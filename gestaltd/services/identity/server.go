@@ -28,13 +28,7 @@ func (s *providerServer) Authorize(ctx context.Context, req *proto.AuthorizeRequ
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.Authorize(ctx, authorizeRequestFromProto(req))
-	if err != nil {
-		return nil, identityToGRPCError("authorize", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "identity provider returned nil response")
-	}
-	return authorizeResponseToProto(resp), nil
+	return identityResponse(resp, err, "authorize", authorizeResponseToProto)
 }
 
 func (s *providerServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto.TokenResponse, error) {
@@ -45,13 +39,7 @@ func (s *providerServer) Token(ctx context.Context, req *proto.TokenRequest) (*p
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.Token(gestalt.AuthCallContextFromIncoming(ctx), tokenRequestFromProto(req))
-	if err != nil {
-		return nil, identityToGRPCError("token", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "identity provider returned nil response")
-	}
-	return tokenResponseToProto(resp), nil
+	return identityResponse(resp, err, "token", tokenResponseToProto)
 }
 
 func (s *providerServer) Introspect(ctx context.Context, req *proto.IntrospectRequest) (*proto.IntrospectResponse, error) {
@@ -62,13 +50,7 @@ func (s *providerServer) Introspect(ctx context.Context, req *proto.IntrospectRe
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.Introspect(ctx, introspectRequestFromProto(req))
-	if err != nil {
-		return nil, identityToGRPCError("introspect", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "identity provider returned nil response")
-	}
-	return introspectResponseToProto(resp), nil
+	return identityResponse(resp, err, "introspect", introspectResponseToProto)
 }
 
 func (s *providerServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (*proto.UserInfoResponse, error) {
@@ -79,13 +61,7 @@ func (s *providerServer) UserInfo(ctx context.Context, req *proto.UserInfoReques
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.UserInfo(gestalt.AuthCallContextFromIncoming(ctx), userInfoRequestFromProto(req))
-	if err != nil {
-		return nil, identityToGRPCError("userinfo", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "identity provider returned nil response")
-	}
-	return userInfoResponseToProto(resp), nil
+	return identityResponse(resp, err, "userinfo", userInfoResponseToProto)
 }
 
 func (s *providerServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
@@ -93,13 +69,7 @@ func (s *providerServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequ
 		return nil, err
 	}
 	resp, err := s.provider.ListGrants(gestalt.AuthCallContextFromIncoming(ctx), &core.ListGrantsRequest{})
-	if err != nil {
-		return nil, identityToGRPCError("list grants", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "identity provider returned nil response")
-	}
-	return listGrantsResponseToProto(resp), nil
+	return identityResponse(resp, err, "list grants", listGrantsResponseToProto)
 }
 
 func (s *providerServer) GetGrant(ctx context.Context, req *proto.GetGrantRequest) (*proto.GetGrantResponse, error) {
@@ -110,13 +80,7 @@ func (s *providerServer) GetGrant(ctx context.Context, req *proto.GetGrantReques
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.GetGrant(gestalt.AuthCallContextFromIncoming(ctx), getGrantRequestFromProto(req))
-	if err != nil {
-		return nil, identityToGRPCError("get grant", err)
-	}
-	if resp == nil {
-		return nil, status.Error(codes.Internal, "identity provider returned nil response")
-	}
-	return getGrantResponseToProto(resp), nil
+	return identityResponse(resp, err, "get grant", getGrantResponseToProto)
 }
 
 func (s *providerServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrantRequest) (*proto.RevokeGrantResponse, error) {
@@ -130,6 +94,16 @@ func (s *providerServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrant
 		return nil, identityToGRPCError("revoke grant", err)
 	}
 	return &proto.RevokeGrantResponse{}, nil
+}
+
+func identityResponse[T, R any](resp *T, err error, operation string, encode func(*T) *R) (*R, error) {
+	if err != nil {
+		return nil, identityToGRPCError(operation, err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "identity provider returned nil response")
+	}
+	return encode(resp), nil
 }
 
 func (s *providerServer) requireProvider() error {
@@ -185,9 +159,6 @@ func identityGRPCCode(code gestalt.StatusCode) codes.Code {
 }
 
 func authorizeRequestFromProto(req *proto.AuthorizeRequest) *core.AuthorizeRequest {
-	if req == nil {
-		return nil
-	}
 	return &core.AuthorizeRequest{
 		ResponseType: req.GetResponseType(),
 		ClientID:     req.GetClientId(),
@@ -198,16 +169,10 @@ func authorizeRequestFromProto(req *proto.AuthorizeRequest) *core.AuthorizeReque
 }
 
 func authorizeResponseToProto(resp *core.AuthorizeResponse) *proto.AuthorizeResponse {
-	if resp == nil {
-		return nil
-	}
 	return &proto.AuthorizeResponse{RedirectUri: resp.RedirectURI}
 }
 
 func tokenRequestFromProto(req *proto.TokenRequest) *core.TokenRequest {
-	if req == nil {
-		return nil
-	}
 	return &core.TokenRequest{
 		GrantType:        req.GetGrantType(),
 		Code:             req.GetCode(),
@@ -224,9 +189,6 @@ func tokenRequestFromProto(req *proto.TokenRequest) *core.TokenRequest {
 }
 
 func tokenResponseToProto(resp *core.TokenResponse) *proto.TokenResponse {
-	if resp == nil {
-		return nil
-	}
 	return &proto.TokenResponse{
 		AccessToken:  resp.AccessToken,
 		TokenType:    resp.TokenType,
@@ -238,9 +200,6 @@ func tokenResponseToProto(resp *core.TokenResponse) *proto.TokenResponse {
 }
 
 func introspectRequestFromProto(req *proto.IntrospectRequest) *core.IntrospectRequest {
-	if req == nil {
-		return nil
-	}
 	return &core.IntrospectRequest{
 		Token:         req.GetToken(),
 		TokenTypeHint: req.GetTokenTypeHint(),
@@ -248,9 +207,6 @@ func introspectRequestFromProto(req *proto.IntrospectRequest) *core.IntrospectRe
 }
 
 func introspectResponseToProto(resp *core.IntrospectResponse) *proto.IntrospectResponse {
-	if resp == nil {
-		return nil
-	}
 	return &proto.IntrospectResponse{
 		Active:   resp.Active,
 		Subject:  resp.Subject,
@@ -265,9 +221,6 @@ func userInfoRequestFromProto(_ *proto.UserInfoRequest) *core.UserInfoRequest {
 }
 
 func userInfoResponseToProto(resp *core.UserInfoResponse) *proto.UserInfoResponse {
-	if resp == nil {
-		return nil
-	}
 	return &proto.UserInfoResponse{
 		SubjectId: resp.SubjectID,
 		Email:     resp.Email,
@@ -276,23 +229,14 @@ func userInfoResponseToProto(resp *core.UserInfoResponse) *proto.UserInfoRespons
 }
 
 func listGrantsResponseToProto(resp *core.ListGrantsResponse) *proto.ListGrantsResponse {
-	if resp == nil {
-		return nil
-	}
 	return &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
 }
 
 func getGrantRequestFromProto(req *proto.GetGrantRequest) *core.GetGrantRequest {
-	if req == nil {
-		return nil
-	}
 	return &core.GetGrantRequest{GrantID: req.GetGrantId()}
 }
 
 func getGrantResponseToProto(resp *core.GetGrantResponse) *proto.GetGrantResponse {
-	if resp == nil {
-		return nil
-	}
 	out := &proto.GetGrantResponse{
 		CreatedAt: resp.CreatedAt,
 		ExpiresAt: resp.ExpiresAt,
@@ -308,8 +252,5 @@ func getGrantResponseToProto(resp *core.GetGrantResponse) *proto.GetGrantRespons
 }
 
 func revokeGrantRequestFromProto(req *proto.RevokeGrantRequest) *core.RevokeGrantRequest {
-	if req == nil {
-		return nil
-	}
 	return &core.RevokeGrantRequest{GrantID: req.GetGrantId()}
 }
