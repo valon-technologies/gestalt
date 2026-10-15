@@ -7,339 +7,311 @@ import (
 )
 
 func ToWireGetRuntimeSessionRequest(value *GetRuntimeSessionRequest) *proto.GetRuntimeSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetRuntimeSessionRequest{
-		SessionId: value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *GetRuntimeSessionRequest) *proto.GetRuntimeSessionRequest {
+		out := &proto.GetRuntimeSessionRequest{
+			SessionId: value.SessionId,
+		}
+		return out
+	})
 }
 
 func FromWireGetRuntimeSessionRequest(value *proto.GetRuntimeSessionRequest) *GetRuntimeSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetRuntimeSessionRequest{
-		SessionId: value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetRuntimeSessionRequest) *GetRuntimeSessionRequest {
+		out := &GetRuntimeSessionRequest{
+			SessionId: value.SessionId,
+		}
+		return out
+	})
 }
 
 func ToWireHostedApp(value *HostedApp) *proto.HostedApp {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HostedApp{
-		Id:         value.Id,
-		SessionId:  value.SessionId,
-		AppName:    value.AppName,
-		DialTarget: value.DialTarget,
-	}
-	return out
+	return convertMessage(value, func(value *HostedApp) *proto.HostedApp {
+		out := &proto.HostedApp{
+			Id:         value.Id,
+			SessionId:  value.SessionId,
+			AppName:    value.AppName,
+			DialTarget: value.DialTarget,
+		}
+		return out
+	})
 }
 
 func FromWireHostedApp(value *proto.HostedApp) *HostedApp {
-	if value == nil {
-		return nil
-	}
-	out := &HostedApp{
-		Id:         value.Id,
-		SessionId:  value.SessionId,
-		AppName:    value.AppName,
-		DialTarget: value.DialTarget,
-	}
-	return out
+	return convertMessage(value, func(value *proto.HostedApp) *HostedApp {
+		out := &HostedApp{
+			Id:         value.Id,
+			SessionId:  value.SessionId,
+			AppName:    value.AppName,
+			DialTarget: value.DialTarget,
+		}
+		return out
+	})
 }
 
 func ToWireListRuntimeSessionsRequest(value *ListRuntimeSessionsRequest) *proto.ListRuntimeSessionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListRuntimeSessionsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-	return out
+	return convertMessage(value, func(value *ListRuntimeSessionsRequest) *proto.ListRuntimeSessionsRequest {
+		out := &proto.ListRuntimeSessionsRequest{
+			PageSize:  value.PageSize,
+			PageToken: value.PageToken,
+		}
+		return out
+	})
 }
 
 func FromWireListRuntimeSessionsRequest(value *proto.ListRuntimeSessionsRequest) *ListRuntimeSessionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListRuntimeSessionsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListRuntimeSessionsRequest) *ListRuntimeSessionsRequest {
+		out := &ListRuntimeSessionsRequest{
+			PageSize:  value.PageSize,
+			PageToken: value.PageToken,
+		}
+		return out
+	})
 }
 
 func ToWireListRuntimeSessionsResponse(value *ListRuntimeSessionsResponse) *proto.ListRuntimeSessionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListRuntimeSessionsResponse{
-		NextPageToken: value.NextPageToken,
-	}
-	appendMessageSlice(&out.Sessions, value.Sessions, ToWireRuntimeSession)
-	return out
+	return convertMessage(value, func(value *ListRuntimeSessionsResponse) *proto.ListRuntimeSessionsResponse {
+		out := &proto.ListRuntimeSessionsResponse{
+			NextPageToken: value.NextPageToken,
+		}
+		appendMessageSlice(&out.Sessions, value.Sessions, ToWireRuntimeSession)
+		return out
+	})
 }
 
 func FromWireListRuntimeSessionsResponse(value *proto.ListRuntimeSessionsResponse) *ListRuntimeSessionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListRuntimeSessionsResponse{
-		NextPageToken: value.NextPageToken,
-	}
-	appendMessageSlice(&out.Sessions, value.Sessions, FromWireRuntimeSession)
-	return out
+	return convertMessage(value, func(value *proto.ListRuntimeSessionsResponse) *ListRuntimeSessionsResponse {
+		out := &ListRuntimeSessionsResponse{
+			NextPageToken: value.NextPageToken,
+		}
+		appendMessageSlice(&out.Sessions, value.Sessions, FromWireRuntimeSession)
+		return out
+	})
 }
 
 func ToWirePrepareRuntimeWorkspaceRequest(value *PrepareRuntimeWorkspaceRequest) *proto.PrepareRuntimeWorkspaceRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PrepareRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
-		Workspace:      ToWireAgentWorkspace(value.Workspace),
-	}
-	return out
+	return convertMessage(value, func(value *PrepareRuntimeWorkspaceRequest) *proto.PrepareRuntimeWorkspaceRequest {
+		out := &proto.PrepareRuntimeWorkspaceRequest{
+			SessionId:      value.SessionId,
+			AgentSessionId: value.AgentSessionId,
+			Workspace:      ToWireAgentWorkspace(value.Workspace),
+		}
+		return out
+	})
 }
 
 func FromWirePrepareRuntimeWorkspaceRequest(value *proto.PrepareRuntimeWorkspaceRequest) *PrepareRuntimeWorkspaceRequest {
-	if value == nil {
-		return nil
-	}
-	out := &PrepareRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
-		Workspace:      FromWireAgentWorkspace(value.Workspace),
-	}
-	return out
+	return convertMessage(value, func(value *proto.PrepareRuntimeWorkspaceRequest) *PrepareRuntimeWorkspaceRequest {
+		out := &PrepareRuntimeWorkspaceRequest{
+			SessionId:      value.SessionId,
+			AgentSessionId: value.AgentSessionId,
+			Workspace:      FromWireAgentWorkspace(value.Workspace),
+		}
+		return out
+	})
 }
 
 func ToWirePrepareRuntimeWorkspaceResponse(value *PrepareRuntimeWorkspaceResponse) *proto.PrepareRuntimeWorkspaceResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PrepareRuntimeWorkspaceResponse{
-		Workspace: ToWirePreparedAgentWorkspace(value.Workspace),
-	}
-	return out
+	return convertMessage(value, func(value *PrepareRuntimeWorkspaceResponse) *proto.PrepareRuntimeWorkspaceResponse {
+		out := &proto.PrepareRuntimeWorkspaceResponse{
+			Workspace: ToWirePreparedAgentWorkspace(value.Workspace),
+		}
+		return out
+	})
 }
 
 func FromWirePrepareRuntimeWorkspaceResponse(value *proto.PrepareRuntimeWorkspaceResponse) *PrepareRuntimeWorkspaceResponse {
-	if value == nil {
-		return nil
-	}
-	out := &PrepareRuntimeWorkspaceResponse{
-		Workspace: FromWirePreparedAgentWorkspace(value.Workspace),
-	}
-	return out
+	return convertMessage(value, func(value *proto.PrepareRuntimeWorkspaceResponse) *PrepareRuntimeWorkspaceResponse {
+		out := &PrepareRuntimeWorkspaceResponse{
+			Workspace: FromWirePreparedAgentWorkspace(value.Workspace),
+		}
+		return out
+	})
 }
 
 func ToWireRemoveRuntimeWorkspaceRequest(value *RemoveRuntimeWorkspaceRequest) *proto.RemoveRuntimeWorkspaceRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RemoveRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
-	}
-	return out
+	return convertMessage(value, func(value *RemoveRuntimeWorkspaceRequest) *proto.RemoveRuntimeWorkspaceRequest {
+		out := &proto.RemoveRuntimeWorkspaceRequest{
+			SessionId:      value.SessionId,
+			AgentSessionId: value.AgentSessionId,
+		}
+		return out
+	})
 }
 
 func FromWireRemoveRuntimeWorkspaceRequest(value *proto.RemoveRuntimeWorkspaceRequest) *RemoveRuntimeWorkspaceRequest {
-	if value == nil {
-		return nil
-	}
-	out := &RemoveRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RemoveRuntimeWorkspaceRequest) *RemoveRuntimeWorkspaceRequest {
+		out := &RemoveRuntimeWorkspaceRequest{
+			SessionId:      value.SessionId,
+			AgentSessionId: value.AgentSessionId,
+		}
+		return out
+	})
 }
 
 func ToWireRuntimeImagePullAuth(value *RuntimeImagePullAuth) *proto.RuntimeImagePullAuth {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RuntimeImagePullAuth{
-		DockerConfigJson: value.DockerConfigJson,
-	}
-	return out
+	return convertMessage(value, func(value *RuntimeImagePullAuth) *proto.RuntimeImagePullAuth {
+		out := &proto.RuntimeImagePullAuth{
+			DockerConfigJson: value.DockerConfigJson,
+		}
+		return out
+	})
 }
 
 func FromWireRuntimeImagePullAuth(value *proto.RuntimeImagePullAuth) *RuntimeImagePullAuth {
-	if value == nil {
-		return nil
-	}
-	out := &RuntimeImagePullAuth{
-		DockerConfigJson: value.DockerConfigJson,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RuntimeImagePullAuth) *RuntimeImagePullAuth {
+		out := &RuntimeImagePullAuth{
+			DockerConfigJson: value.DockerConfigJson,
+		}
+		return out
+	})
 }
 
 func ToWireRuntimeSession(value *RuntimeSession) *proto.RuntimeSession {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RuntimeSession{
-		Id:           value.Id,
-		State:        value.State,
-		Metadata:     value.Metadata,
-		Lifecycle:    ToWireRuntimeSessionLifecycle(value.Lifecycle),
-		StateReason:  value.StateReason,
-		StateMessage: value.StateMessage,
-	}
-	return out
+	return convertMessage(value, func(value *RuntimeSession) *proto.RuntimeSession {
+		out := &proto.RuntimeSession{
+			Id:           value.Id,
+			State:        value.State,
+			Metadata:     value.Metadata,
+			Lifecycle:    ToWireRuntimeSessionLifecycle(value.Lifecycle),
+			StateReason:  value.StateReason,
+			StateMessage: value.StateMessage,
+		}
+		return out
+	})
 }
 
 func FromWireRuntimeSession(value *proto.RuntimeSession) *RuntimeSession {
-	if value == nil {
-		return nil
-	}
-	out := &RuntimeSession{
-		Id:           value.Id,
-		State:        value.State,
-		Metadata:     value.Metadata,
-		Lifecycle:    FromWireRuntimeSessionLifecycle(value.Lifecycle),
-		StateReason:  value.StateReason,
-		StateMessage: value.StateMessage,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RuntimeSession) *RuntimeSession {
+		out := &RuntimeSession{
+			Id:           value.Id,
+			State:        value.State,
+			Metadata:     value.Metadata,
+			Lifecycle:    FromWireRuntimeSessionLifecycle(value.Lifecycle),
+			StateReason:  value.StateReason,
+			StateMessage: value.StateMessage,
+		}
+		return out
+	})
 }
 
 func ToWireRuntimeSessionLifecycle(value *RuntimeSessionLifecycle) *proto.RuntimeSessionLifecycle {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RuntimeSessionLifecycle{
-		StartedAt:          ToWireTimestamp(value.StartedAt),
-		RecommendedDrainAt: ToWireTimestamp(value.RecommendedDrainAt),
-		ExpiresAt:          ToWireTimestamp(value.ExpiresAt),
-	}
-	return out
+	return convertMessage(value, func(value *RuntimeSessionLifecycle) *proto.RuntimeSessionLifecycle {
+		out := &proto.RuntimeSessionLifecycle{
+			StartedAt:          ToWireTimestamp(value.StartedAt),
+			RecommendedDrainAt: ToWireTimestamp(value.RecommendedDrainAt),
+			ExpiresAt:          ToWireTimestamp(value.ExpiresAt),
+		}
+		return out
+	})
 }
 
 func FromWireRuntimeSessionLifecycle(value *proto.RuntimeSessionLifecycle) *RuntimeSessionLifecycle {
-	if value == nil {
-		return nil
-	}
-	out := &RuntimeSessionLifecycle{
-		StartedAt:          FromWireTimestamp(value.StartedAt),
-		RecommendedDrainAt: FromWireTimestamp(value.RecommendedDrainAt),
-		ExpiresAt:          FromWireTimestamp(value.ExpiresAt),
-	}
-	return out
+	return convertMessage(value, func(value *proto.RuntimeSessionLifecycle) *RuntimeSessionLifecycle {
+		out := &RuntimeSessionLifecycle{
+			StartedAt:          FromWireTimestamp(value.StartedAt),
+			RecommendedDrainAt: FromWireTimestamp(value.RecommendedDrainAt),
+			ExpiresAt:          FromWireTimestamp(value.ExpiresAt),
+		}
+		return out
+	})
 }
 
 func ToWireRuntimeSupport(value *RuntimeSupport) *proto.RuntimeSupport {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RuntimeSupport{
-		CanHostApps:              value.CanHostApps,
-		EgressMode:               proto.RuntimeEgressMode(value.EgressMode),
-		SupportsPrepareWorkspace: value.SupportsPrepareWorkspace,
-	}
-	return out
+	return convertMessage(value, func(value *RuntimeSupport) *proto.RuntimeSupport {
+		out := &proto.RuntimeSupport{
+			CanHostApps:              value.CanHostApps,
+			EgressMode:               proto.RuntimeEgressMode(value.EgressMode),
+			SupportsPrepareWorkspace: value.SupportsPrepareWorkspace,
+		}
+		return out
+	})
 }
 
 func FromWireRuntimeSupport(value *proto.RuntimeSupport) *RuntimeSupport {
-	if value == nil {
-		return nil
-	}
-	out := &RuntimeSupport{
-		CanHostApps:              value.CanHostApps,
-		EgressMode:               RuntimeEgressMode(value.EgressMode),
-		SupportsPrepareWorkspace: value.SupportsPrepareWorkspace,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RuntimeSupport) *RuntimeSupport {
+		out := &RuntimeSupport{
+			CanHostApps:              value.CanHostApps,
+			EgressMode:               RuntimeEgressMode(value.EgressMode),
+			SupportsPrepareWorkspace: value.SupportsPrepareWorkspace,
+		}
+		return out
+	})
 }
 
 func ToWireStartHostedAppRequest(value *StartHostedAppRequest) *proto.StartHostedAppRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartHostedAppRequest{
-		SessionId:     value.SessionId,
-		AppName:       value.AppName,
-		Command:       value.Command,
-		Args:          value.Args,
-		Env:           value.Env,
-		AllowedHosts:  value.AllowedHosts,
-		DefaultAction: value.DefaultAction,
-		HostBinary:    value.HostBinary,
-		Workdir:       value.Workdir,
-	}
-	return out
+	return convertMessage(value, func(value *StartHostedAppRequest) *proto.StartHostedAppRequest {
+		out := &proto.StartHostedAppRequest{
+			SessionId:     value.SessionId,
+			AppName:       value.AppName,
+			Command:       value.Command,
+			Args:          value.Args,
+			Env:           value.Env,
+			AllowedHosts:  value.AllowedHosts,
+			DefaultAction: value.DefaultAction,
+			HostBinary:    value.HostBinary,
+			Workdir:       value.Workdir,
+		}
+		return out
+	})
 }
 
 func FromWireStartHostedAppRequest(value *proto.StartHostedAppRequest) *StartHostedAppRequest {
-	if value == nil {
-		return nil
-	}
-	out := &StartHostedAppRequest{
-		SessionId:     value.SessionId,
-		AppName:       value.AppName,
-		Command:       value.Command,
-		Args:          value.Args,
-		Env:           value.Env,
-		AllowedHosts:  value.AllowedHosts,
-		DefaultAction: value.DefaultAction,
-		HostBinary:    value.HostBinary,
-		Workdir:       value.Workdir,
-	}
-	return out
+	return convertMessage(value, func(value *proto.StartHostedAppRequest) *StartHostedAppRequest {
+		out := &StartHostedAppRequest{
+			SessionId:     value.SessionId,
+			AppName:       value.AppName,
+			Command:       value.Command,
+			Args:          value.Args,
+			Env:           value.Env,
+			AllowedHosts:  value.AllowedHosts,
+			DefaultAction: value.DefaultAction,
+			HostBinary:    value.HostBinary,
+			Workdir:       value.Workdir,
+		}
+		return out
+	})
 }
 
 func ToWireStartRuntimeSessionRequest(value *StartRuntimeSessionRequest) *proto.StartRuntimeSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartRuntimeSessionRequest{
-		AppName:       value.AppName,
-		Template:      value.Template,
-		Image:         value.Image,
-		Metadata:      value.Metadata,
-		ImagePullAuth: ToWireRuntimeImagePullAuth(value.ImagePullAuth),
-	}
-	return out
+	return convertMessage(value, func(value *StartRuntimeSessionRequest) *proto.StartRuntimeSessionRequest {
+		out := &proto.StartRuntimeSessionRequest{
+			AppName:       value.AppName,
+			Template:      value.Template,
+			Image:         value.Image,
+			Metadata:      value.Metadata,
+			ImagePullAuth: ToWireRuntimeImagePullAuth(value.ImagePullAuth),
+		}
+		return out
+	})
 }
 
 func FromWireStartRuntimeSessionRequest(value *proto.StartRuntimeSessionRequest) *StartRuntimeSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &StartRuntimeSessionRequest{
-		AppName:       value.AppName,
-		Template:      value.Template,
-		Image:         value.Image,
-		Metadata:      value.Metadata,
-		ImagePullAuth: FromWireRuntimeImagePullAuth(value.ImagePullAuth),
-	}
-	return out
+	return convertMessage(value, func(value *proto.StartRuntimeSessionRequest) *StartRuntimeSessionRequest {
+		out := &StartRuntimeSessionRequest{
+			AppName:       value.AppName,
+			Template:      value.Template,
+			Image:         value.Image,
+			Metadata:      value.Metadata,
+			ImagePullAuth: FromWireRuntimeImagePullAuth(value.ImagePullAuth),
+		}
+		return out
+	})
 }
 
 func ToWireStopRuntimeSessionRequest(value *StopRuntimeSessionRequest) *proto.StopRuntimeSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StopRuntimeSessionRequest{
-		SessionId: value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *StopRuntimeSessionRequest) *proto.StopRuntimeSessionRequest {
+		out := &proto.StopRuntimeSessionRequest{
+			SessionId: value.SessionId,
+		}
+		return out
+	})
 }
 
 func FromWireStopRuntimeSessionRequest(value *proto.StopRuntimeSessionRequest) *StopRuntimeSessionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &StopRuntimeSessionRequest{
-		SessionId: value.SessionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.StopRuntimeSessionRequest) *StopRuntimeSessionRequest {
+		out := &StopRuntimeSessionRequest{
+			SessionId: value.SessionId,
+		}
+		return out
+	})
 }

@@ -7,37 +7,33 @@ import (
 )
 
 func ToWireHelloWorldRequest(value *HelloWorldRequest) *proto.HelloWorldRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HelloWorldRequest{}
-	return out
+	return convertMessage(value, func(value *HelloWorldRequest) *proto.HelloWorldRequest {
+		out := &proto.HelloWorldRequest{}
+		return out
+	})
 }
 
 func FromWireHelloWorldRequest(value *proto.HelloWorldRequest) *HelloWorldRequest {
-	if value == nil {
-		return nil
-	}
-	out := &HelloWorldRequest{}
-	return out
+	return convertMessage(value, func(value *proto.HelloWorldRequest) *HelloWorldRequest {
+		out := &HelloWorldRequest{}
+		return out
+	})
 }
 
 func ToWireHelloWorldResponse(value *HelloWorldResponse) *proto.HelloWorldResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HelloWorldResponse{
-		Message: value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *HelloWorldResponse) *proto.HelloWorldResponse {
+		out := &proto.HelloWorldResponse{
+			Message: value.Message,
+		}
+		return out
+	})
 }
 
 func FromWireHelloWorldResponse(value *proto.HelloWorldResponse) *HelloWorldResponse {
-	if value == nil {
-		return nil
-	}
-	out := &HelloWorldResponse{
-		Message: value.Message,
-	}
-	return out
+	return convertMessage(value, func(value *proto.HelloWorldResponse) *HelloWorldResponse {
+		out := &HelloWorldResponse{
+			Message: value.Message,
+		}
+		return out
+	})
 }

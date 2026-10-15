@@ -8,1363 +8,1263 @@ import (
 )
 
 func ToWireApplyWorkflowProviderDefinitionRequest(value *ApplyWorkflowProviderDefinitionRequest) *proto.ApplyWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ApplyWorkflowProviderDefinitionRequest{
-		Provider:       value.Provider,
-		Spec:           ToWireWorkflowDefinitionSpec(value.Spec),
-		IdempotencyKey: value.IdempotencyKey,
-		Context:        ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *ApplyWorkflowProviderDefinitionRequest) *proto.ApplyWorkflowProviderDefinitionRequest {
+		out := &proto.ApplyWorkflowProviderDefinitionRequest{
+			Provider:       value.Provider,
+			Spec:           ToWireWorkflowDefinitionSpec(value.Spec),
+			IdempotencyKey: value.IdempotencyKey,
+			Context:        ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireApplyWorkflowProviderDefinitionRequest(value *proto.ApplyWorkflowProviderDefinitionRequest) *ApplyWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ApplyWorkflowProviderDefinitionRequest{
-		Provider:       value.Provider,
-		Spec:           FromWireWorkflowDefinitionSpec(value.Spec),
-		IdempotencyKey: value.IdempotencyKey,
-		Context:        FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ApplyWorkflowProviderDefinitionRequest) *ApplyWorkflowProviderDefinitionRequest {
+		out := &ApplyWorkflowProviderDefinitionRequest{
+			Provider:       value.Provider,
+			Spec:           FromWireWorkflowDefinitionSpec(value.Spec),
+			IdempotencyKey: value.IdempotencyKey,
+			Context:        FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireBoundWorkflowTarget(value *BoundWorkflowTarget) *proto.BoundWorkflowTarget {
-	if value == nil {
-		return nil
-	}
-	out := &proto.BoundWorkflowTarget{}
-	appendMessageSlice(&out.Steps, value.Steps, ToWireWorkflowStep)
-	return out
+	return convertMessage(value, func(value *BoundWorkflowTarget) *proto.BoundWorkflowTarget {
+		out := &proto.BoundWorkflowTarget{}
+		appendMessageSlice(&out.Steps, value.Steps, ToWireWorkflowStep)
+		return out
+	})
 }
 
 func FromWireBoundWorkflowTarget(value *proto.BoundWorkflowTarget) *BoundWorkflowTarget {
-	if value == nil {
-		return nil
-	}
-	out := &BoundWorkflowTarget{}
-	appendMessageSlice(&out.Steps, value.Steps, FromWireWorkflowStep)
-	return out
+	return convertMessage(value, func(value *proto.BoundWorkflowTarget) *BoundWorkflowTarget {
+		out := &BoundWorkflowTarget{}
+		appendMessageSlice(&out.Steps, value.Steps, FromWireWorkflowStep)
+		return out
+	})
 }
 
 func ToWireCancelWorkflowProviderRunRequest(value *CancelWorkflowProviderRunRequest) *proto.CancelWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CancelWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Reason:   value.Reason,
-		Context:  ToWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *CancelWorkflowProviderRunRequest) *proto.CancelWorkflowProviderRunRequest {
+		out := &proto.CancelWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Reason:   value.Reason,
+			Context:  ToWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireCancelWorkflowProviderRunRequest(value *proto.CancelWorkflowProviderRunRequest) *CancelWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CancelWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Reason:   value.Reason,
-		Context:  FromWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CancelWorkflowProviderRunRequest) *CancelWorkflowProviderRunRequest {
+		out := &CancelWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Reason:   value.Reason,
+			Context:  FromWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireDeleteWorkflowProviderDefinitionRequest(value *DeleteWorkflowProviderDefinitionRequest) *proto.DeleteWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteWorkflowProviderDefinitionRequest{
-		DefinitionId: value.DefinitionId,
-		Context:      ToWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteWorkflowProviderDefinitionRequest) *proto.DeleteWorkflowProviderDefinitionRequest {
+		out := &proto.DeleteWorkflowProviderDefinitionRequest{
+			DefinitionId: value.DefinitionId,
+			Context:      ToWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireDeleteWorkflowProviderDefinitionRequest(value *proto.DeleteWorkflowProviderDefinitionRequest) *DeleteWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteWorkflowProviderDefinitionRequest{
-		DefinitionId: value.DefinitionId,
-		Context:      FromWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteWorkflowProviderDefinitionRequest) *DeleteWorkflowProviderDefinitionRequest {
+		out := &DeleteWorkflowProviderDefinitionRequest{
+			DefinitionId: value.DefinitionId,
+			Context:      FromWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireDeliverWorkflowProviderEventRequest(value *DeliverWorkflowProviderEventRequest) *proto.DeliverWorkflowProviderEventRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeliverWorkflowProviderEventRequest{
-		Provider: value.Provider,
-		Event:    ToWireWorkflowEvent(value.Event),
-		Context:  ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *DeliverWorkflowProviderEventRequest) *proto.DeliverWorkflowProviderEventRequest {
+		out := &proto.DeliverWorkflowProviderEventRequest{
+			Provider: value.Provider,
+			Event:    ToWireWorkflowEvent(value.Event),
+			Context:  ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireDeliverWorkflowProviderEventRequest(value *proto.DeliverWorkflowProviderEventRequest) *DeliverWorkflowProviderEventRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeliverWorkflowProviderEventRequest{
-		Provider: value.Provider,
-		Event:    FromWireWorkflowEvent(value.Event),
-		Context:  FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeliverWorkflowProviderEventRequest) *DeliverWorkflowProviderEventRequest {
+		out := &DeliverWorkflowProviderEventRequest{
+			Provider: value.Provider,
+			Event:    FromWireWorkflowEvent(value.Event),
+			Context:  FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderDefinitionRequest(value *GetWorkflowProviderDefinitionRequest) *proto.GetWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderDefinitionRequest{
-		DefinitionId: value.DefinitionId,
-		Context:      ToWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderDefinitionRequest) *proto.GetWorkflowProviderDefinitionRequest {
+		out := &proto.GetWorkflowProviderDefinitionRequest{
+			DefinitionId: value.DefinitionId,
+			Context:      ToWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireGetWorkflowProviderDefinitionRequest(value *proto.GetWorkflowProviderDefinitionRequest) *GetWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetWorkflowProviderDefinitionRequest{
-		DefinitionId: value.DefinitionId,
-		Context:      FromWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetWorkflowProviderDefinitionRequest) *GetWorkflowProviderDefinitionRequest {
+		out := &GetWorkflowProviderDefinitionRequest{
+			DefinitionId: value.DefinitionId,
+			Context:      FromWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunEventsRequest(value *GetWorkflowProviderRunEventsRequest) *proto.GetWorkflowProviderRunEventsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunEventsRequest{
-		RunId:    value.RunId,
-		Context:  ToWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunEventsRequest) *proto.GetWorkflowProviderRunEventsRequest {
+		out := &proto.GetWorkflowProviderRunEventsRequest{
+			RunId:    value.RunId,
+			Context:  ToWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireGetWorkflowProviderRunEventsRequest(value *proto.GetWorkflowProviderRunEventsRequest) *GetWorkflowProviderRunEventsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetWorkflowProviderRunEventsRequest{
-		RunId:    value.RunId,
-		Context:  FromWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetWorkflowProviderRunEventsRequest) *GetWorkflowProviderRunEventsRequest {
+		out := &GetWorkflowProviderRunEventsRequest{
+			RunId:    value.RunId,
+			Context:  FromWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunEventsResponse(value *GetWorkflowProviderRunEventsResponse) *proto.GetWorkflowProviderRunEventsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunEventsResponse{}
-	appendMessageSlice(&out.Events, value.Events, ToWireWorkflowRunEvent)
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunEventsResponse) *proto.GetWorkflowProviderRunEventsResponse {
+		out := &proto.GetWorkflowProviderRunEventsResponse{}
+		appendMessageSlice(&out.Events, value.Events, ToWireWorkflowRunEvent)
+		return out
+	})
 }
 
 func FromWireGetWorkflowProviderRunEventsResponse(value *proto.GetWorkflowProviderRunEventsResponse) *GetWorkflowProviderRunEventsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &GetWorkflowProviderRunEventsResponse{}
-	appendMessageSlice(&out.Events, value.Events, FromWireWorkflowRunEvent)
-	return out
+	return convertMessage(value, func(value *proto.GetWorkflowProviderRunEventsResponse) *GetWorkflowProviderRunEventsResponse {
+		out := &GetWorkflowProviderRunEventsResponse{}
+		appendMessageSlice(&out.Events, value.Events, FromWireWorkflowRunEvent)
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunOutputRequest(value *GetWorkflowProviderRunOutputRequest) *proto.GetWorkflowProviderRunOutputRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunOutputRequest{
-		RunId:    value.RunId,
-		Context:  ToWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunOutputRequest) *proto.GetWorkflowProviderRunOutputRequest {
+		out := &proto.GetWorkflowProviderRunOutputRequest{
+			RunId:    value.RunId,
+			Context:  ToWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireGetWorkflowProviderRunOutputRequest(value *proto.GetWorkflowProviderRunOutputRequest) *GetWorkflowProviderRunOutputRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetWorkflowProviderRunOutputRequest{
-		RunId:    value.RunId,
-		Context:  FromWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetWorkflowProviderRunOutputRequest) *GetWorkflowProviderRunOutputRequest {
+		out := &GetWorkflowProviderRunOutputRequest{
+			RunId:    value.RunId,
+			Context:  FromWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunOutputResponse(value *GetWorkflowProviderRunOutputResponse) *proto.GetWorkflowProviderRunOutputResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunOutputResponse{
-		Output: ToWireValue(value.Output),
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunOutputResponse) *proto.GetWorkflowProviderRunOutputResponse {
+		out := &proto.GetWorkflowProviderRunOutputResponse{
+			Output: ToWireValue(value.Output),
+		}
+		return out
+	})
 }
 
 func FromWireGetWorkflowProviderRunOutputResponse(value *proto.GetWorkflowProviderRunOutputResponse) *GetWorkflowProviderRunOutputResponse {
-	if value == nil {
-		return nil
-	}
-	out := &GetWorkflowProviderRunOutputResponse{
-		Output: FromWireValue(value.Output),
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetWorkflowProviderRunOutputResponse) *GetWorkflowProviderRunOutputResponse {
+		out := &GetWorkflowProviderRunOutputResponse{
+			Output: FromWireValue(value.Output),
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunRequest(value *GetWorkflowProviderRunRequest) *proto.GetWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Context:  ToWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunRequest) *proto.GetWorkflowProviderRunRequest {
+		out := &proto.GetWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Context:  ToWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireGetWorkflowProviderRunRequest(value *proto.GetWorkflowProviderRunRequest) *GetWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Context:  FromWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetWorkflowProviderRunRequest) *GetWorkflowProviderRunRequest {
+		out := &GetWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Context:  FromWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireListWorkflowProviderDefinitionsRequest(value *ListWorkflowProviderDefinitionsRequest) *proto.ListWorkflowProviderDefinitionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListWorkflowProviderDefinitionsRequest{
-		Context:  ToWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *ListWorkflowProviderDefinitionsRequest) *proto.ListWorkflowProviderDefinitionsRequest {
+		out := &proto.ListWorkflowProviderDefinitionsRequest{
+			Context:  ToWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireListWorkflowProviderDefinitionsRequest(value *proto.ListWorkflowProviderDefinitionsRequest) *ListWorkflowProviderDefinitionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListWorkflowProviderDefinitionsRequest{
-		Context:  FromWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListWorkflowProviderDefinitionsRequest) *ListWorkflowProviderDefinitionsRequest {
+		out := &ListWorkflowProviderDefinitionsRequest{
+			Context:  FromWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireListWorkflowProviderDefinitionsResponse(value *ListWorkflowProviderDefinitionsResponse) *proto.ListWorkflowProviderDefinitionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListWorkflowProviderDefinitionsResponse{}
-	appendMessageSlice(&out.Definitions, value.Definitions, ToWireWorkflowDefinition)
-	return out
+	return convertMessage(value, func(value *ListWorkflowProviderDefinitionsResponse) *proto.ListWorkflowProviderDefinitionsResponse {
+		out := &proto.ListWorkflowProviderDefinitionsResponse{}
+		appendMessageSlice(&out.Definitions, value.Definitions, ToWireWorkflowDefinition)
+		return out
+	})
 }
 
 func FromWireListWorkflowProviderDefinitionsResponse(value *proto.ListWorkflowProviderDefinitionsResponse) *ListWorkflowProviderDefinitionsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListWorkflowProviderDefinitionsResponse{}
-	appendMessageSlice(&out.Definitions, value.Definitions, FromWireWorkflowDefinition)
-	return out
+	return convertMessage(value, func(value *proto.ListWorkflowProviderDefinitionsResponse) *ListWorkflowProviderDefinitionsResponse {
+		out := &ListWorkflowProviderDefinitionsResponse{}
+		appendMessageSlice(&out.Definitions, value.Definitions, FromWireWorkflowDefinition)
+		return out
+	})
 }
 
 func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsRequest) *proto.ListWorkflowProviderRunsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListWorkflowProviderRunsRequest{
-		PageSize:     value.PageSize,
-		PageToken:    value.PageToken,
-		Status:       proto.WorkflowRunStatus(value.Status),
-		TargetApp:    value.TargetApp,
-		Context:      ToWireRequestContext(value.Context),
-		Provider:     value.Provider,
-		KnownApps:    value.KnownApps,
-		DefinitionId: value.DefinitionId,
-	}
-	return out
+	return convertMessage(value, func(value *ListWorkflowProviderRunsRequest) *proto.ListWorkflowProviderRunsRequest {
+		out := &proto.ListWorkflowProviderRunsRequest{
+			PageSize:     value.PageSize,
+			PageToken:    value.PageToken,
+			Status:       proto.WorkflowRunStatus(value.Status),
+			TargetApp:    value.TargetApp,
+			Context:      ToWireRequestContext(value.Context),
+			Provider:     value.Provider,
+			KnownApps:    value.KnownApps,
+			DefinitionId: value.DefinitionId,
+		}
+		return out
+	})
 }
 
 func FromWireListWorkflowProviderRunsRequest(value *proto.ListWorkflowProviderRunsRequest) *ListWorkflowProviderRunsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListWorkflowProviderRunsRequest{
-		PageSize:     value.PageSize,
-		PageToken:    value.PageToken,
-		Status:       WorkflowRunStatus(value.Status),
-		TargetApp:    value.TargetApp,
-		Context:      FromWireRequestContext(value.Context),
-		Provider:     value.Provider,
-		KnownApps:    value.KnownApps,
-		DefinitionId: value.DefinitionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListWorkflowProviderRunsRequest) *ListWorkflowProviderRunsRequest {
+		out := &ListWorkflowProviderRunsRequest{
+			PageSize:     value.PageSize,
+			PageToken:    value.PageToken,
+			Status:       WorkflowRunStatus(value.Status),
+			TargetApp:    value.TargetApp,
+			Context:      FromWireRequestContext(value.Context),
+			Provider:     value.Provider,
+			KnownApps:    value.KnownApps,
+			DefinitionId: value.DefinitionId,
+		}
+		return out
+	})
 }
 
 func ToWireListWorkflowProviderRunsResponse(value *ListWorkflowProviderRunsResponse) *proto.ListWorkflowProviderRunsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListWorkflowProviderRunsResponse{
-		NextPageToken: value.NextPageToken,
-		TotalCount:    value.TotalCount,
-		StatusCounts:  ToWireWorkflowRunStatusCounts(value.StatusCounts),
-	}
-	appendMessageSlice(&out.Runs, value.Runs, ToWireWorkflowRun)
-	return out
+	return convertMessage(value, func(value *ListWorkflowProviderRunsResponse) *proto.ListWorkflowProviderRunsResponse {
+		out := &proto.ListWorkflowProviderRunsResponse{
+			NextPageToken: value.NextPageToken,
+			TotalCount:    value.TotalCount,
+			StatusCounts:  ToWireWorkflowRunStatusCounts(value.StatusCounts),
+		}
+		appendMessageSlice(&out.Runs, value.Runs, ToWireWorkflowRun)
+		return out
+	})
 }
 
 func FromWireListWorkflowProviderRunsResponse(value *proto.ListWorkflowProviderRunsResponse) *ListWorkflowProviderRunsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListWorkflowProviderRunsResponse{
-		NextPageToken: value.NextPageToken,
-		TotalCount:    value.TotalCount,
-		StatusCounts:  FromWireWorkflowRunStatusCounts(value.StatusCounts),
-	}
-	appendMessageSlice(&out.Runs, value.Runs, FromWireWorkflowRun)
-	return out
+	return convertMessage(value, func(value *proto.ListWorkflowProviderRunsResponse) *ListWorkflowProviderRunsResponse {
+		out := &ListWorkflowProviderRunsResponse{
+			NextPageToken: value.NextPageToken,
+			TotalCount:    value.TotalCount,
+			StatusCounts:  FromWireWorkflowRunStatusCounts(value.StatusCounts),
+		}
+		appendMessageSlice(&out.Runs, value.Runs, FromWireWorkflowRun)
+		return out
+	})
 }
 
 func ToWireSetWorkflowProviderActivationPausedRequest(value *SetWorkflowProviderActivationPausedRequest) *proto.SetWorkflowProviderActivationPausedRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetWorkflowProviderActivationPausedRequest{
-		DefinitionId: value.DefinitionId,
-		ActivationId: value.ActivationId,
-		Paused:       value.Paused,
-		Context:      ToWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *SetWorkflowProviderActivationPausedRequest) *proto.SetWorkflowProviderActivationPausedRequest {
+		out := &proto.SetWorkflowProviderActivationPausedRequest{
+			DefinitionId: value.DefinitionId,
+			ActivationId: value.ActivationId,
+			Paused:       value.Paused,
+			Context:      ToWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireSetWorkflowProviderActivationPausedRequest(value *proto.SetWorkflowProviderActivationPausedRequest) *SetWorkflowProviderActivationPausedRequest {
-	if value == nil {
-		return nil
-	}
-	out := &SetWorkflowProviderActivationPausedRequest{
-		DefinitionId: value.DefinitionId,
-		ActivationId: value.ActivationId,
-		Paused:       value.Paused,
-		Context:      FromWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SetWorkflowProviderActivationPausedRequest) *SetWorkflowProviderActivationPausedRequest {
+		out := &SetWorkflowProviderActivationPausedRequest{
+			DefinitionId: value.DefinitionId,
+			ActivationId: value.ActivationId,
+			Paused:       value.Paused,
+			Context:      FromWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireSetWorkflowProviderDefinitionPausedRequest(value *SetWorkflowProviderDefinitionPausedRequest) *proto.SetWorkflowProviderDefinitionPausedRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionId: value.DefinitionId,
-		Paused:       value.Paused,
-		Context:      ToWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *SetWorkflowProviderDefinitionPausedRequest) *proto.SetWorkflowProviderDefinitionPausedRequest {
+		out := &proto.SetWorkflowProviderDefinitionPausedRequest{
+			DefinitionId: value.DefinitionId,
+			Paused:       value.Paused,
+			Context:      ToWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireSetWorkflowProviderDefinitionPausedRequest(value *proto.SetWorkflowProviderDefinitionPausedRequest) *SetWorkflowProviderDefinitionPausedRequest {
-	if value == nil {
-		return nil
-	}
-	out := &SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionId: value.DefinitionId,
-		Paused:       value.Paused,
-		Context:      FromWireRequestContext(value.Context),
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SetWorkflowProviderDefinitionPausedRequest) *SetWorkflowProviderDefinitionPausedRequest {
+		out := &SetWorkflowProviderDefinitionPausedRequest{
+			DefinitionId: value.DefinitionId,
+			Paused:       value.Paused,
+			Context:      FromWireRequestContext(value.Context),
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireSignalOrStartWorkflowProviderRunRequest(value *SignalOrStartWorkflowProviderRunRequest) *proto.SignalOrStartWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:                  value.WorkflowKey,
-		IdempotencyKey:               value.IdempotencyKey,
-		Signal:                       ToWireWorkflowSignal(value.Signal),
-		Provider:                     value.Provider,
-		DefinitionId:                 value.DefinitionId,
-		Input:                        ToWireStruct(value.Input),
-		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
-		Context:                      ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *SignalOrStartWorkflowProviderRunRequest) *proto.SignalOrStartWorkflowProviderRunRequest {
+		out := &proto.SignalOrStartWorkflowProviderRunRequest{
+			WorkflowKey:                  value.WorkflowKey,
+			IdempotencyKey:               value.IdempotencyKey,
+			Signal:                       ToWireWorkflowSignal(value.Signal),
+			Provider:                     value.Provider,
+			DefinitionId:                 value.DefinitionId,
+			Input:                        ToWireStruct(value.Input),
+			ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
+			Context:                      ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireSignalOrStartWorkflowProviderRunRequest(value *proto.SignalOrStartWorkflowProviderRunRequest) *SignalOrStartWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:                  value.WorkflowKey,
-		IdempotencyKey:               value.IdempotencyKey,
-		Signal:                       FromWireWorkflowSignal(value.Signal),
-		Provider:                     value.Provider,
-		DefinitionId:                 value.DefinitionId,
-		Input:                        FromWireStruct(value.Input),
-		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
-		Context:                      FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.SignalOrStartWorkflowProviderRunRequest) *SignalOrStartWorkflowProviderRunRequest {
+		out := &SignalOrStartWorkflowProviderRunRequest{
+			WorkflowKey:                  value.WorkflowKey,
+			IdempotencyKey:               value.IdempotencyKey,
+			Signal:                       FromWireWorkflowSignal(value.Signal),
+			Provider:                     value.Provider,
+			DefinitionId:                 value.DefinitionId,
+			Input:                        FromWireStruct(value.Input),
+			ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
+			Context:                      FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireSignalWorkflowProviderRunRequest(value *SignalWorkflowProviderRunRequest) *proto.SignalWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SignalWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Signal:   ToWireWorkflowSignal(value.Signal),
-		Context:  ToWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *SignalWorkflowProviderRunRequest) *proto.SignalWorkflowProviderRunRequest {
+		out := &proto.SignalWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Signal:   ToWireWorkflowSignal(value.Signal),
+			Context:  ToWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func FromWireSignalWorkflowProviderRunRequest(value *proto.SignalWorkflowProviderRunRequest) *SignalWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &SignalWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Signal:   FromWireWorkflowSignal(value.Signal),
-		Context:  FromWireRequestContext(value.Context),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SignalWorkflowProviderRunRequest) *SignalWorkflowProviderRunRequest {
+		out := &SignalWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Signal:   FromWireWorkflowSignal(value.Signal),
+			Context:  FromWireRequestContext(value.Context),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireSignalWorkflowRunResponse(value *SignalWorkflowRunResponse) *proto.SignalWorkflowRunResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SignalWorkflowRunResponse{
-		Run:         ToWireWorkflowRun(value.Run),
-		Signal:      ToWireWorkflowSignal(value.Signal),
-		StartedRun:  value.StartedRun,
-		WorkflowKey: value.WorkflowKey,
-	}
-	return out
+	return convertMessage(value, func(value *SignalWorkflowRunResponse) *proto.SignalWorkflowRunResponse {
+		out := &proto.SignalWorkflowRunResponse{
+			Run:         ToWireWorkflowRun(value.Run),
+			Signal:      ToWireWorkflowSignal(value.Signal),
+			StartedRun:  value.StartedRun,
+			WorkflowKey: value.WorkflowKey,
+		}
+		return out
+	})
 }
 
 func FromWireSignalWorkflowRunResponse(value *proto.SignalWorkflowRunResponse) *SignalWorkflowRunResponse {
-	if value == nil {
-		return nil
-	}
-	out := &SignalWorkflowRunResponse{
-		Run:         FromWireWorkflowRun(value.Run),
-		Signal:      FromWireWorkflowSignal(value.Signal),
-		StartedRun:  value.StartedRun,
-		WorkflowKey: value.WorkflowKey,
-	}
-	return out
+	return convertMessage(value, func(value *proto.SignalWorkflowRunResponse) *SignalWorkflowRunResponse {
+		out := &SignalWorkflowRunResponse{
+			Run:         FromWireWorkflowRun(value.Run),
+			Signal:      FromWireWorkflowSignal(value.Signal),
+			StartedRun:  value.StartedRun,
+			WorkflowKey: value.WorkflowKey,
+		}
+		return out
+	})
 }
 
 func ToWireStartWorkflowProviderRunRequest(value *StartWorkflowProviderRunRequest) *proto.StartWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartWorkflowProviderRunRequest{
-		IdempotencyKey:               value.IdempotencyKey,
-		WorkflowKey:                  value.WorkflowKey,
-		Provider:                     value.Provider,
-		DefinitionId:                 value.DefinitionId,
-		Input:                        ToWireStruct(value.Input),
-		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
-		Context:                      ToWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *StartWorkflowProviderRunRequest) *proto.StartWorkflowProviderRunRequest {
+		out := &proto.StartWorkflowProviderRunRequest{
+			IdempotencyKey:               value.IdempotencyKey,
+			WorkflowKey:                  value.WorkflowKey,
+			Provider:                     value.Provider,
+			DefinitionId:                 value.DefinitionId,
+			Input:                        ToWireStruct(value.Input),
+			ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
+			Context:                      ToWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func FromWireStartWorkflowProviderRunRequest(value *proto.StartWorkflowProviderRunRequest) *StartWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &StartWorkflowProviderRunRequest{
-		IdempotencyKey:               value.IdempotencyKey,
-		WorkflowKey:                  value.WorkflowKey,
-		Provider:                     value.Provider,
-		DefinitionId:                 value.DefinitionId,
-		Input:                        FromWireStruct(value.Input),
-		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
-		Context:                      FromWireRequestContext(value.Context),
-	}
-	return out
+	return convertMessage(value, func(value *proto.StartWorkflowProviderRunRequest) *StartWorkflowProviderRunRequest {
+		out := &StartWorkflowProviderRunRequest{
+			IdempotencyKey:               value.IdempotencyKey,
+			WorkflowKey:                  value.WorkflowKey,
+			Provider:                     value.Provider,
+			DefinitionId:                 value.DefinitionId,
+			Input:                        FromWireStruct(value.Input),
+			ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
+			Context:                      FromWireRequestContext(value.Context),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowActivation(value *WorkflowActivation) *proto.WorkflowActivation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowActivation{
-		Id:     value.Id,
-		Input:  ToWireWorkflowValue(value.Input),
-		Paused: value.Paused,
-	}
-	switch variant := value.Trigger.(type) {
-	case *WorkflowActivationTriggerSchedule:
-		out.Trigger = &proto.WorkflowActivation_Schedule{Schedule: ToWireWorkflowScheduleActivation(variant.Value)}
-	case *WorkflowActivationTriggerEvent:
-		out.Trigger = &proto.WorkflowActivation_Event{Event: ToWireWorkflowEventActivation(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowActivation) *proto.WorkflowActivation {
+		out := &proto.WorkflowActivation{
+			Id:     value.Id,
+			Input:  ToWireWorkflowValue(value.Input),
+			Paused: value.Paused,
+		}
+		switch variant := value.Trigger.(type) {
+		case *WorkflowActivationTriggerSchedule:
+			out.Trigger = &proto.WorkflowActivation_Schedule{Schedule: ToWireWorkflowScheduleActivation(variant.Value)}
+		case *WorkflowActivationTriggerEvent:
+			out.Trigger = &proto.WorkflowActivation_Event{Event: ToWireWorkflowEventActivation(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowActivation(value *proto.WorkflowActivation) *WorkflowActivation {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowActivation{
-		Id:     value.Id,
-		Input:  FromWireWorkflowValue(value.Input),
-		Paused: value.Paused,
-	}
-	switch variant := value.Trigger.(type) {
-	case *proto.WorkflowActivation_Schedule:
-		out.Trigger = &WorkflowActivationTriggerSchedule{Value: FromWireWorkflowScheduleActivation(variant.Schedule)}
-	case *proto.WorkflowActivation_Event:
-		out.Trigger = &WorkflowActivationTriggerEvent{Value: FromWireWorkflowEventActivation(variant.Event)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowActivation) *WorkflowActivation {
+		out := &WorkflowActivation{
+			Id:     value.Id,
+			Input:  FromWireWorkflowValue(value.Input),
+			Paused: value.Paused,
+		}
+		switch variant := value.Trigger.(type) {
+		case *proto.WorkflowActivation_Schedule:
+			out.Trigger = &WorkflowActivationTriggerSchedule{Value: FromWireWorkflowScheduleActivation(variant.Schedule)}
+		case *proto.WorkflowActivation_Event:
+			out.Trigger = &WorkflowActivationTriggerEvent{Value: FromWireWorkflowEventActivation(variant.Event)}
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowAgentMessage(value *WorkflowAgentMessage) *proto.WorkflowAgentMessage {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowAgentMessage{
-		Role:     value.Role,
-		Text:     ToWireWorkflowText(value.Text),
-		Metadata: ToWireStruct(value.Metadata),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowAgentMessage) *proto.WorkflowAgentMessage {
+		out := &proto.WorkflowAgentMessage{
+			Role:     value.Role,
+			Text:     ToWireWorkflowText(value.Text),
+			Metadata: ToWireStruct(value.Metadata),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowAgentMessage(value *proto.WorkflowAgentMessage) *WorkflowAgentMessage {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowAgentMessage{
-		Role:     value.Role,
-		Text:     FromWireWorkflowText(value.Text),
-		Metadata: FromWireStruct(value.Metadata),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowAgentMessage) *WorkflowAgentMessage {
+		out := &WorkflowAgentMessage{
+			Role:     value.Role,
+			Text:     FromWireWorkflowText(value.Text),
+			Metadata: FromWireStruct(value.Metadata),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowArray(value *WorkflowArray) *proto.WorkflowArray {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowArray{}
-	appendMessageSlice(&out.Values, value.Values, ToWireWorkflowValue)
-	return out
+	return convertMessage(value, func(value *WorkflowArray) *proto.WorkflowArray {
+		out := &proto.WorkflowArray{}
+		appendMessageSlice(&out.Values, value.Values, ToWireWorkflowValue)
+		return out
+	})
 }
 
 func FromWireWorkflowArray(value *proto.WorkflowArray) *WorkflowArray {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowArray{}
-	appendMessageSlice(&out.Values, value.Values, FromWireWorkflowValue)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowArray) *WorkflowArray {
+		out := &WorkflowArray{}
+		appendMessageSlice(&out.Values, value.Values, FromWireWorkflowValue)
+		return out
+	})
 }
 
 func ToWireWorkflowDefinition(value *WorkflowDefinition) *proto.WorkflowDefinition {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowDefinition{
-		Id:         value.Id,
-		Generation: value.Generation,
-		Target:     ToWireBoundWorkflowTarget(value.Target),
-		Paused:     value.Paused,
-		CreatedAt:  ToWireTimestamp(value.CreatedAt),
-		UpdatedAt:  ToWireTimestamp(value.UpdatedAt),
-		Provider:   value.Provider,
-		RunAs:      value.RunAs,
-	}
-	appendMessageSlice(&out.Activations, value.Activations, ToWireWorkflowActivation)
-	return out
+	return convertMessage(value, func(value *WorkflowDefinition) *proto.WorkflowDefinition {
+		out := &proto.WorkflowDefinition{
+			Id:         value.Id,
+			Generation: value.Generation,
+			Target:     ToWireBoundWorkflowTarget(value.Target),
+			Paused:     value.Paused,
+			CreatedAt:  ToWireTimestamp(value.CreatedAt),
+			UpdatedAt:  ToWireTimestamp(value.UpdatedAt),
+			Provider:   value.Provider,
+			RunAs:      value.RunAs,
+		}
+		appendMessageSlice(&out.Activations, value.Activations, ToWireWorkflowActivation)
+		return out
+	})
 }
 
 func FromWireWorkflowDefinition(value *proto.WorkflowDefinition) *WorkflowDefinition {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowDefinition{
-		Id:         value.Id,
-		Generation: value.Generation,
-		Target:     FromWireBoundWorkflowTarget(value.Target),
-		Paused:     value.Paused,
-		CreatedAt:  FromWireTimestamp(value.CreatedAt),
-		UpdatedAt:  FromWireTimestamp(value.UpdatedAt),
-		Provider:   value.Provider,
-		RunAs:      value.RunAs,
-	}
-	appendMessageSlice(&out.Activations, value.Activations, FromWireWorkflowActivation)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowDefinition) *WorkflowDefinition {
+		out := &WorkflowDefinition{
+			Id:         value.Id,
+			Generation: value.Generation,
+			Target:     FromWireBoundWorkflowTarget(value.Target),
+			Paused:     value.Paused,
+			CreatedAt:  FromWireTimestamp(value.CreatedAt),
+			UpdatedAt:  FromWireTimestamp(value.UpdatedAt),
+			Provider:   value.Provider,
+			RunAs:      value.RunAs,
+		}
+		appendMessageSlice(&out.Activations, value.Activations, FromWireWorkflowActivation)
+		return out
+	})
 }
 
 func ToWireWorkflowDefinitionSpec(value *WorkflowDefinitionSpec) *proto.WorkflowDefinitionSpec {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowDefinitionSpec{
-		Id:     value.Id,
-		Target: ToWireBoundWorkflowTarget(value.Target),
-		Paused: value.Paused,
-		RunAs:  value.RunAs,
-	}
-	appendMessageSlice(&out.Activations, value.Activations, ToWireWorkflowActivation)
-	return out
+	return convertMessage(value, func(value *WorkflowDefinitionSpec) *proto.WorkflowDefinitionSpec {
+		out := &proto.WorkflowDefinitionSpec{
+			Id:     value.Id,
+			Target: ToWireBoundWorkflowTarget(value.Target),
+			Paused: value.Paused,
+			RunAs:  value.RunAs,
+		}
+		appendMessageSlice(&out.Activations, value.Activations, ToWireWorkflowActivation)
+		return out
+	})
 }
 
 func FromWireWorkflowDefinitionSpec(value *proto.WorkflowDefinitionSpec) *WorkflowDefinitionSpec {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowDefinitionSpec{
-		Id:     value.Id,
-		Target: FromWireBoundWorkflowTarget(value.Target),
-		Paused: value.Paused,
-		RunAs:  value.RunAs,
-	}
-	appendMessageSlice(&out.Activations, value.Activations, FromWireWorkflowActivation)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowDefinitionSpec) *WorkflowDefinitionSpec {
+		out := &WorkflowDefinitionSpec{
+			Id:     value.Id,
+			Target: FromWireBoundWorkflowTarget(value.Target),
+			Paused: value.Paused,
+			RunAs:  value.RunAs,
+		}
+		appendMessageSlice(&out.Activations, value.Activations, FromWireWorkflowActivation)
+		return out
+	})
 }
 
 func ToWireWorkflowEvent(value *WorkflowEvent) *proto.WorkflowEvent {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowEvent{
-		Id:              value.Id,
-		Source:          value.Source,
-		SpecVersion:     value.SpecVersion,
-		Type:            value.Type,
-		Subject:         value.Subject,
-		Time:            ToWireTimestamp(value.Time),
-		Datacontenttype: value.Datacontenttype,
-		Data:            ToWireStruct(value.Data),
-	}
-	if value.Extensions != nil {
-		out.Extensions = make(map[string]*structpb.Value, len(value.Extensions))
-		for key, item := range value.Extensions {
-			out.Extensions[key] = ToWireValue(item)
+	return convertMessage(value, func(value *WorkflowEvent) *proto.WorkflowEvent {
+		out := &proto.WorkflowEvent{
+			Id:              value.Id,
+			Source:          value.Source,
+			SpecVersion:     value.SpecVersion,
+			Type:            value.Type,
+			Subject:         value.Subject,
+			Time:            ToWireTimestamp(value.Time),
+			Datacontenttype: value.Datacontenttype,
+			Data:            ToWireStruct(value.Data),
 		}
-	}
-	return out
+		if value.Extensions != nil {
+			out.Extensions = make(map[string]*structpb.Value, len(value.Extensions))
+			for key, item := range value.Extensions {
+				out.Extensions[key] = ToWireValue(item)
+			}
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowEvent(value *proto.WorkflowEvent) *WorkflowEvent {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowEvent{
-		Id:              value.Id,
-		Source:          value.Source,
-		SpecVersion:     value.SpecVersion,
-		Type:            value.Type,
-		Subject:         value.Subject,
-		Time:            FromWireTimestamp(value.Time),
-		Datacontenttype: value.Datacontenttype,
-		Data:            FromWireStruct(value.Data),
-	}
-	if value.Extensions != nil {
-		out.Extensions = make(map[string]any, len(value.Extensions))
-		for key, item := range value.Extensions {
-			out.Extensions[key] = FromWireValue(item)
+	return convertMessage(value, func(value *proto.WorkflowEvent) *WorkflowEvent {
+		out := &WorkflowEvent{
+			Id:              value.Id,
+			Source:          value.Source,
+			SpecVersion:     value.SpecVersion,
+			Type:            value.Type,
+			Subject:         value.Subject,
+			Time:            FromWireTimestamp(value.Time),
+			Datacontenttype: value.Datacontenttype,
+			Data:            FromWireStruct(value.Data),
 		}
-	}
-	return out
+		if value.Extensions != nil {
+			out.Extensions = make(map[string]any, len(value.Extensions))
+			for key, item := range value.Extensions {
+				out.Extensions[key] = FromWireValue(item)
+			}
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowEventActivation(value *WorkflowEventActivation) *proto.WorkflowEventActivation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowEventActivation{
-		Match: ToWireWorkflowEventMatch(value.Match),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowEventActivation) *proto.WorkflowEventActivation {
+		out := &proto.WorkflowEventActivation{
+			Match: ToWireWorkflowEventMatch(value.Match),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowEventActivation(value *proto.WorkflowEventActivation) *WorkflowEventActivation {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowEventActivation{
-		Match: FromWireWorkflowEventMatch(value.Match),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowEventActivation) *WorkflowEventActivation {
+		out := &WorkflowEventActivation{
+			Match: FromWireWorkflowEventMatch(value.Match),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowEventMatch(value *WorkflowEventMatch) *proto.WorkflowEventMatch {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowEventMatch{
-		Type:    value.Type,
-		Source:  value.Source,
-		Subject: value.Subject,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowEventMatch) *proto.WorkflowEventMatch {
+		out := &proto.WorkflowEventMatch{
+			Type:    value.Type,
+			Source:  value.Source,
+			Subject: value.Subject,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowEventMatch(value *proto.WorkflowEventMatch) *WorkflowEventMatch {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowEventMatch{
-		Type:    value.Type,
-		Source:  value.Source,
-		Subject: value.Subject,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowEventMatch) *WorkflowEventMatch {
+		out := &WorkflowEventMatch{
+			Type:    value.Type,
+			Source:  value.Source,
+			Subject: value.Subject,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowEventTriggerInvocation(value *WorkflowEventTriggerInvocation) *proto.WorkflowEventTriggerInvocation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowEventTriggerInvocation{
-		ActivationId: value.ActivationId,
-		Event:        ToWireWorkflowEvent(value.Event),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowEventTriggerInvocation) *proto.WorkflowEventTriggerInvocation {
+		out := &proto.WorkflowEventTriggerInvocation{
+			ActivationId: value.ActivationId,
+			Event:        ToWireWorkflowEvent(value.Event),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowEventTriggerInvocation(value *proto.WorkflowEventTriggerInvocation) *WorkflowEventTriggerInvocation {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowEventTriggerInvocation{
-		ActivationId: value.ActivationId,
-		Event:        FromWireWorkflowEvent(value.Event),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowEventTriggerInvocation) *WorkflowEventTriggerInvocation {
+		out := &WorkflowEventTriggerInvocation{
+			ActivationId: value.ActivationId,
+			Event:        FromWireWorkflowEvent(value.Event),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowManualTrigger(value *WorkflowManualTrigger) *proto.WorkflowManualTrigger {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowManualTrigger{}
-	return out
+	return convertMessage(value, func(value *WorkflowManualTrigger) *proto.WorkflowManualTrigger {
+		out := &proto.WorkflowManualTrigger{}
+		return out
+	})
 }
 
 func FromWireWorkflowManualTrigger(value *proto.WorkflowManualTrigger) *WorkflowManualTrigger {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowManualTrigger{}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowManualTrigger) *WorkflowManualTrigger {
+		out := &WorkflowManualTrigger{}
+		return out
+	})
 }
 
 func ToWireWorkflowObject(value *WorkflowObject) *proto.WorkflowObject {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowObject{}
-	out.Fields = convertMessageMap(value.Fields, ToWireWorkflowValue)
-	return out
+	return convertMessage(value, func(value *WorkflowObject) *proto.WorkflowObject {
+		out := &proto.WorkflowObject{}
+		out.Fields = convertMessageMap(value.Fields, ToWireWorkflowValue)
+		return out
+	})
 }
 
 func FromWireWorkflowObject(value *proto.WorkflowObject) *WorkflowObject {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowObject{}
-	out.Fields = convertMessageMap(value.Fields, FromWireWorkflowValue)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowObject) *WorkflowObject {
+		out := &WorkflowObject{}
+		out.Fields = convertMessageMap(value.Fields, FromWireWorkflowValue)
+		return out
+	})
 }
 
 func ToWireWorkflowPathSource(value *WorkflowPathSource) *proto.WorkflowPathSource {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowPathSource{
-		Path: value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowPathSource) *proto.WorkflowPathSource {
+		out := &proto.WorkflowPathSource{
+			Path: value.Path,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowPathSource(value *proto.WorkflowPathSource) *WorkflowPathSource {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowPathSource{
-		Path: value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowPathSource) *WorkflowPathSource {
+		out := &WorkflowPathSource{
+			Path: value.Path,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowRun(value *WorkflowRun) *proto.WorkflowRun {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowRun{
-		Id:                   value.Id,
-		Status:               proto.WorkflowRunStatus(value.Status),
-		Target:               ToWireBoundWorkflowTarget(value.Target),
-		Trigger:              ToWireWorkflowRunTrigger(value.Trigger),
-		CreatedAt:            ToWireTimestamp(value.CreatedAt),
-		StartedAt:            ToWireTimestamp(value.StartedAt),
-		CompletedAt:          ToWireTimestamp(value.CompletedAt),
-		StatusMessage:        value.StatusMessage,
-		Output:               ToWireValue(value.Output),
-		WorkflowKey:          value.WorkflowKey,
-		Provider:             value.Provider,
-		DefinitionId:         value.DefinitionId,
-		RunAs:                value.RunAs,
-		Input:                ToWireStruct(value.Input),
-		DefinitionGeneration: value.DefinitionGeneration,
-		CurrentStepId:        value.CurrentStepId,
-	}
-	appendMessageSlice(&out.Steps, value.Steps, ToWireWorkflowStepExecution)
-	return out
+	return convertMessage(value, func(value *WorkflowRun) *proto.WorkflowRun {
+		out := &proto.WorkflowRun{
+			Id:                   value.Id,
+			Status:               proto.WorkflowRunStatus(value.Status),
+			Target:               ToWireBoundWorkflowTarget(value.Target),
+			Trigger:              ToWireWorkflowRunTrigger(value.Trigger),
+			CreatedAt:            ToWireTimestamp(value.CreatedAt),
+			StartedAt:            ToWireTimestamp(value.StartedAt),
+			CompletedAt:          ToWireTimestamp(value.CompletedAt),
+			StatusMessage:        value.StatusMessage,
+			Output:               ToWireValue(value.Output),
+			WorkflowKey:          value.WorkflowKey,
+			Provider:             value.Provider,
+			DefinitionId:         value.DefinitionId,
+			RunAs:                value.RunAs,
+			Input:                ToWireStruct(value.Input),
+			DefinitionGeneration: value.DefinitionGeneration,
+			CurrentStepId:        value.CurrentStepId,
+		}
+		appendMessageSlice(&out.Steps, value.Steps, ToWireWorkflowStepExecution)
+		return out
+	})
 }
 
 func FromWireWorkflowRun(value *proto.WorkflowRun) *WorkflowRun {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowRun{
-		Id:                   value.Id,
-		Status:               WorkflowRunStatus(value.Status),
-		Target:               FromWireBoundWorkflowTarget(value.Target),
-		Trigger:              FromWireWorkflowRunTrigger(value.Trigger),
-		CreatedAt:            FromWireTimestamp(value.CreatedAt),
-		StartedAt:            FromWireTimestamp(value.StartedAt),
-		CompletedAt:          FromWireTimestamp(value.CompletedAt),
-		StatusMessage:        value.StatusMessage,
-		Output:               FromWireValue(value.Output),
-		WorkflowKey:          value.WorkflowKey,
-		Provider:             value.Provider,
-		DefinitionId:         value.DefinitionId,
-		RunAs:                value.RunAs,
-		Input:                FromWireStruct(value.Input),
-		DefinitionGeneration: value.DefinitionGeneration,
-		CurrentStepId:        value.CurrentStepId,
-	}
-	appendMessageSlice(&out.Steps, value.Steps, FromWireWorkflowStepExecution)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowRun) *WorkflowRun {
+		out := &WorkflowRun{
+			Id:                   value.Id,
+			Status:               WorkflowRunStatus(value.Status),
+			Target:               FromWireBoundWorkflowTarget(value.Target),
+			Trigger:              FromWireWorkflowRunTrigger(value.Trigger),
+			CreatedAt:            FromWireTimestamp(value.CreatedAt),
+			StartedAt:            FromWireTimestamp(value.StartedAt),
+			CompletedAt:          FromWireTimestamp(value.CompletedAt),
+			StatusMessage:        value.StatusMessage,
+			Output:               FromWireValue(value.Output),
+			WorkflowKey:          value.WorkflowKey,
+			Provider:             value.Provider,
+			DefinitionId:         value.DefinitionId,
+			RunAs:                value.RunAs,
+			Input:                FromWireStruct(value.Input),
+			DefinitionGeneration: value.DefinitionGeneration,
+			CurrentStepId:        value.CurrentStepId,
+		}
+		appendMessageSlice(&out.Steps, value.Steps, FromWireWorkflowStepExecution)
+		return out
+	})
 }
 
 func ToWireWorkflowRunEvent(value *WorkflowRunEvent) *proto.WorkflowRunEvent {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowRunEvent{
-		Id:        value.Id,
-		RunId:     value.RunId,
-		StepId:    value.StepId,
-		Type:      value.Type,
-		Data:      ToWireStruct(value.Data),
-		CreatedAt: ToWireTimestamp(value.CreatedAt),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowRunEvent) *proto.WorkflowRunEvent {
+		out := &proto.WorkflowRunEvent{
+			Id:        value.Id,
+			RunId:     value.RunId,
+			StepId:    value.StepId,
+			Type:      value.Type,
+			Data:      ToWireStruct(value.Data),
+			CreatedAt: ToWireTimestamp(value.CreatedAt),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowRunEvent(value *proto.WorkflowRunEvent) *WorkflowRunEvent {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowRunEvent{
-		Id:        value.Id,
-		RunId:     value.RunId,
-		StepId:    value.StepId,
-		Type:      value.Type,
-		Data:      FromWireStruct(value.Data),
-		CreatedAt: FromWireTimestamp(value.CreatedAt),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowRunEvent) *WorkflowRunEvent {
+		out := &WorkflowRunEvent{
+			Id:        value.Id,
+			RunId:     value.RunId,
+			StepId:    value.StepId,
+			Type:      value.Type,
+			Data:      FromWireStruct(value.Data),
+			CreatedAt: FromWireTimestamp(value.CreatedAt),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowRunStatusCounts(value *WorkflowRunStatusCounts) *proto.WorkflowRunStatusCounts {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowRunStatusCounts{
-		Pending:   value.Pending,
-		Running:   value.Running,
-		Succeeded: value.Succeeded,
-		Failed:    value.Failed,
-		Canceled:  value.Canceled,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowRunStatusCounts) *proto.WorkflowRunStatusCounts {
+		out := &proto.WorkflowRunStatusCounts{
+			Pending:   value.Pending,
+			Running:   value.Running,
+			Succeeded: value.Succeeded,
+			Failed:    value.Failed,
+			Canceled:  value.Canceled,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowRunStatusCounts(value *proto.WorkflowRunStatusCounts) *WorkflowRunStatusCounts {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowRunStatusCounts{
-		Pending:   value.Pending,
-		Running:   value.Running,
-		Succeeded: value.Succeeded,
-		Failed:    value.Failed,
-		Canceled:  value.Canceled,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowRunStatusCounts) *WorkflowRunStatusCounts {
+		out := &WorkflowRunStatusCounts{
+			Pending:   value.Pending,
+			Running:   value.Running,
+			Succeeded: value.Succeeded,
+			Failed:    value.Failed,
+			Canceled:  value.Canceled,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowRunTrigger(value *WorkflowRunTrigger) *proto.WorkflowRunTrigger {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowRunTrigger{}
-	switch variant := value.Kind.(type) {
-	case *WorkflowRunTriggerKindManual:
-		out.Kind = &proto.WorkflowRunTrigger_Manual{Manual: ToWireWorkflowManualTrigger(variant.Value)}
-	case *WorkflowRunTriggerKindSchedule:
-		out.Kind = &proto.WorkflowRunTrigger_Schedule{Schedule: ToWireWorkflowScheduleTrigger(variant.Value)}
-	case *WorkflowRunTriggerKindEvent:
-		out.Kind = &proto.WorkflowRunTrigger_Event{Event: ToWireWorkflowEventTriggerInvocation(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowRunTrigger) *proto.WorkflowRunTrigger {
+		out := &proto.WorkflowRunTrigger{}
+		switch variant := value.Kind.(type) {
+		case *WorkflowRunTriggerKindManual:
+			out.Kind = &proto.WorkflowRunTrigger_Manual{Manual: ToWireWorkflowManualTrigger(variant.Value)}
+		case *WorkflowRunTriggerKindSchedule:
+			out.Kind = &proto.WorkflowRunTrigger_Schedule{Schedule: ToWireWorkflowScheduleTrigger(variant.Value)}
+		case *WorkflowRunTriggerKindEvent:
+			out.Kind = &proto.WorkflowRunTrigger_Event{Event: ToWireWorkflowEventTriggerInvocation(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowRunTrigger(value *proto.WorkflowRunTrigger) *WorkflowRunTrigger {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowRunTrigger{}
-	switch variant := value.Kind.(type) {
-	case *proto.WorkflowRunTrigger_Manual:
-		out.Kind = &WorkflowRunTriggerKindManual{Value: FromWireWorkflowManualTrigger(variant.Manual)}
-	case *proto.WorkflowRunTrigger_Schedule:
-		out.Kind = &WorkflowRunTriggerKindSchedule{Value: FromWireWorkflowScheduleTrigger(variant.Schedule)}
-	case *proto.WorkflowRunTrigger_Event:
-		out.Kind = &WorkflowRunTriggerKindEvent{Value: FromWireWorkflowEventTriggerInvocation(variant.Event)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowRunTrigger) *WorkflowRunTrigger {
+		out := &WorkflowRunTrigger{}
+		switch variant := value.Kind.(type) {
+		case *proto.WorkflowRunTrigger_Manual:
+			out.Kind = &WorkflowRunTriggerKindManual{Value: FromWireWorkflowManualTrigger(variant.Manual)}
+		case *proto.WorkflowRunTrigger_Schedule:
+			out.Kind = &WorkflowRunTriggerKindSchedule{Value: FromWireWorkflowScheduleTrigger(variant.Schedule)}
+		case *proto.WorkflowRunTrigger_Event:
+			out.Kind = &WorkflowRunTriggerKindEvent{Value: FromWireWorkflowEventTriggerInvocation(variant.Event)}
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowScheduleActivation(value *WorkflowScheduleActivation) *proto.WorkflowScheduleActivation {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowScheduleActivation{
-		Cron:     value.Cron,
-		Timezone: value.Timezone,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowScheduleActivation) *proto.WorkflowScheduleActivation {
+		out := &proto.WorkflowScheduleActivation{
+			Cron:     value.Cron,
+			Timezone: value.Timezone,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowScheduleActivation(value *proto.WorkflowScheduleActivation) *WorkflowScheduleActivation {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowScheduleActivation{
-		Cron:     value.Cron,
-		Timezone: value.Timezone,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowScheduleActivation) *WorkflowScheduleActivation {
+		out := &WorkflowScheduleActivation{
+			Cron:     value.Cron,
+			Timezone: value.Timezone,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowScheduleTrigger(value *WorkflowScheduleTrigger) *proto.WorkflowScheduleTrigger {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowScheduleTrigger{
-		ActivationId: value.ActivationId,
-		ScheduledFor: ToWireTimestamp(value.ScheduledFor),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowScheduleTrigger) *proto.WorkflowScheduleTrigger {
+		out := &proto.WorkflowScheduleTrigger{
+			ActivationId: value.ActivationId,
+			ScheduledFor: ToWireTimestamp(value.ScheduledFor),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowScheduleTrigger(value *proto.WorkflowScheduleTrigger) *WorkflowScheduleTrigger {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowScheduleTrigger{
-		ActivationId: value.ActivationId,
-		ScheduledFor: FromWireTimestamp(value.ScheduledFor),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowScheduleTrigger) *WorkflowScheduleTrigger {
+		out := &WorkflowScheduleTrigger{
+			ActivationId: value.ActivationId,
+			ScheduledFor: FromWireTimestamp(value.ScheduledFor),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowSignal(value *WorkflowSignal) *proto.WorkflowSignal {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowSignal{
-		Id:             value.Id,
-		Name:           value.Name,
-		Payload:        ToWireStruct(value.Payload),
-		Metadata:       ToWireStruct(value.Metadata),
-		CreatedAt:      ToWireTimestamp(value.CreatedAt),
-		IdempotencyKey: value.IdempotencyKey,
-		Sequence:       value.Sequence,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowSignal) *proto.WorkflowSignal {
+		out := &proto.WorkflowSignal{
+			Id:             value.Id,
+			Name:           value.Name,
+			Payload:        ToWireStruct(value.Payload),
+			Metadata:       ToWireStruct(value.Metadata),
+			CreatedAt:      ToWireTimestamp(value.CreatedAt),
+			IdempotencyKey: value.IdempotencyKey,
+			Sequence:       value.Sequence,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowSignal(value *proto.WorkflowSignal) *WorkflowSignal {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowSignal{
-		Id:             value.Id,
-		Name:           value.Name,
-		Payload:        FromWireStruct(value.Payload),
-		Metadata:       FromWireStruct(value.Metadata),
-		CreatedAt:      FromWireTimestamp(value.CreatedAt),
-		IdempotencyKey: value.IdempotencyKey,
-		Sequence:       value.Sequence,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowSignal) *WorkflowSignal {
+		out := &WorkflowSignal{
+			Id:             value.Id,
+			Name:           value.Name,
+			Payload:        FromWireStruct(value.Payload),
+			Metadata:       FromWireStruct(value.Metadata),
+			CreatedAt:      FromWireTimestamp(value.CreatedAt),
+			IdempotencyKey: value.IdempotencyKey,
+			Sequence:       value.Sequence,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowStep(value *WorkflowStep) *proto.WorkflowStep {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStep{
-		Id:             value.Id,
-		When:           ToWireWorkflowStepWhen(value.When),
-		TimeoutSeconds: value.TimeoutSeconds,
-		Metadata:       ToWireStruct(value.Metadata),
-	}
-	out.Inputs = convertMessageMap(value.Inputs, ToWireWorkflowValue)
-	switch variant := value.Action.(type) {
-	case *WorkflowStepActionApp:
-		out.Action = &proto.WorkflowStep_App{App: ToWireWorkflowStepAppCall(variant.Value)}
-	case *WorkflowStepActionAgent:
-		out.Action = &proto.WorkflowStep_Agent{Agent: ToWireWorkflowStepAgentTurn(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowStep) *proto.WorkflowStep {
+		out := &proto.WorkflowStep{
+			Id:             value.Id,
+			When:           ToWireWorkflowStepWhen(value.When),
+			TimeoutSeconds: value.TimeoutSeconds,
+			Metadata:       ToWireStruct(value.Metadata),
+		}
+		out.Inputs = convertMessageMap(value.Inputs, ToWireWorkflowValue)
+		switch variant := value.Action.(type) {
+		case *WorkflowStepActionApp:
+			out.Action = &proto.WorkflowStep_App{App: ToWireWorkflowStepAppCall(variant.Value)}
+		case *WorkflowStepActionAgent:
+			out.Action = &proto.WorkflowStep_Agent{Agent: ToWireWorkflowStepAgentTurn(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowStep(value *proto.WorkflowStep) *WorkflowStep {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStep{
-		Id:             value.Id,
-		When:           FromWireWorkflowStepWhen(value.When),
-		TimeoutSeconds: value.TimeoutSeconds,
-		Metadata:       FromWireStruct(value.Metadata),
-	}
-	out.Inputs = convertMessageMap(value.Inputs, FromWireWorkflowValue)
-	switch variant := value.Action.(type) {
-	case *proto.WorkflowStep_App:
-		out.Action = &WorkflowStepActionApp{Value: FromWireWorkflowStepAppCall(variant.App)}
-	case *proto.WorkflowStep_Agent:
-		out.Action = &WorkflowStepActionAgent{Value: FromWireWorkflowStepAgentTurn(variant.Agent)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStep) *WorkflowStep {
+		out := &WorkflowStep{
+			Id:             value.Id,
+			When:           FromWireWorkflowStepWhen(value.When),
+			TimeoutSeconds: value.TimeoutSeconds,
+			Metadata:       FromWireStruct(value.Metadata),
+		}
+		out.Inputs = convertMessageMap(value.Inputs, FromWireWorkflowValue)
+		switch variant := value.Action.(type) {
+		case *proto.WorkflowStep_App:
+			out.Action = &WorkflowStepActionApp{Value: FromWireWorkflowStepAppCall(variant.App)}
+		case *proto.WorkflowStep_Agent:
+			out.Action = &WorkflowStepActionAgent{Value: FromWireWorkflowStepAgentTurn(variant.Agent)}
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowStepAgentTurn(value *WorkflowStepAgentTurn) *proto.WorkflowStepAgentTurn {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepAgentTurn{
-		Provider:     value.Provider,
-		Model:        value.Model,
-		SessionKey:   value.SessionKey,
-		Prompt:       ToWireWorkflowText(value.Prompt),
-		Output:       ToWireAgentOutput(value.Output),
-		ModelOptions: ToWireStruct(value.ModelOptions),
-	}
-	appendMessageSlice(&out.Messages, value.Messages, ToWireWorkflowAgentMessage)
-	appendMessageSlice(&out.Tools, value.Tools, ToWireAgentToolRef)
-	return out
+	return convertMessage(value, func(value *WorkflowStepAgentTurn) *proto.WorkflowStepAgentTurn {
+		out := &proto.WorkflowStepAgentTurn{
+			Provider:     value.Provider,
+			Model:        value.Model,
+			SessionKey:   value.SessionKey,
+			Prompt:       ToWireWorkflowText(value.Prompt),
+			Output:       ToWireAgentOutput(value.Output),
+			ModelOptions: ToWireStruct(value.ModelOptions),
+		}
+		appendMessageSlice(&out.Messages, value.Messages, ToWireWorkflowAgentMessage)
+		appendMessageSlice(&out.Tools, value.Tools, ToWireAgentToolRef)
+		return out
+	})
 }
 
 func FromWireWorkflowStepAgentTurn(value *proto.WorkflowStepAgentTurn) *WorkflowStepAgentTurn {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepAgentTurn{
-		Provider:     value.Provider,
-		Model:        value.Model,
-		SessionKey:   value.SessionKey,
-		Prompt:       FromWireWorkflowText(value.Prompt),
-		Output:       FromWireAgentOutput(value.Output),
-		ModelOptions: FromWireStruct(value.ModelOptions),
-	}
-	appendMessageSlice(&out.Messages, value.Messages, FromWireWorkflowAgentMessage)
-	appendMessageSlice(&out.Tools, value.Tools, FromWireAgentToolRef)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepAgentTurn) *WorkflowStepAgentTurn {
+		out := &WorkflowStepAgentTurn{
+			Provider:     value.Provider,
+			Model:        value.Model,
+			SessionKey:   value.SessionKey,
+			Prompt:       FromWireWorkflowText(value.Prompt),
+			Output:       FromWireAgentOutput(value.Output),
+			ModelOptions: FromWireStruct(value.ModelOptions),
+		}
+		appendMessageSlice(&out.Messages, value.Messages, FromWireWorkflowAgentMessage)
+		appendMessageSlice(&out.Tools, value.Tools, FromWireAgentToolRef)
+		return out
+	})
 }
 
 func ToWireWorkflowStepAppCall(value *WorkflowStepAppCall) *proto.WorkflowStepAppCall {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepAppCall{
-		Name:           value.Name,
-		Operation:      value.Operation,
-		Input:          ToWireWorkflowValue(value.Input),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		CredentialMode: value.CredentialMode,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowStepAppCall) *proto.WorkflowStepAppCall {
+		out := &proto.WorkflowStepAppCall{
+			Name:           value.Name,
+			Operation:      value.Operation,
+			Input:          ToWireWorkflowValue(value.Input),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			CredentialMode: value.CredentialMode,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowStepAppCall(value *proto.WorkflowStepAppCall) *WorkflowStepAppCall {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepAppCall{
-		Name:           value.Name,
-		Operation:      value.Operation,
-		Input:          FromWireWorkflowValue(value.Input),
-		Connection:     value.Connection,
-		Instance:       value.Instance,
-		CredentialMode: value.CredentialMode,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepAppCall) *WorkflowStepAppCall {
+		out := &WorkflowStepAppCall{
+			Name:           value.Name,
+			Operation:      value.Operation,
+			Input:          FromWireWorkflowValue(value.Input),
+			Connection:     value.Connection,
+			Instance:       value.Instance,
+			CredentialMode: value.CredentialMode,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowStepAttempt(value *WorkflowStepAttempt) *proto.WorkflowStepAttempt {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepAttempt{
-		Id:             value.Id,
-		Status:         proto.WorkflowStepStatus(value.Status),
-		IdempotencyKey: value.IdempotencyKey,
-		Input:          ToWireValue(value.Input),
-		Output:         ToWireValue(value.Output),
-		StatusMessage:  value.StatusMessage,
-		StartedAt:      ToWireTimestamp(value.StartedAt),
-		CompletedAt:    ToWireTimestamp(value.CompletedAt),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowStepAttempt) *proto.WorkflowStepAttempt {
+		out := &proto.WorkflowStepAttempt{
+			Id:             value.Id,
+			Status:         proto.WorkflowStepStatus(value.Status),
+			IdempotencyKey: value.IdempotencyKey,
+			Input:          ToWireValue(value.Input),
+			Output:         ToWireValue(value.Output),
+			StatusMessage:  value.StatusMessage,
+			StartedAt:      ToWireTimestamp(value.StartedAt),
+			CompletedAt:    ToWireTimestamp(value.CompletedAt),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowStepAttempt(value *proto.WorkflowStepAttempt) *WorkflowStepAttempt {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepAttempt{
-		Id:             value.Id,
-		Status:         WorkflowStepStatus(value.Status),
-		IdempotencyKey: value.IdempotencyKey,
-		Input:          FromWireValue(value.Input),
-		Output:         FromWireValue(value.Output),
-		StatusMessage:  value.StatusMessage,
-		StartedAt:      FromWireTimestamp(value.StartedAt),
-		CompletedAt:    FromWireTimestamp(value.CompletedAt),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepAttempt) *WorkflowStepAttempt {
+		out := &WorkflowStepAttempt{
+			Id:             value.Id,
+			Status:         WorkflowStepStatus(value.Status),
+			IdempotencyKey: value.IdempotencyKey,
+			Input:          FromWireValue(value.Input),
+			Output:         FromWireValue(value.Output),
+			StatusMessage:  value.StatusMessage,
+			StartedAt:      FromWireTimestamp(value.StartedAt),
+			CompletedAt:    FromWireTimestamp(value.CompletedAt),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowStepExecution(value *WorkflowStepExecution) *proto.WorkflowStepExecution {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepExecution{
-		StepId:        value.StepId,
-		Status:        proto.WorkflowStepStatus(value.Status),
-		Input:         ToWireValue(value.Input),
-		Output:        ToWireValue(value.Output),
-		StatusMessage: value.StatusMessage,
-		SkipReason:    value.SkipReason,
-		StartedAt:     ToWireTimestamp(value.StartedAt),
-		CompletedAt:   ToWireTimestamp(value.CompletedAt),
-	}
-	appendMessageSlice(&out.Attempts, value.Attempts, ToWireWorkflowStepAttempt)
-	return out
+	return convertMessage(value, func(value *WorkflowStepExecution) *proto.WorkflowStepExecution {
+		out := &proto.WorkflowStepExecution{
+			StepId:        value.StepId,
+			Status:        proto.WorkflowStepStatus(value.Status),
+			Input:         ToWireValue(value.Input),
+			Output:        ToWireValue(value.Output),
+			StatusMessage: value.StatusMessage,
+			SkipReason:    value.SkipReason,
+			StartedAt:     ToWireTimestamp(value.StartedAt),
+			CompletedAt:   ToWireTimestamp(value.CompletedAt),
+		}
+		appendMessageSlice(&out.Attempts, value.Attempts, ToWireWorkflowStepAttempt)
+		return out
+	})
 }
 
 func FromWireWorkflowStepExecution(value *proto.WorkflowStepExecution) *WorkflowStepExecution {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepExecution{
-		StepId:        value.StepId,
-		Status:        WorkflowStepStatus(value.Status),
-		Input:         FromWireValue(value.Input),
-		Output:        FromWireValue(value.Output),
-		StatusMessage: value.StatusMessage,
-		SkipReason:    value.SkipReason,
-		StartedAt:     FromWireTimestamp(value.StartedAt),
-		CompletedAt:   FromWireTimestamp(value.CompletedAt),
-	}
-	appendMessageSlice(&out.Attempts, value.Attempts, FromWireWorkflowStepAttempt)
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepExecution) *WorkflowStepExecution {
+		out := &WorkflowStepExecution{
+			StepId:        value.StepId,
+			Status:        WorkflowStepStatus(value.Status),
+			Input:         FromWireValue(value.Input),
+			Output:        FromWireValue(value.Output),
+			StatusMessage: value.StatusMessage,
+			SkipReason:    value.SkipReason,
+			StartedAt:     FromWireTimestamp(value.StartedAt),
+			CompletedAt:   FromWireTimestamp(value.CompletedAt),
+		}
+		appendMessageSlice(&out.Attempts, value.Attempts, FromWireWorkflowStepAttempt)
+		return out
+	})
 }
 
 func ToWireWorkflowStepInputSource(value *WorkflowStepInputSource) *proto.WorkflowStepInputSource {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepInputSource{
-		StepId: value.StepId,
-		Path:   value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowStepInputSource) *proto.WorkflowStepInputSource {
+		out := &proto.WorkflowStepInputSource{
+			StepId: value.StepId,
+			Path:   value.Path,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowStepInputSource(value *proto.WorkflowStepInputSource) *WorkflowStepInputSource {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepInputSource{
-		StepId: value.StepId,
-		Path:   value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepInputSource) *WorkflowStepInputSource {
+		out := &WorkflowStepInputSource{
+			StepId: value.StepId,
+			Path:   value.Path,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowStepOutputSource(value *WorkflowStepOutputSource) *proto.WorkflowStepOutputSource {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepOutputSource{
-		StepId: value.StepId,
-		Path:   value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowStepOutputSource) *proto.WorkflowStepOutputSource {
+		out := &proto.WorkflowStepOutputSource{
+			StepId: value.StepId,
+			Path:   value.Path,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowStepOutputSource(value *proto.WorkflowStepOutputSource) *WorkflowStepOutputSource {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepOutputSource{
-		StepId: value.StepId,
-		Path:   value.Path,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepOutputSource) *WorkflowStepOutputSource {
+		out := &WorkflowStepOutputSource{
+			StepId: value.StepId,
+			Path:   value.Path,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowStepWhen(value *WorkflowStepWhen) *proto.WorkflowStepWhen {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowStepWhen{
-		Value:  ToWireWorkflowValue(value.Value),
-		Equals: ToWireValue(value.Equals),
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowStepWhen) *proto.WorkflowStepWhen {
+		out := &proto.WorkflowStepWhen{
+			Value:  ToWireWorkflowValue(value.Value),
+			Equals: ToWireValue(value.Equals),
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowStepWhen(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowStepWhen{
-		Value:  FromWireWorkflowValue(value.Value),
-		Equals: FromWireValue(value.Equals),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
+		out := &WorkflowStepWhen{
+			Value:  FromWireWorkflowValue(value.Value),
+			Equals: FromWireValue(value.Equals),
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowText(value *WorkflowText) *proto.WorkflowText {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowText{
-		Template: value.Template,
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowText) *proto.WorkflowText {
+		out := &proto.WorkflowText{
+			Template: value.Template,
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowText(value *proto.WorkflowText) *WorkflowText {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowText{
-		Template: value.Template,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowText) *WorkflowText {
+		out := &WorkflowText{
+			Template: value.Template,
+		}
+		return out
+	})
 }
 
 func ToWireWorkflowValue(value *WorkflowValue) *proto.WorkflowValue {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WorkflowValue{}
-	switch variant := value.Kind.(type) {
-	case *WorkflowValueKindLiteral:
-		out.Kind = &proto.WorkflowValue_Literal{Literal: ToWireValue(variant.Value)}
-	case *WorkflowValueKindObject:
-		out.Kind = &proto.WorkflowValue_Object{Object: ToWireWorkflowObject(variant.Value)}
-	case *WorkflowValueKindArray:
-		out.Kind = &proto.WorkflowValue_Array{Array: ToWireWorkflowArray(variant.Value)}
-	case *WorkflowValueKindTemplate:
-		out.Kind = &proto.WorkflowValue_Template{Template: ToWireWorkflowText(variant.Value)}
-	case *WorkflowValueKindInput:
-		out.Kind = &proto.WorkflowValue_Input{Input: ToWireWorkflowPathSource(variant.Value)}
-	case *WorkflowValueKindSignal:
-		out.Kind = &proto.WorkflowValue_Signal{Signal: ToWireWorkflowPathSource(variant.Value)}
-	case *WorkflowValueKindStepOutput:
-		out.Kind = &proto.WorkflowValue_StepOutput{StepOutput: ToWireWorkflowStepOutputSource(variant.Value)}
-	case *WorkflowValueKindStepInput:
-		out.Kind = &proto.WorkflowValue_StepInput{StepInput: ToWireWorkflowStepInputSource(variant.Value)}
-	}
-	return out
+	return convertMessage(value, func(value *WorkflowValue) *proto.WorkflowValue {
+		out := &proto.WorkflowValue{}
+		switch variant := value.Kind.(type) {
+		case *WorkflowValueKindLiteral:
+			out.Kind = &proto.WorkflowValue_Literal{Literal: ToWireValue(variant.Value)}
+		case *WorkflowValueKindObject:
+			out.Kind = &proto.WorkflowValue_Object{Object: ToWireWorkflowObject(variant.Value)}
+		case *WorkflowValueKindArray:
+			out.Kind = &proto.WorkflowValue_Array{Array: ToWireWorkflowArray(variant.Value)}
+		case *WorkflowValueKindTemplate:
+			out.Kind = &proto.WorkflowValue_Template{Template: ToWireWorkflowText(variant.Value)}
+		case *WorkflowValueKindInput:
+			out.Kind = &proto.WorkflowValue_Input{Input: ToWireWorkflowPathSource(variant.Value)}
+		case *WorkflowValueKindSignal:
+			out.Kind = &proto.WorkflowValue_Signal{Signal: ToWireWorkflowPathSource(variant.Value)}
+		case *WorkflowValueKindStepOutput:
+			out.Kind = &proto.WorkflowValue_StepOutput{StepOutput: ToWireWorkflowStepOutputSource(variant.Value)}
+		case *WorkflowValueKindStepInput:
+			out.Kind = &proto.WorkflowValue_StepInput{StepInput: ToWireWorkflowStepInputSource(variant.Value)}
+		}
+		return out
+	})
 }
 
 func FromWireWorkflowValue(value *proto.WorkflowValue) *WorkflowValue {
-	if value == nil {
-		return nil
-	}
-	out := &WorkflowValue{}
-	switch variant := value.Kind.(type) {
-	case *proto.WorkflowValue_Literal:
-		out.Kind = &WorkflowValueKindLiteral{Value: FromWireValue(variant.Literal)}
-	case *proto.WorkflowValue_Object:
-		out.Kind = &WorkflowValueKindObject{Value: FromWireWorkflowObject(variant.Object)}
-	case *proto.WorkflowValue_Array:
-		out.Kind = &WorkflowValueKindArray{Value: FromWireWorkflowArray(variant.Array)}
-	case *proto.WorkflowValue_Template:
-		out.Kind = &WorkflowValueKindTemplate{Value: FromWireWorkflowText(variant.Template)}
-	case *proto.WorkflowValue_Input:
-		out.Kind = &WorkflowValueKindInput{Value: FromWireWorkflowPathSource(variant.Input)}
-	case *proto.WorkflowValue_Signal:
-		out.Kind = &WorkflowValueKindSignal{Value: FromWireWorkflowPathSource(variant.Signal)}
-	case *proto.WorkflowValue_StepOutput:
-		out.Kind = &WorkflowValueKindStepOutput{Value: FromWireWorkflowStepOutputSource(variant.StepOutput)}
-	case *proto.WorkflowValue_StepInput:
-		out.Kind = &WorkflowValueKindStepInput{Value: FromWireWorkflowStepInputSource(variant.StepInput)}
-	}
-	return out
+	return convertMessage(value, func(value *proto.WorkflowValue) *WorkflowValue {
+		out := &WorkflowValue{}
+		switch variant := value.Kind.(type) {
+		case *proto.WorkflowValue_Literal:
+			out.Kind = &WorkflowValueKindLiteral{Value: FromWireValue(variant.Literal)}
+		case *proto.WorkflowValue_Object:
+			out.Kind = &WorkflowValueKindObject{Value: FromWireWorkflowObject(variant.Object)}
+		case *proto.WorkflowValue_Array:
+			out.Kind = &WorkflowValueKindArray{Value: FromWireWorkflowArray(variant.Array)}
+		case *proto.WorkflowValue_Template:
+			out.Kind = &WorkflowValueKindTemplate{Value: FromWireWorkflowText(variant.Template)}
+		case *proto.WorkflowValue_Input:
+			out.Kind = &WorkflowValueKindInput{Value: FromWireWorkflowPathSource(variant.Input)}
+		case *proto.WorkflowValue_Signal:
+			out.Kind = &WorkflowValueKindSignal{Value: FromWireWorkflowPathSource(variant.Signal)}
+		case *proto.WorkflowValue_StepOutput:
+			out.Kind = &WorkflowValueKindStepOutput{Value: FromWireWorkflowStepOutputSource(variant.StepOutput)}
+		case *proto.WorkflowValue_StepInput:
+			out.Kind = &WorkflowValueKindStepInput{Value: FromWireWorkflowStepInputSource(variant.StepInput)}
+		}
+		return out
+	})
 }

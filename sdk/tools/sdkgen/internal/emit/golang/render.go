@@ -380,7 +380,7 @@ func (r *renderer) renderConversions(m *model.Message) {
 	wireName := wireMessage(m.FullName)
 
 	fmt.Fprintf(&r.body, "func %s(value *%s) *%s {\n", toWireFunc(name), name, wireName)
-	r.body.WriteString("\tif value == nil {\n\t\treturn nil\n\t}\n")
+	fmt.Fprintf(&r.body, "\treturn convertMessage(value, func(value *%s) *%s {\n", name, wireName)
 	var parts []conversionParts
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
@@ -392,13 +392,13 @@ func (r *renderer) renderConversions(m *model.Message) {
 	for _, o := range m.Oneofs {
 		r.writeOneofToWire(m, o)
 	}
-	r.body.WriteString("\treturn out\n}\n\n")
+	r.body.WriteString("\treturn out\n\t})\n}\n\n")
 
  	if r.toWireOnly {
  		return
  	}
 	fmt.Fprintf(&r.body, "func %s(value *%s) *%s {\n", fromWireFunc(name), wireName, name)
-	r.body.WriteString("\tif value == nil {\n\t\treturn nil\n\t}\n")
+	fmt.Fprintf(&r.body, "\treturn convertMessage(value, func(value *%s) *%s {\n", wireName, name)
 	parts = parts[:0]
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
@@ -410,7 +410,7 @@ func (r *renderer) renderConversions(m *model.Message) {
 	for _, o := range m.Oneofs {
 		r.writeOneofFromWire(m, o)
 	}
-	r.body.WriteString("\treturn out\n}\n\n")
+	r.body.WriteString("\treturn out\n\t})\n}\n\n")
 }
 
 // writeLiteral renders `out := &T{...}` from literal entries, followed by the

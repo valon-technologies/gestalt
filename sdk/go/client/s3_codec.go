@@ -7,491 +7,453 @@ import (
 )
 
 func ToWireByteRange(value *ByteRange) *proto.ByteRange {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ByteRange{
-		Start: value.Start,
-		End:   value.End,
-	}
-	return out
+	return convertMessage(value, func(value *ByteRange) *proto.ByteRange {
+		out := &proto.ByteRange{
+			Start: value.Start,
+			End:   value.End,
+		}
+		return out
+	})
 }
 
 func FromWireByteRange(value *proto.ByteRange) *ByteRange {
-	if value == nil {
-		return nil
-	}
-	out := &ByteRange{
-		Start: value.Start,
-		End:   value.End,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ByteRange) *ByteRange {
+		out := &ByteRange{
+			Start: value.Start,
+			End:   value.End,
+		}
+		return out
+	})
 }
 
 func ToWireCopyObjectRequest(value *CopyObjectRequest) *proto.CopyObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CopyObjectRequest{
-		Source:      ToWireS3ObjectRef(value.Source),
-		Destination: ToWireS3ObjectRef(value.Destination),
-		IfMatch:     value.IfMatch,
-		IfNoneMatch: value.IfNoneMatch,
-	}
-	return out
+	return convertMessage(value, func(value *CopyObjectRequest) *proto.CopyObjectRequest {
+		out := &proto.CopyObjectRequest{
+			Source:      ToWireS3ObjectRef(value.Source),
+			Destination: ToWireS3ObjectRef(value.Destination),
+			IfMatch:     value.IfMatch,
+			IfNoneMatch: value.IfNoneMatch,
+		}
+		return out
+	})
 }
 
 func FromWireCopyObjectRequest(value *proto.CopyObjectRequest) *CopyObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CopyObjectRequest{
-		Source:      FromWireS3ObjectRef(value.Source),
-		Destination: FromWireS3ObjectRef(value.Destination),
-		IfMatch:     value.IfMatch,
-		IfNoneMatch: value.IfNoneMatch,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CopyObjectRequest) *CopyObjectRequest {
+		out := &CopyObjectRequest{
+			Source:      FromWireS3ObjectRef(value.Source),
+			Destination: FromWireS3ObjectRef(value.Destination),
+			IfMatch:     value.IfMatch,
+			IfNoneMatch: value.IfNoneMatch,
+		}
+		return out
+	})
 }
 
 func ToWireCopyObjectResponse(value *CopyObjectResponse) *proto.CopyObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CopyObjectResponse{
-		Meta: ToWireS3ObjectMeta(value.Meta),
-	}
-	return out
+	return convertMessage(value, func(value *CopyObjectResponse) *proto.CopyObjectResponse {
+		out := &proto.CopyObjectResponse{
+			Meta: ToWireS3ObjectMeta(value.Meta),
+		}
+		return out
+	})
 }
 
 func FromWireCopyObjectResponse(value *proto.CopyObjectResponse) *CopyObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CopyObjectResponse{
-		Meta: FromWireS3ObjectMeta(value.Meta),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CopyObjectResponse) *CopyObjectResponse {
+		out := &CopyObjectResponse{
+			Meta: FromWireS3ObjectMeta(value.Meta),
+		}
+		return out
+	})
 }
 
 func ToWireCreateObjectAccessURLRequest(value *CreateObjectAccessURLRequest) *proto.CreateObjectAccessURLRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateObjectAccessURLRequest{
-		Ref:                ToWireS3ObjectRef(value.Ref),
-		Method:             proto.PresignMethod(value.Method),
-		ExpiresSeconds:     value.ExpiresSeconds,
-		ContentType:        value.ContentType,
-		ContentDisposition: value.ContentDisposition,
-		Headers:            value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *CreateObjectAccessURLRequest) *proto.CreateObjectAccessURLRequest {
+		out := &proto.CreateObjectAccessURLRequest{
+			Ref:                ToWireS3ObjectRef(value.Ref),
+			Method:             proto.PresignMethod(value.Method),
+			ExpiresSeconds:     value.ExpiresSeconds,
+			ContentType:        value.ContentType,
+			ContentDisposition: value.ContentDisposition,
+			Headers:            value.Headers,
+		}
+		return out
+	})
 }
 
 func FromWireCreateObjectAccessURLRequest(value *proto.CreateObjectAccessURLRequest) *CreateObjectAccessURLRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CreateObjectAccessURLRequest{
-		Ref:                FromWireS3ObjectRef(value.Ref),
-		Method:             PresignMethod(value.Method),
-		ExpiresSeconds:     value.ExpiresSeconds,
-		ContentType:        value.ContentType,
-		ContentDisposition: value.ContentDisposition,
-		Headers:            value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CreateObjectAccessURLRequest) *CreateObjectAccessURLRequest {
+		out := &CreateObjectAccessURLRequest{
+			Ref:                FromWireS3ObjectRef(value.Ref),
+			Method:             PresignMethod(value.Method),
+			ExpiresSeconds:     value.ExpiresSeconds,
+			ContentType:        value.ContentType,
+			ContentDisposition: value.ContentDisposition,
+			Headers:            value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWireCreateObjectAccessURLResponse(value *CreateObjectAccessURLResponse) *proto.CreateObjectAccessURLResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CreateObjectAccessURLResponse{
-		Url:       value.Url,
-		Method:    proto.PresignMethod(value.Method),
-		ExpiresAt: ToWireTimestamp(value.ExpiresAt),
-		Headers:   value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *CreateObjectAccessURLResponse) *proto.CreateObjectAccessURLResponse {
+		out := &proto.CreateObjectAccessURLResponse{
+			Url:       value.Url,
+			Method:    proto.PresignMethod(value.Method),
+			ExpiresAt: ToWireTimestamp(value.ExpiresAt),
+			Headers:   value.Headers,
+		}
+		return out
+	})
 }
 
 func FromWireCreateObjectAccessURLResponse(value *proto.CreateObjectAccessURLResponse) *CreateObjectAccessURLResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CreateObjectAccessURLResponse{
-		Url:       value.Url,
-		Method:    PresignMethod(value.Method),
-		ExpiresAt: FromWireTimestamp(value.ExpiresAt),
-		Headers:   value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CreateObjectAccessURLResponse) *CreateObjectAccessURLResponse {
+		out := &CreateObjectAccessURLResponse{
+			Url:       value.Url,
+			Method:    PresignMethod(value.Method),
+			ExpiresAt: FromWireTimestamp(value.ExpiresAt),
+			Headers:   value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWireDeleteObjectRequest(value *DeleteObjectRequest) *proto.DeleteObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteObjectRequest{
-		Ref: ToWireS3ObjectRef(value.Ref),
-	}
-	return out
+	return convertMessage(value, func(value *DeleteObjectRequest) *proto.DeleteObjectRequest {
+		out := &proto.DeleteObjectRequest{
+			Ref: ToWireS3ObjectRef(value.Ref),
+		}
+		return out
+	})
 }
 
 func FromWireDeleteObjectRequest(value *proto.DeleteObjectRequest) *DeleteObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &DeleteObjectRequest{
-		Ref: FromWireS3ObjectRef(value.Ref),
-	}
-	return out
+	return convertMessage(value, func(value *proto.DeleteObjectRequest) *DeleteObjectRequest {
+		out := &DeleteObjectRequest{
+			Ref: FromWireS3ObjectRef(value.Ref),
+		}
+		return out
+	})
 }
 
 func ToWireHeadObjectRequest(value *HeadObjectRequest) *proto.HeadObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HeadObjectRequest{
-		Ref: ToWireS3ObjectRef(value.Ref),
-	}
-	return out
+	return convertMessage(value, func(value *HeadObjectRequest) *proto.HeadObjectRequest {
+		out := &proto.HeadObjectRequest{
+			Ref: ToWireS3ObjectRef(value.Ref),
+		}
+		return out
+	})
 }
 
 func FromWireHeadObjectRequest(value *proto.HeadObjectRequest) *HeadObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &HeadObjectRequest{
-		Ref: FromWireS3ObjectRef(value.Ref),
-	}
-	return out
+	return convertMessage(value, func(value *proto.HeadObjectRequest) *HeadObjectRequest {
+		out := &HeadObjectRequest{
+			Ref: FromWireS3ObjectRef(value.Ref),
+		}
+		return out
+	})
 }
 
 func ToWireHeadObjectResponse(value *HeadObjectResponse) *proto.HeadObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.HeadObjectResponse{
-		Meta: ToWireS3ObjectMeta(value.Meta),
-	}
-	return out
+	return convertMessage(value, func(value *HeadObjectResponse) *proto.HeadObjectResponse {
+		out := &proto.HeadObjectResponse{
+			Meta: ToWireS3ObjectMeta(value.Meta),
+		}
+		return out
+	})
 }
 
 func FromWireHeadObjectResponse(value *proto.HeadObjectResponse) *HeadObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &HeadObjectResponse{
-		Meta: FromWireS3ObjectMeta(value.Meta),
-	}
-	return out
+	return convertMessage(value, func(value *proto.HeadObjectResponse) *HeadObjectResponse {
+		out := &HeadObjectResponse{
+			Meta: FromWireS3ObjectMeta(value.Meta),
+		}
+		return out
+	})
 }
 
 func ToWireListObjectsRequest(value *ListObjectsRequest) *proto.ListObjectsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListObjectsRequest{
-		Prefix:            value.Prefix,
-		Delimiter:         value.Delimiter,
-		ContinuationToken: value.ContinuationToken,
-		StartAfter:        value.StartAfter,
-		MaxKeys:           value.MaxKeys,
-	}
-	return out
+	return convertMessage(value, func(value *ListObjectsRequest) *proto.ListObjectsRequest {
+		out := &proto.ListObjectsRequest{
+			Prefix:            value.Prefix,
+			Delimiter:         value.Delimiter,
+			ContinuationToken: value.ContinuationToken,
+			StartAfter:        value.StartAfter,
+			MaxKeys:           value.MaxKeys,
+		}
+		return out
+	})
 }
 
 func FromWireListObjectsRequest(value *proto.ListObjectsRequest) *ListObjectsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListObjectsRequest{
-		Prefix:            value.Prefix,
-		Delimiter:         value.Delimiter,
-		ContinuationToken: value.ContinuationToken,
-		StartAfter:        value.StartAfter,
-		MaxKeys:           value.MaxKeys,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListObjectsRequest) *ListObjectsRequest {
+		out := &ListObjectsRequest{
+			Prefix:            value.Prefix,
+			Delimiter:         value.Delimiter,
+			ContinuationToken: value.ContinuationToken,
+			StartAfter:        value.StartAfter,
+			MaxKeys:           value.MaxKeys,
+		}
+		return out
+	})
 }
 
 func ToWireListObjectsResponse(value *ListObjectsResponse) *proto.ListObjectsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListObjectsResponse{
-		CommonPrefixes:        value.CommonPrefixes,
-		NextContinuationToken: value.NextContinuationToken,
-		HasMore:               value.HasMore,
-	}
-	appendMessageSlice(&out.Objects, value.Objects, ToWireS3ObjectMeta)
-	return out
+	return convertMessage(value, func(value *ListObjectsResponse) *proto.ListObjectsResponse {
+		out := &proto.ListObjectsResponse{
+			CommonPrefixes:        value.CommonPrefixes,
+			NextContinuationToken: value.NextContinuationToken,
+			HasMore:               value.HasMore,
+		}
+		appendMessageSlice(&out.Objects, value.Objects, ToWireS3ObjectMeta)
+		return out
+	})
 }
 
 func FromWireListObjectsResponse(value *proto.ListObjectsResponse) *ListObjectsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListObjectsResponse{
-		CommonPrefixes:        value.CommonPrefixes,
-		NextContinuationToken: value.NextContinuationToken,
-		HasMore:               value.HasMore,
-	}
-	appendMessageSlice(&out.Objects, value.Objects, FromWireS3ObjectMeta)
-	return out
+	return convertMessage(value, func(value *proto.ListObjectsResponse) *ListObjectsResponse {
+		out := &ListObjectsResponse{
+			CommonPrefixes:        value.CommonPrefixes,
+			NextContinuationToken: value.NextContinuationToken,
+			HasMore:               value.HasMore,
+		}
+		appendMessageSlice(&out.Objects, value.Objects, FromWireS3ObjectMeta)
+		return out
+	})
 }
 
 func ToWirePresignObjectRequest(value *PresignObjectRequest) *proto.PresignObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PresignObjectRequest{
-		Ref:                ToWireS3ObjectRef(value.Ref),
-		Method:             proto.PresignMethod(value.Method),
-		ExpiresSeconds:     value.ExpiresSeconds,
-		ContentType:        value.ContentType,
-		ContentDisposition: value.ContentDisposition,
-		Headers:            value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *PresignObjectRequest) *proto.PresignObjectRequest {
+		out := &proto.PresignObjectRequest{
+			Ref:                ToWireS3ObjectRef(value.Ref),
+			Method:             proto.PresignMethod(value.Method),
+			ExpiresSeconds:     value.ExpiresSeconds,
+			ContentType:        value.ContentType,
+			ContentDisposition: value.ContentDisposition,
+			Headers:            value.Headers,
+		}
+		return out
+	})
 }
 
 func FromWirePresignObjectRequest(value *proto.PresignObjectRequest) *PresignObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &PresignObjectRequest{
-		Ref:                FromWireS3ObjectRef(value.Ref),
-		Method:             PresignMethod(value.Method),
-		ExpiresSeconds:     value.ExpiresSeconds,
-		ContentType:        value.ContentType,
-		ContentDisposition: value.ContentDisposition,
-		Headers:            value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *proto.PresignObjectRequest) *PresignObjectRequest {
+		out := &PresignObjectRequest{
+			Ref:                FromWireS3ObjectRef(value.Ref),
+			Method:             PresignMethod(value.Method),
+			ExpiresSeconds:     value.ExpiresSeconds,
+			ContentType:        value.ContentType,
+			ContentDisposition: value.ContentDisposition,
+			Headers:            value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWirePresignObjectResponse(value *PresignObjectResponse) *proto.PresignObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.PresignObjectResponse{
-		Url:       value.Url,
-		Method:    proto.PresignMethod(value.Method),
-		ExpiresAt: ToWireTimestamp(value.ExpiresAt),
-		Headers:   value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *PresignObjectResponse) *proto.PresignObjectResponse {
+		out := &proto.PresignObjectResponse{
+			Url:       value.Url,
+			Method:    proto.PresignMethod(value.Method),
+			ExpiresAt: ToWireTimestamp(value.ExpiresAt),
+			Headers:   value.Headers,
+		}
+		return out
+	})
 }
 
 func FromWirePresignObjectResponse(value *proto.PresignObjectResponse) *PresignObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &PresignObjectResponse{
-		Url:       value.Url,
-		Method:    PresignMethod(value.Method),
-		ExpiresAt: FromWireTimestamp(value.ExpiresAt),
-		Headers:   value.Headers,
-	}
-	return out
+	return convertMessage(value, func(value *proto.PresignObjectResponse) *PresignObjectResponse {
+		out := &PresignObjectResponse{
+			Url:       value.Url,
+			Method:    PresignMethod(value.Method),
+			ExpiresAt: FromWireTimestamp(value.ExpiresAt),
+			Headers:   value.Headers,
+		}
+		return out
+	})
 }
 
 func ToWireReadObjectChunk(value *ReadObjectChunk) *proto.ReadObjectChunk {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ReadObjectChunk{}
-	switch variant := value.Result.(type) {
-	case *ReadObjectChunkResultMeta:
-		out.Result = &proto.ReadObjectChunk_Meta{Meta: ToWireS3ObjectMeta(variant.Value)}
-	case *ReadObjectChunkResultData:
-		out.Result = &proto.ReadObjectChunk_Data{Data: variant.Value}
-	}
-	return out
+	return convertMessage(value, func(value *ReadObjectChunk) *proto.ReadObjectChunk {
+		out := &proto.ReadObjectChunk{}
+		switch variant := value.Result.(type) {
+		case *ReadObjectChunkResultMeta:
+			out.Result = &proto.ReadObjectChunk_Meta{Meta: ToWireS3ObjectMeta(variant.Value)}
+		case *ReadObjectChunkResultData:
+			out.Result = &proto.ReadObjectChunk_Data{Data: variant.Value}
+		}
+		return out
+	})
 }
 
 func FromWireReadObjectChunk(value *proto.ReadObjectChunk) *ReadObjectChunk {
-	if value == nil {
-		return nil
-	}
-	out := &ReadObjectChunk{}
-	switch variant := value.Result.(type) {
-	case *proto.ReadObjectChunk_Meta:
-		out.Result = &ReadObjectChunkResultMeta{Value: FromWireS3ObjectMeta(variant.Meta)}
-	case *proto.ReadObjectChunk_Data:
-		out.Result = &ReadObjectChunkResultData{Value: variant.Data}
-	}
-	return out
+	return convertMessage(value, func(value *proto.ReadObjectChunk) *ReadObjectChunk {
+		out := &ReadObjectChunk{}
+		switch variant := value.Result.(type) {
+		case *proto.ReadObjectChunk_Meta:
+			out.Result = &ReadObjectChunkResultMeta{Value: FromWireS3ObjectMeta(variant.Meta)}
+		case *proto.ReadObjectChunk_Data:
+			out.Result = &ReadObjectChunkResultData{Value: variant.Data}
+		}
+		return out
+	})
 }
 
 func ToWireReadObjectRequest(value *ReadObjectRequest) *proto.ReadObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ReadObjectRequest{
-		Ref:               ToWireS3ObjectRef(value.Ref),
-		Range:             ToWireByteRange(value.Range),
-		IfMatch:           value.IfMatch,
-		IfNoneMatch:       value.IfNoneMatch,
-		IfModifiedSince:   ToWireTimestamp(value.IfModifiedSince),
-		IfUnmodifiedSince: ToWireTimestamp(value.IfUnmodifiedSince),
-	}
-	return out
+	return convertMessage(value, func(value *ReadObjectRequest) *proto.ReadObjectRequest {
+		out := &proto.ReadObjectRequest{
+			Ref:               ToWireS3ObjectRef(value.Ref),
+			Range:             ToWireByteRange(value.Range),
+			IfMatch:           value.IfMatch,
+			IfNoneMatch:       value.IfNoneMatch,
+			IfModifiedSince:   ToWireTimestamp(value.IfModifiedSince),
+			IfUnmodifiedSince: ToWireTimestamp(value.IfUnmodifiedSince),
+		}
+		return out
+	})
 }
 
 func FromWireReadObjectRequest(value *proto.ReadObjectRequest) *ReadObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ReadObjectRequest{
-		Ref:               FromWireS3ObjectRef(value.Ref),
-		Range:             FromWireByteRange(value.Range),
-		IfMatch:           value.IfMatch,
-		IfNoneMatch:       value.IfNoneMatch,
-		IfModifiedSince:   FromWireTimestamp(value.IfModifiedSince),
-		IfUnmodifiedSince: FromWireTimestamp(value.IfUnmodifiedSince),
-	}
-	return out
+	return convertMessage(value, func(value *proto.ReadObjectRequest) *ReadObjectRequest {
+		out := &ReadObjectRequest{
+			Ref:               FromWireS3ObjectRef(value.Ref),
+			Range:             FromWireByteRange(value.Range),
+			IfMatch:           value.IfMatch,
+			IfNoneMatch:       value.IfNoneMatch,
+			IfModifiedSince:   FromWireTimestamp(value.IfModifiedSince),
+			IfUnmodifiedSince: FromWireTimestamp(value.IfUnmodifiedSince),
+		}
+		return out
+	})
 }
 
 func ToWireS3ObjectMeta(value *S3ObjectMeta) *proto.S3ObjectMeta {
-	if value == nil {
-		return nil
-	}
-	out := &proto.S3ObjectMeta{
-		Ref:          ToWireS3ObjectRef(value.Ref),
-		Etag:         value.Etag,
-		Size:         value.Size,
-		ContentType:  value.ContentType,
-		LastModified: ToWireTimestamp(value.LastModified),
-		Metadata:     value.Metadata,
-		StorageClass: value.StorageClass,
-	}
-	return out
+	return convertMessage(value, func(value *S3ObjectMeta) *proto.S3ObjectMeta {
+		out := &proto.S3ObjectMeta{
+			Ref:          ToWireS3ObjectRef(value.Ref),
+			Etag:         value.Etag,
+			Size:         value.Size,
+			ContentType:  value.ContentType,
+			LastModified: ToWireTimestamp(value.LastModified),
+			Metadata:     value.Metadata,
+			StorageClass: value.StorageClass,
+		}
+		return out
+	})
 }
 
 func FromWireS3ObjectMeta(value *proto.S3ObjectMeta) *S3ObjectMeta {
-	if value == nil {
-		return nil
-	}
-	out := &S3ObjectMeta{
-		Ref:          FromWireS3ObjectRef(value.Ref),
-		Etag:         value.Etag,
-		Size:         value.Size,
-		ContentType:  value.ContentType,
-		LastModified: FromWireTimestamp(value.LastModified),
-		Metadata:     value.Metadata,
-		StorageClass: value.StorageClass,
-	}
-	return out
+	return convertMessage(value, func(value *proto.S3ObjectMeta) *S3ObjectMeta {
+		out := &S3ObjectMeta{
+			Ref:          FromWireS3ObjectRef(value.Ref),
+			Etag:         value.Etag,
+			Size:         value.Size,
+			ContentType:  value.ContentType,
+			LastModified: FromWireTimestamp(value.LastModified),
+			Metadata:     value.Metadata,
+			StorageClass: value.StorageClass,
+		}
+		return out
+	})
 }
 
 func ToWireS3ObjectRef(value *S3ObjectRef) *proto.S3ObjectRef {
-	if value == nil {
-		return nil
-	}
-	out := &proto.S3ObjectRef{
-		Key:       value.Key,
-		VersionId: value.VersionId,
-	}
-	return out
+	return convertMessage(value, func(value *S3ObjectRef) *proto.S3ObjectRef {
+		out := &proto.S3ObjectRef{
+			Key:       value.Key,
+			VersionId: value.VersionId,
+		}
+		return out
+	})
 }
 
 func FromWireS3ObjectRef(value *proto.S3ObjectRef) *S3ObjectRef {
-	if value == nil {
-		return nil
-	}
-	out := &S3ObjectRef{
-		Key:       value.Key,
-		VersionId: value.VersionId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.S3ObjectRef) *S3ObjectRef {
+		out := &S3ObjectRef{
+			Key:       value.Key,
+			VersionId: value.VersionId,
+		}
+		return out
+	})
 }
 
 func ToWireWriteObjectOpen(value *WriteObjectOpen) *proto.WriteObjectOpen {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WriteObjectOpen{
-		Ref:                ToWireS3ObjectRef(value.Ref),
-		ContentType:        value.ContentType,
-		CacheControl:       value.CacheControl,
-		ContentDisposition: value.ContentDisposition,
-		ContentEncoding:    value.ContentEncoding,
-		ContentLanguage:    value.ContentLanguage,
-		Metadata:           value.Metadata,
-		IfMatch:            value.IfMatch,
-		IfNoneMatch:        value.IfNoneMatch,
-	}
-	return out
+	return convertMessage(value, func(value *WriteObjectOpen) *proto.WriteObjectOpen {
+		out := &proto.WriteObjectOpen{
+			Ref:                ToWireS3ObjectRef(value.Ref),
+			ContentType:        value.ContentType,
+			CacheControl:       value.CacheControl,
+			ContentDisposition: value.ContentDisposition,
+			ContentEncoding:    value.ContentEncoding,
+			ContentLanguage:    value.ContentLanguage,
+			Metadata:           value.Metadata,
+			IfMatch:            value.IfMatch,
+			IfNoneMatch:        value.IfNoneMatch,
+		}
+		return out
+	})
 }
 
 func FromWireWriteObjectOpen(value *proto.WriteObjectOpen) *WriteObjectOpen {
-	if value == nil {
-		return nil
-	}
-	out := &WriteObjectOpen{
-		Ref:                FromWireS3ObjectRef(value.Ref),
-		ContentType:        value.ContentType,
-		CacheControl:       value.CacheControl,
-		ContentDisposition: value.ContentDisposition,
-		ContentEncoding:    value.ContentEncoding,
-		ContentLanguage:    value.ContentLanguage,
-		Metadata:           value.Metadata,
-		IfMatch:            value.IfMatch,
-		IfNoneMatch:        value.IfNoneMatch,
-	}
-	return out
+	return convertMessage(value, func(value *proto.WriteObjectOpen) *WriteObjectOpen {
+		out := &WriteObjectOpen{
+			Ref:                FromWireS3ObjectRef(value.Ref),
+			ContentType:        value.ContentType,
+			CacheControl:       value.CacheControl,
+			ContentDisposition: value.ContentDisposition,
+			ContentEncoding:    value.ContentEncoding,
+			ContentLanguage:    value.ContentLanguage,
+			Metadata:           value.Metadata,
+			IfMatch:            value.IfMatch,
+			IfNoneMatch:        value.IfNoneMatch,
+		}
+		return out
+	})
 }
 
 func ToWireWriteObjectRequest(value *WriteObjectRequest) *proto.WriteObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WriteObjectRequest{}
-	switch variant := value.Msg.(type) {
-	case *WriteObjectRequestMsgOpen:
-		out.Msg = &proto.WriteObjectRequest_Open{Open: ToWireWriteObjectOpen(variant.Value)}
-	case *WriteObjectRequestMsgData:
-		out.Msg = &proto.WriteObjectRequest_Data{Data: variant.Value}
-	}
-	return out
+	return convertMessage(value, func(value *WriteObjectRequest) *proto.WriteObjectRequest {
+		out := &proto.WriteObjectRequest{}
+		switch variant := value.Msg.(type) {
+		case *WriteObjectRequestMsgOpen:
+			out.Msg = &proto.WriteObjectRequest_Open{Open: ToWireWriteObjectOpen(variant.Value)}
+		case *WriteObjectRequestMsgData:
+			out.Msg = &proto.WriteObjectRequest_Data{Data: variant.Value}
+		}
+		return out
+	})
 }
 
 func FromWireWriteObjectRequest(value *proto.WriteObjectRequest) *WriteObjectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &WriteObjectRequest{}
-	switch variant := value.Msg.(type) {
-	case *proto.WriteObjectRequest_Open:
-		out.Msg = &WriteObjectRequestMsgOpen{Value: FromWireWriteObjectOpen(variant.Open)}
-	case *proto.WriteObjectRequest_Data:
-		out.Msg = &WriteObjectRequestMsgData{Value: variant.Data}
-	}
-	return out
+	return convertMessage(value, func(value *proto.WriteObjectRequest) *WriteObjectRequest {
+		out := &WriteObjectRequest{}
+		switch variant := value.Msg.(type) {
+		case *proto.WriteObjectRequest_Open:
+			out.Msg = &WriteObjectRequestMsgOpen{Value: FromWireWriteObjectOpen(variant.Open)}
+		case *proto.WriteObjectRequest_Data:
+			out.Msg = &WriteObjectRequestMsgData{Value: variant.Data}
+		}
+		return out
+	})
 }
 
 func ToWireWriteObjectResponse(value *WriteObjectResponse) *proto.WriteObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.WriteObjectResponse{
-		Meta: ToWireS3ObjectMeta(value.Meta),
-	}
-	return out
+	return convertMessage(value, func(value *WriteObjectResponse) *proto.WriteObjectResponse {
+		out := &proto.WriteObjectResponse{
+			Meta: ToWireS3ObjectMeta(value.Meta),
+		}
+		return out
+	})
 }
 
 func FromWireWriteObjectResponse(value *proto.WriteObjectResponse) *WriteObjectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &WriteObjectResponse{
-		Meta: FromWireS3ObjectMeta(value.Meta),
-	}
-	return out
+	return convertMessage(value, func(value *proto.WriteObjectResponse) *WriteObjectResponse {
+		out := &WriteObjectResponse{
+			Meta: FromWireS3ObjectMeta(value.Meta),
+		}
+		return out
+	})
 }

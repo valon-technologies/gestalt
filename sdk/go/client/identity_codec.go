@@ -7,349 +7,319 @@ import (
 )
 
 func ToWireAuthorizeRequest(value *AuthorizeRequest) *proto.AuthorizeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AuthorizeRequest{
-		ResponseType: value.ResponseType,
-		ClientId:     value.ClientId,
-		RedirectUri:  value.RedirectUri,
-		Scope:        value.Scope,
-		State:        value.State,
-	}
-	return out
+	return convertMessage(value, func(value *AuthorizeRequest) *proto.AuthorizeRequest {
+		out := &proto.AuthorizeRequest{
+			ResponseType: value.ResponseType,
+			ClientId:     value.ClientId,
+			RedirectUri:  value.RedirectUri,
+			Scope:        value.Scope,
+			State:        value.State,
+		}
+		return out
+	})
 }
 
 func FromWireAuthorizeRequest(value *proto.AuthorizeRequest) *AuthorizeRequest {
-	if value == nil {
-		return nil
-	}
-	out := &AuthorizeRequest{
-		ResponseType: value.ResponseType,
-		ClientId:     value.ClientId,
-		RedirectUri:  value.RedirectUri,
-		Scope:        value.Scope,
-		State:        value.State,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AuthorizeRequest) *AuthorizeRequest {
+		out := &AuthorizeRequest{
+			ResponseType: value.ResponseType,
+			ClientId:     value.ClientId,
+			RedirectUri:  value.RedirectUri,
+			Scope:        value.Scope,
+			State:        value.State,
+		}
+		return out
+	})
 }
 
 func ToWireAuthorizeResponse(value *AuthorizeResponse) *proto.AuthorizeResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.AuthorizeResponse{
-		RedirectUri: value.RedirectUri,
-	}
-	return out
+	return convertMessage(value, func(value *AuthorizeResponse) *proto.AuthorizeResponse {
+		out := &proto.AuthorizeResponse{
+			RedirectUri: value.RedirectUri,
+		}
+		return out
+	})
 }
 
 func FromWireAuthorizeResponse(value *proto.AuthorizeResponse) *AuthorizeResponse {
-	if value == nil {
-		return nil
-	}
-	out := &AuthorizeResponse{
-		RedirectUri: value.RedirectUri,
-	}
-	return out
+	return convertMessage(value, func(value *proto.AuthorizeResponse) *AuthorizeResponse {
+		out := &AuthorizeResponse{
+			RedirectUri: value.RedirectUri,
+		}
+		return out
+	})
 }
 
 func ToWireGetGrantRequest(value *GetGrantRequest) *proto.GetGrantRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetGrantRequest{
-		GrantId: value.GrantId,
-	}
-	return out
+	return convertMessage(value, func(value *GetGrantRequest) *proto.GetGrantRequest {
+		out := &proto.GetGrantRequest{
+			GrantId: value.GrantId,
+		}
+		return out
+	})
 }
 
 func FromWireGetGrantRequest(value *proto.GetGrantRequest) *GetGrantRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetGrantRequest{
-		GrantId: value.GrantId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetGrantRequest) *GetGrantRequest {
+		out := &GetGrantRequest{
+			GrantId: value.GrantId,
+		}
+		return out
+	})
 }
 
 func ToWireGetGrantResponse(value *GetGrantResponse) *proto.GetGrantResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetGrantResponse{
-		CreatedAt: value.CreatedAt,
-		ExpiresAt: value.ExpiresAt,
-		Name:      value.Name,
-	}
-	appendMessageSlice(&out.Scopes, value.Scopes, ToWireGrantScope)
-	return out
+	return convertMessage(value, func(value *GetGrantResponse) *proto.GetGrantResponse {
+		out := &proto.GetGrantResponse{
+			CreatedAt: value.CreatedAt,
+			ExpiresAt: value.ExpiresAt,
+			Name:      value.Name,
+		}
+		appendMessageSlice(&out.Scopes, value.Scopes, ToWireGrantScope)
+		return out
+	})
 }
 
 func FromWireGetGrantResponse(value *proto.GetGrantResponse) *GetGrantResponse {
-	if value == nil {
-		return nil
-	}
-	out := &GetGrantResponse{
-		CreatedAt: value.CreatedAt,
-		ExpiresAt: value.ExpiresAt,
-		Name:      value.Name,
-	}
-	appendMessageSlice(&out.Scopes, value.Scopes, FromWireGrantScope)
-	return out
+	return convertMessage(value, func(value *proto.GetGrantResponse) *GetGrantResponse {
+		out := &GetGrantResponse{
+			CreatedAt: value.CreatedAt,
+			ExpiresAt: value.ExpiresAt,
+			Name:      value.Name,
+		}
+		appendMessageSlice(&out.Scopes, value.Scopes, FromWireGrantScope)
+		return out
+	})
 }
 
 func ToWireGrantScope(value *GrantScope) *proto.GrantScope {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GrantScope{
-		Scope:    value.Scope,
-		Resource: value.Resource,
-	}
-	return out
+	return convertMessage(value, func(value *GrantScope) *proto.GrantScope {
+		out := &proto.GrantScope{
+			Scope:    value.Scope,
+			Resource: value.Resource,
+		}
+		return out
+	})
 }
 
 func FromWireGrantScope(value *proto.GrantScope) *GrantScope {
-	if value == nil {
-		return nil
-	}
-	out := &GrantScope{
-		Scope:    value.Scope,
-		Resource: value.Resource,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GrantScope) *GrantScope {
+		out := &GrantScope{
+			Scope:    value.Scope,
+			Resource: value.Resource,
+		}
+		return out
+	})
 }
 
 func ToWireIntrospectRequest(value *IntrospectRequest) *proto.IntrospectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.IntrospectRequest{
-		Token:         value.Token,
-		TokenTypeHint: value.TokenTypeHint,
-	}
-	return out
+	return convertMessage(value, func(value *IntrospectRequest) *proto.IntrospectRequest {
+		out := &proto.IntrospectRequest{
+			Token:         value.Token,
+			TokenTypeHint: value.TokenTypeHint,
+		}
+		return out
+	})
 }
 
 func FromWireIntrospectRequest(value *proto.IntrospectRequest) *IntrospectRequest {
-	if value == nil {
-		return nil
-	}
-	out := &IntrospectRequest{
-		Token:         value.Token,
-		TokenTypeHint: value.TokenTypeHint,
-	}
-	return out
+	return convertMessage(value, func(value *proto.IntrospectRequest) *IntrospectRequest {
+		out := &IntrospectRequest{
+			Token:         value.Token,
+			TokenTypeHint: value.TokenTypeHint,
+		}
+		return out
+	})
 }
 
 func ToWireIntrospectResponse(value *IntrospectResponse) *proto.IntrospectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.IntrospectResponse{
-		Active:   value.Active,
-		Subject:  value.Subject,
-		Scope:    value.Scope,
-		ClientId: value.ClientId,
-		Audience: value.Audience,
-	}
-	return out
+	return convertMessage(value, func(value *IntrospectResponse) *proto.IntrospectResponse {
+		out := &proto.IntrospectResponse{
+			Active:   value.Active,
+			Subject:  value.Subject,
+			Scope:    value.Scope,
+			ClientId: value.ClientId,
+			Audience: value.Audience,
+		}
+		return out
+	})
 }
 
 func FromWireIntrospectResponse(value *proto.IntrospectResponse) *IntrospectResponse {
-	if value == nil {
-		return nil
-	}
-	out := &IntrospectResponse{
-		Active:   value.Active,
-		Subject:  value.Subject,
-		Scope:    value.Scope,
-		ClientId: value.ClientId,
-		Audience: value.Audience,
-	}
-	return out
+	return convertMessage(value, func(value *proto.IntrospectResponse) *IntrospectResponse {
+		out := &IntrospectResponse{
+			Active:   value.Active,
+			Subject:  value.Subject,
+			Scope:    value.Scope,
+			ClientId: value.ClientId,
+			Audience: value.Audience,
+		}
+		return out
+	})
 }
 
 func ToWireListGrantsRequest(value *ListGrantsRequest) *proto.ListGrantsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListGrantsRequest{}
-	return out
+	return convertMessage(value, func(value *ListGrantsRequest) *proto.ListGrantsRequest {
+		out := &proto.ListGrantsRequest{}
+		return out
+	})
 }
 
 func FromWireListGrantsRequest(value *proto.ListGrantsRequest) *ListGrantsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &ListGrantsRequest{}
-	return out
+	return convertMessage(value, func(value *proto.ListGrantsRequest) *ListGrantsRequest {
+		out := &ListGrantsRequest{}
+		return out
+	})
 }
 
 func ToWireListGrantsResponse(value *ListGrantsResponse) *proto.ListGrantsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListGrantsResponse{
-		GrantIds: value.GrantIds,
-	}
-	return out
+	return convertMessage(value, func(value *ListGrantsResponse) *proto.ListGrantsResponse {
+		out := &proto.ListGrantsResponse{
+			GrantIds: value.GrantIds,
+		}
+		return out
+	})
 }
 
 func FromWireListGrantsResponse(value *proto.ListGrantsResponse) *ListGrantsResponse {
-	if value == nil {
-		return nil
-	}
-	out := &ListGrantsResponse{
-		GrantIds: value.GrantIds,
-	}
-	return out
+	return convertMessage(value, func(value *proto.ListGrantsResponse) *ListGrantsResponse {
+		out := &ListGrantsResponse{
+			GrantIds: value.GrantIds,
+		}
+		return out
+	})
 }
 
 func ToWireRevokeGrantRequest(value *RevokeGrantRequest) *proto.RevokeGrantRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RevokeGrantRequest{
-		GrantId: value.GrantId,
-	}
-	return out
+	return convertMessage(value, func(value *RevokeGrantRequest) *proto.RevokeGrantRequest {
+		out := &proto.RevokeGrantRequest{
+			GrantId: value.GrantId,
+		}
+		return out
+	})
 }
 
 func FromWireRevokeGrantRequest(value *proto.RevokeGrantRequest) *RevokeGrantRequest {
-	if value == nil {
-		return nil
-	}
-	out := &RevokeGrantRequest{
-		GrantId: value.GrantId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.RevokeGrantRequest) *RevokeGrantRequest {
+		out := &RevokeGrantRequest{
+			GrantId: value.GrantId,
+		}
+		return out
+	})
 }
 
 func ToWireRevokeGrantResponse(value *RevokeGrantResponse) *proto.RevokeGrantResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.RevokeGrantResponse{}
-	return out
+	return convertMessage(value, func(value *RevokeGrantResponse) *proto.RevokeGrantResponse {
+		out := &proto.RevokeGrantResponse{}
+		return out
+	})
 }
 
 func FromWireRevokeGrantResponse(value *proto.RevokeGrantResponse) *RevokeGrantResponse {
-	if value == nil {
-		return nil
-	}
-	out := &RevokeGrantResponse{}
-	return out
+	return convertMessage(value, func(value *proto.RevokeGrantResponse) *RevokeGrantResponse {
+		out := &RevokeGrantResponse{}
+		return out
+	})
 }
 
 func ToWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TokenRequest{
-		GrantType:        value.GrantType,
-		Code:             value.Code,
-		RedirectUri:      value.RedirectUri,
-		ClientId:         value.ClientId,
-		State:            value.State,
-		Scope:            value.Scope,
-		SubjectToken:     value.SubjectToken,
-		SubjectTokenType: value.SubjectTokenType,
-		ExpiresIn:        value.ExpiresIn,
-		Name:             value.Name,
-		GrantSubject:     value.GrantSubject,
-	}
-	return out
+	return convertMessage(value, func(value *TokenRequest) *proto.TokenRequest {
+		out := &proto.TokenRequest{
+			GrantType:        value.GrantType,
+			Code:             value.Code,
+			RedirectUri:      value.RedirectUri,
+			ClientId:         value.ClientId,
+			State:            value.State,
+			Scope:            value.Scope,
+			SubjectToken:     value.SubjectToken,
+			SubjectTokenType: value.SubjectTokenType,
+			ExpiresIn:        value.ExpiresIn,
+			Name:             value.Name,
+			GrantSubject:     value.GrantSubject,
+		}
+		return out
+	})
 }
 
 func FromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
-	if value == nil {
-		return nil
-	}
-	out := &TokenRequest{
-		GrantType:        value.GrantType,
-		Code:             value.Code,
-		RedirectUri:      value.RedirectUri,
-		ClientId:         value.ClientId,
-		State:            value.State,
-		Scope:            value.Scope,
-		SubjectToken:     value.SubjectToken,
-		SubjectTokenType: value.SubjectTokenType,
-		ExpiresIn:        value.ExpiresIn,
-		Name:             value.Name,
-		GrantSubject:     value.GrantSubject,
-	}
-	return out
+	return convertMessage(value, func(value *proto.TokenRequest) *TokenRequest {
+		out := &TokenRequest{
+			GrantType:        value.GrantType,
+			Code:             value.Code,
+			RedirectUri:      value.RedirectUri,
+			ClientId:         value.ClientId,
+			State:            value.State,
+			Scope:            value.Scope,
+			SubjectToken:     value.SubjectToken,
+			SubjectTokenType: value.SubjectTokenType,
+			ExpiresIn:        value.ExpiresIn,
+			Name:             value.Name,
+			GrantSubject:     value.GrantSubject,
+		}
+		return out
+	})
 }
 
 func ToWireTokenResponse(value *TokenResponse) *proto.TokenResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.TokenResponse{
-		AccessToken:  value.AccessToken,
-		TokenType:    value.TokenType,
-		ExpiresIn:    value.ExpiresIn,
-		RefreshToken: value.RefreshToken,
-		Scope:        value.Scope,
-		GrantId:      value.GrantId,
-	}
-	return out
+	return convertMessage(value, func(value *TokenResponse) *proto.TokenResponse {
+		out := &proto.TokenResponse{
+			AccessToken:  value.AccessToken,
+			TokenType:    value.TokenType,
+			ExpiresIn:    value.ExpiresIn,
+			RefreshToken: value.RefreshToken,
+			Scope:        value.Scope,
+			GrantId:      value.GrantId,
+		}
+		return out
+	})
 }
 
 func FromWireTokenResponse(value *proto.TokenResponse) *TokenResponse {
-	if value == nil {
-		return nil
-	}
-	out := &TokenResponse{
-		AccessToken:  value.AccessToken,
-		TokenType:    value.TokenType,
-		ExpiresIn:    value.ExpiresIn,
-		RefreshToken: value.RefreshToken,
-		Scope:        value.Scope,
-		GrantId:      value.GrantId,
-	}
-	return out
+	return convertMessage(value, func(value *proto.TokenResponse) *TokenResponse {
+		out := &TokenResponse{
+			AccessToken:  value.AccessToken,
+			TokenType:    value.TokenType,
+			ExpiresIn:    value.ExpiresIn,
+			RefreshToken: value.RefreshToken,
+			Scope:        value.Scope,
+			GrantId:      value.GrantId,
+		}
+		return out
+	})
 }
 
 func ToWireUserInfoRequest(value *UserInfoRequest) *proto.UserInfoRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.UserInfoRequest{}
-	return out
+	return convertMessage(value, func(value *UserInfoRequest) *proto.UserInfoRequest {
+		out := &proto.UserInfoRequest{}
+		return out
+	})
 }
 
 func FromWireUserInfoRequest(value *proto.UserInfoRequest) *UserInfoRequest {
-	if value == nil {
-		return nil
-	}
-	out := &UserInfoRequest{}
-	return out
+	return convertMessage(value, func(value *proto.UserInfoRequest) *UserInfoRequest {
+		out := &UserInfoRequest{}
+		return out
+	})
 }
 
 func ToWireUserInfoResponse(value *UserInfoResponse) *proto.UserInfoResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.UserInfoResponse{
-		SubjectId: value.SubjectId,
-		Email:     value.Email,
-		Name:      value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *UserInfoResponse) *proto.UserInfoResponse {
+		out := &proto.UserInfoResponse{
+			SubjectId: value.SubjectId,
+			Email:     value.Email,
+			Name:      value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireUserInfoResponse(value *proto.UserInfoResponse) *UserInfoResponse {
-	if value == nil {
-		return nil
-	}
-	out := &UserInfoResponse{
-		SubjectId: value.SubjectId,
-		Email:     value.Email,
-		Name:      value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.UserInfoResponse) *UserInfoResponse {
+		out := &UserInfoResponse{
+			SubjectId: value.SubjectId,
+			Email:     value.Email,
+			Name:      value.Name,
+		}
+		return out
+	})
 }

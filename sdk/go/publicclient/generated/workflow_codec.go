@@ -8,173 +8,159 @@ import (
 )
 
 func ToWireApplyWorkflowProviderDefinitionRequest(value *ApplyWorkflowProviderDefinitionRequest) *proto.ApplyWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ApplyWorkflowProviderDefinitionRequest{
-		Provider:       value.Provider,
-		Spec:           gestaltclient.ToWireWorkflowDefinitionSpec(value.Spec),
-		IdempotencyKey: value.IdempotencyKey,
-	}
-	return out
+	return convertMessage(value, func(value *ApplyWorkflowProviderDefinitionRequest) *proto.ApplyWorkflowProviderDefinitionRequest {
+		out := &proto.ApplyWorkflowProviderDefinitionRequest{
+			Provider:       value.Provider,
+			Spec:           gestaltclient.ToWireWorkflowDefinitionSpec(value.Spec),
+			IdempotencyKey: value.IdempotencyKey,
+		}
+		return out
+	})
 }
 
 func ToWireCancelWorkflowProviderRunRequest(value *CancelWorkflowProviderRunRequest) *proto.CancelWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CancelWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Reason:   value.Reason,
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *CancelWorkflowProviderRunRequest) *proto.CancelWorkflowProviderRunRequest {
+		out := &proto.CancelWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Reason:   value.Reason,
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireDeleteWorkflowProviderDefinitionRequest(value *DeleteWorkflowProviderDefinitionRequest) *proto.DeleteWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.DeleteWorkflowProviderDefinitionRequest{
-		DefinitionId: value.DefinitionId,
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *DeleteWorkflowProviderDefinitionRequest) *proto.DeleteWorkflowProviderDefinitionRequest {
+		out := &proto.DeleteWorkflowProviderDefinitionRequest{
+			DefinitionId: value.DefinitionId,
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderDefinitionRequest(value *GetWorkflowProviderDefinitionRequest) *proto.GetWorkflowProviderDefinitionRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderDefinitionRequest{
-		DefinitionId: value.DefinitionId,
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderDefinitionRequest) *proto.GetWorkflowProviderDefinitionRequest {
+		out := &proto.GetWorkflowProviderDefinitionRequest{
+			DefinitionId: value.DefinitionId,
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunEventsRequest(value *GetWorkflowProviderRunEventsRequest) *proto.GetWorkflowProviderRunEventsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunEventsRequest{
-		RunId:    value.RunId,
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunEventsRequest) *proto.GetWorkflowProviderRunEventsRequest {
+		out := &proto.GetWorkflowProviderRunEventsRequest{
+			RunId:    value.RunId,
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunOutputRequest(value *GetWorkflowProviderRunOutputRequest) *proto.GetWorkflowProviderRunOutputRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunOutputRequest{
-		RunId:    value.RunId,
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunOutputRequest) *proto.GetWorkflowProviderRunOutputRequest {
+		out := &proto.GetWorkflowProviderRunOutputRequest{
+			RunId:    value.RunId,
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireGetWorkflowProviderRunRequest(value *GetWorkflowProviderRunRequest) *proto.GetWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *GetWorkflowProviderRunRequest) *proto.GetWorkflowProviderRunRequest {
+		out := &proto.GetWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireListWorkflowProviderDefinitionsRequest(value *ListWorkflowProviderDefinitionsRequest) *proto.ListWorkflowProviderDefinitionsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListWorkflowProviderDefinitionsRequest{
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *ListWorkflowProviderDefinitionsRequest) *proto.ListWorkflowProviderDefinitionsRequest {
+		out := &proto.ListWorkflowProviderDefinitionsRequest{
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireListWorkflowProviderRunsRequest(value *ListWorkflowProviderRunsRequest) *proto.ListWorkflowProviderRunsRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.ListWorkflowProviderRunsRequest{
-		PageSize:     value.PageSize,
-		PageToken:    value.PageToken,
-		Status:       proto.WorkflowRunStatus(value.Status),
-		TargetApp:    value.TargetApp,
-		Provider:     value.Provider,
-		DefinitionId: value.DefinitionId,
-	}
-	return out
+	return convertMessage(value, func(value *ListWorkflowProviderRunsRequest) *proto.ListWorkflowProviderRunsRequest {
+		out := &proto.ListWorkflowProviderRunsRequest{
+			PageSize:     value.PageSize,
+			PageToken:    value.PageToken,
+			Status:       proto.WorkflowRunStatus(value.Status),
+			TargetApp:    value.TargetApp,
+			Provider:     value.Provider,
+			DefinitionId: value.DefinitionId,
+		}
+		return out
+	})
 }
 
 func ToWireSetWorkflowProviderActivationPausedRequest(value *SetWorkflowProviderActivationPausedRequest) *proto.SetWorkflowProviderActivationPausedRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetWorkflowProviderActivationPausedRequest{
-		DefinitionId: value.DefinitionId,
-		ActivationId: value.ActivationId,
-		Paused:       value.Paused,
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *SetWorkflowProviderActivationPausedRequest) *proto.SetWorkflowProviderActivationPausedRequest {
+		out := &proto.SetWorkflowProviderActivationPausedRequest{
+			DefinitionId: value.DefinitionId,
+			ActivationId: value.ActivationId,
+			Paused:       value.Paused,
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireSetWorkflowProviderDefinitionPausedRequest(value *SetWorkflowProviderDefinitionPausedRequest) *proto.SetWorkflowProviderDefinitionPausedRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionId: value.DefinitionId,
-		Paused:       value.Paused,
-		Provider:     value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *SetWorkflowProviderDefinitionPausedRequest) *proto.SetWorkflowProviderDefinitionPausedRequest {
+		out := &proto.SetWorkflowProviderDefinitionPausedRequest{
+			DefinitionId: value.DefinitionId,
+			Paused:       value.Paused,
+			Provider:     value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireSignalOrStartWorkflowProviderRunRequest(value *SignalOrStartWorkflowProviderRunRequest) *proto.SignalOrStartWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:                  value.WorkflowKey,
-		IdempotencyKey:               value.IdempotencyKey,
-		Signal:                       gestaltclient.ToWireWorkflowSignal(value.Signal),
-		Provider:                     value.Provider,
-		DefinitionId:                 value.DefinitionId,
-		Input:                        gestaltclient.ToWireStruct(value.Input),
-		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
-	}
-	return out
+	return convertMessage(value, func(value *SignalOrStartWorkflowProviderRunRequest) *proto.SignalOrStartWorkflowProviderRunRequest {
+		out := &proto.SignalOrStartWorkflowProviderRunRequest{
+			WorkflowKey:                  value.WorkflowKey,
+			IdempotencyKey:               value.IdempotencyKey,
+			Signal:                       gestaltclient.ToWireWorkflowSignal(value.Signal),
+			Provider:                     value.Provider,
+			DefinitionId:                 value.DefinitionId,
+			Input:                        gestaltclient.ToWireStruct(value.Input),
+			ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
+		}
+		return out
+	})
 }
 
 func ToWireSignalWorkflowProviderRunRequest(value *SignalWorkflowProviderRunRequest) *proto.SignalWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.SignalWorkflowProviderRunRequest{
-		RunId:    value.RunId,
-		Signal:   gestaltclient.ToWireWorkflowSignal(value.Signal),
-		Provider: value.Provider,
-	}
-	return out
+	return convertMessage(value, func(value *SignalWorkflowProviderRunRequest) *proto.SignalWorkflowProviderRunRequest {
+		out := &proto.SignalWorkflowProviderRunRequest{
+			RunId:    value.RunId,
+			Signal:   gestaltclient.ToWireWorkflowSignal(value.Signal),
+			Provider: value.Provider,
+		}
+		return out
+	})
 }
 
 func ToWireStartWorkflowProviderRunRequest(value *StartWorkflowProviderRunRequest) *proto.StartWorkflowProviderRunRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.StartWorkflowProviderRunRequest{
-		IdempotencyKey:               value.IdempotencyKey,
-		WorkflowKey:                  value.WorkflowKey,
-		Provider:                     value.Provider,
-		DefinitionId:                 value.DefinitionId,
-		Input:                        gestaltclient.ToWireStruct(value.Input),
-		ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
-	}
-	return out
+	return convertMessage(value, func(value *StartWorkflowProviderRunRequest) *proto.StartWorkflowProviderRunRequest {
+		out := &proto.StartWorkflowProviderRunRequest{
+			IdempotencyKey:               value.IdempotencyKey,
+			WorkflowKey:                  value.WorkflowKey,
+			Provider:                     value.Provider,
+			DefinitionId:                 value.DefinitionId,
+			Input:                        gestaltclient.ToWireStruct(value.Input),
+			ExpectedDefinitionGeneration: value.ExpectedDefinitionGeneration,
+		}
+		return out
+	})
 }

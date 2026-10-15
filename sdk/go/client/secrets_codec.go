@@ -7,41 +7,37 @@ import (
 )
 
 func ToWireGetSecretRequest(value *GetSecretRequest) *proto.GetSecretRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetSecretRequest{
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *GetSecretRequest) *proto.GetSecretRequest {
+		out := &proto.GetSecretRequest{
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func FromWireGetSecretRequest(value *proto.GetSecretRequest) *GetSecretRequest {
-	if value == nil {
-		return nil
-	}
-	out := &GetSecretRequest{
-		Name: value.Name,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetSecretRequest) *GetSecretRequest {
+		out := &GetSecretRequest{
+			Name: value.Name,
+		}
+		return out
+	})
 }
 
 func ToWireGetSecretResponse(value *GetSecretResponse) *proto.GetSecretResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.GetSecretResponse{
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *GetSecretResponse) *proto.GetSecretResponse {
+		out := &proto.GetSecretResponse{
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func FromWireGetSecretResponse(value *proto.GetSecretResponse) *GetSecretResponse {
-	if value == nil {
-		return nil
-	}
-	out := &GetSecretResponse{
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *proto.GetSecretResponse) *GetSecretResponse {
+		out := &GetSecretResponse{
+			Value: value.Value,
+		}
+		return out
+	})
 }

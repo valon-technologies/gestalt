@@ -7,295 +7,267 @@ import (
 )
 
 func ToWireCacheDeleteManyRequest(value *CacheDeleteManyRequest) *proto.CacheDeleteManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheDeleteManyRequest{
-		Keys: value.Keys,
-	}
-	return out
+	return convertMessage(value, func(value *CacheDeleteManyRequest) *proto.CacheDeleteManyRequest {
+		out := &proto.CacheDeleteManyRequest{
+			Keys: value.Keys,
+		}
+		return out
+	})
 }
 
 func FromWireCacheDeleteManyRequest(value *proto.CacheDeleteManyRequest) *CacheDeleteManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheDeleteManyRequest{
-		Keys: value.Keys,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheDeleteManyRequest) *CacheDeleteManyRequest {
+		out := &CacheDeleteManyRequest{
+			Keys: value.Keys,
+		}
+		return out
+	})
 }
 
 func ToWireCacheDeleteManyResponse(value *CacheDeleteManyResponse) *proto.CacheDeleteManyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheDeleteManyResponse{
-		Deleted: value.Deleted,
-	}
-	return out
+	return convertMessage(value, func(value *CacheDeleteManyResponse) *proto.CacheDeleteManyResponse {
+		out := &proto.CacheDeleteManyResponse{
+			Deleted: value.Deleted,
+		}
+		return out
+	})
 }
 
 func FromWireCacheDeleteManyResponse(value *proto.CacheDeleteManyResponse) *CacheDeleteManyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CacheDeleteManyResponse{
-		Deleted: value.Deleted,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheDeleteManyResponse) *CacheDeleteManyResponse {
+		out := &CacheDeleteManyResponse{
+			Deleted: value.Deleted,
+		}
+		return out
+	})
 }
 
 func ToWireCacheDeleteRequest(value *CacheDeleteRequest) *proto.CacheDeleteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheDeleteRequest{
-		Key: value.Key,
-	}
-	return out
+	return convertMessage(value, func(value *CacheDeleteRequest) *proto.CacheDeleteRequest {
+		out := &proto.CacheDeleteRequest{
+			Key: value.Key,
+		}
+		return out
+	})
 }
 
 func FromWireCacheDeleteRequest(value *proto.CacheDeleteRequest) *CacheDeleteRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheDeleteRequest{
-		Key: value.Key,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheDeleteRequest) *CacheDeleteRequest {
+		out := &CacheDeleteRequest{
+			Key: value.Key,
+		}
+		return out
+	})
 }
 
 func ToWireCacheDeleteResponse(value *CacheDeleteResponse) *proto.CacheDeleteResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheDeleteResponse{
-		Deleted: value.Deleted,
-	}
-	return out
+	return convertMessage(value, func(value *CacheDeleteResponse) *proto.CacheDeleteResponse {
+		out := &proto.CacheDeleteResponse{
+			Deleted: value.Deleted,
+		}
+		return out
+	})
 }
 
 func FromWireCacheDeleteResponse(value *proto.CacheDeleteResponse) *CacheDeleteResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CacheDeleteResponse{
-		Deleted: value.Deleted,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheDeleteResponse) *CacheDeleteResponse {
+		out := &CacheDeleteResponse{
+			Deleted: value.Deleted,
+		}
+		return out
+	})
 }
 
 func ToWireCacheGetManyRequest(value *CacheGetManyRequest) *proto.CacheGetManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheGetManyRequest{
-		Keys: value.Keys,
-	}
-	return out
+	return convertMessage(value, func(value *CacheGetManyRequest) *proto.CacheGetManyRequest {
+		out := &proto.CacheGetManyRequest{
+			Keys: value.Keys,
+		}
+		return out
+	})
 }
 
 func FromWireCacheGetManyRequest(value *proto.CacheGetManyRequest) *CacheGetManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheGetManyRequest{
-		Keys: value.Keys,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheGetManyRequest) *CacheGetManyRequest {
+		out := &CacheGetManyRequest{
+			Keys: value.Keys,
+		}
+		return out
+	})
 }
 
 func ToWireCacheGetManyResponse(value *CacheGetManyResponse) *proto.CacheGetManyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheGetManyResponse{}
-	appendMessageSlice(&out.Entries, value.Entries, ToWireCacheResult)
-	return out
+	return convertMessage(value, func(value *CacheGetManyResponse) *proto.CacheGetManyResponse {
+		out := &proto.CacheGetManyResponse{}
+		appendMessageSlice(&out.Entries, value.Entries, ToWireCacheResult)
+		return out
+	})
 }
 
 func FromWireCacheGetManyResponse(value *proto.CacheGetManyResponse) *CacheGetManyResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CacheGetManyResponse{}
-	appendMessageSlice(&out.Entries, value.Entries, FromWireCacheResult)
-	return out
+	return convertMessage(value, func(value *proto.CacheGetManyResponse) *CacheGetManyResponse {
+		out := &CacheGetManyResponse{}
+		appendMessageSlice(&out.Entries, value.Entries, FromWireCacheResult)
+		return out
+	})
 }
 
 func ToWireCacheGetRequest(value *CacheGetRequest) *proto.CacheGetRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheGetRequest{
-		Key: value.Key,
-	}
-	return out
+	return convertMessage(value, func(value *CacheGetRequest) *proto.CacheGetRequest {
+		out := &proto.CacheGetRequest{
+			Key: value.Key,
+		}
+		return out
+	})
 }
 
 func FromWireCacheGetRequest(value *proto.CacheGetRequest) *CacheGetRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheGetRequest{
-		Key: value.Key,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheGetRequest) *CacheGetRequest {
+		out := &CacheGetRequest{
+			Key: value.Key,
+		}
+		return out
+	})
 }
 
 func ToWireCacheGetResponse(value *CacheGetResponse) *proto.CacheGetResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheGetResponse{
-		Found: value.Found,
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *CacheGetResponse) *proto.CacheGetResponse {
+		out := &proto.CacheGetResponse{
+			Found: value.Found,
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func FromWireCacheGetResponse(value *proto.CacheGetResponse) *CacheGetResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CacheGetResponse{
-		Found: value.Found,
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheGetResponse) *CacheGetResponse {
+		out := &CacheGetResponse{
+			Found: value.Found,
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func ToWireCacheResult(value *CacheResult) *proto.CacheResult {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheResult{
-		Key:   value.Key,
-		Found: value.Found,
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *CacheResult) *proto.CacheResult {
+		out := &proto.CacheResult{
+			Key:   value.Key,
+			Found: value.Found,
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func FromWireCacheResult(value *proto.CacheResult) *CacheResult {
-	if value == nil {
-		return nil
-	}
-	out := &CacheResult{
-		Key:   value.Key,
-		Found: value.Found,
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheResult) *CacheResult {
+		out := &CacheResult{
+			Key:   value.Key,
+			Found: value.Found,
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func ToWireCacheSetEntry(value *CacheSetEntry) *proto.CacheSetEntry {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheSetEntry{
-		Key:   value.Key,
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *CacheSetEntry) *proto.CacheSetEntry {
+		out := &proto.CacheSetEntry{
+			Key:   value.Key,
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func FromWireCacheSetEntry(value *proto.CacheSetEntry) *CacheSetEntry {
-	if value == nil {
-		return nil
-	}
-	out := &CacheSetEntry{
-		Key:   value.Key,
-		Value: value.Value,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheSetEntry) *CacheSetEntry {
+		out := &CacheSetEntry{
+			Key:   value.Key,
+			Value: value.Value,
+		}
+		return out
+	})
 }
 
 func ToWireCacheSetManyRequest(value *CacheSetManyRequest) *proto.CacheSetManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheSetManyRequest{
-		Ttl: ToWireDuration(value.Ttl),
-	}
-	appendMessageSlice(&out.Entries, value.Entries, ToWireCacheSetEntry)
-	return out
+	return convertMessage(value, func(value *CacheSetManyRequest) *proto.CacheSetManyRequest {
+		out := &proto.CacheSetManyRequest{
+			Ttl: ToWireDuration(value.Ttl),
+		}
+		appendMessageSlice(&out.Entries, value.Entries, ToWireCacheSetEntry)
+		return out
+	})
 }
 
 func FromWireCacheSetManyRequest(value *proto.CacheSetManyRequest) *CacheSetManyRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheSetManyRequest{
-		Ttl: FromWireDuration(value.Ttl),
-	}
-	appendMessageSlice(&out.Entries, value.Entries, FromWireCacheSetEntry)
-	return out
+	return convertMessage(value, func(value *proto.CacheSetManyRequest) *CacheSetManyRequest {
+		out := &CacheSetManyRequest{
+			Ttl: FromWireDuration(value.Ttl),
+		}
+		appendMessageSlice(&out.Entries, value.Entries, FromWireCacheSetEntry)
+		return out
+	})
 }
 
 func ToWireCacheSetRequest(value *CacheSetRequest) *proto.CacheSetRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheSetRequest{
-		Key:   value.Key,
-		Value: value.Value,
-		Ttl:   ToWireDuration(value.Ttl),
-	}
-	return out
+	return convertMessage(value, func(value *CacheSetRequest) *proto.CacheSetRequest {
+		out := &proto.CacheSetRequest{
+			Key:   value.Key,
+			Value: value.Value,
+			Ttl:   ToWireDuration(value.Ttl),
+		}
+		return out
+	})
 }
 
 func FromWireCacheSetRequest(value *proto.CacheSetRequest) *CacheSetRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheSetRequest{
-		Key:   value.Key,
-		Value: value.Value,
-		Ttl:   FromWireDuration(value.Ttl),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheSetRequest) *CacheSetRequest {
+		out := &CacheSetRequest{
+			Key:   value.Key,
+			Value: value.Value,
+			Ttl:   FromWireDuration(value.Ttl),
+		}
+		return out
+	})
 }
 
 func ToWireCacheTouchRequest(value *CacheTouchRequest) *proto.CacheTouchRequest {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheTouchRequest{
-		Key: value.Key,
-		Ttl: ToWireDuration(value.Ttl),
-	}
-	return out
+	return convertMessage(value, func(value *CacheTouchRequest) *proto.CacheTouchRequest {
+		out := &proto.CacheTouchRequest{
+			Key: value.Key,
+			Ttl: ToWireDuration(value.Ttl),
+		}
+		return out
+	})
 }
 
 func FromWireCacheTouchRequest(value *proto.CacheTouchRequest) *CacheTouchRequest {
-	if value == nil {
-		return nil
-	}
-	out := &CacheTouchRequest{
-		Key: value.Key,
-		Ttl: FromWireDuration(value.Ttl),
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheTouchRequest) *CacheTouchRequest {
+		out := &CacheTouchRequest{
+			Key: value.Key,
+			Ttl: FromWireDuration(value.Ttl),
+		}
+		return out
+	})
 }
 
 func ToWireCacheTouchResponse(value *CacheTouchResponse) *proto.CacheTouchResponse {
-	if value == nil {
-		return nil
-	}
-	out := &proto.CacheTouchResponse{
-		Touched: value.Touched,
-	}
-	return out
+	return convertMessage(value, func(value *CacheTouchResponse) *proto.CacheTouchResponse {
+		out := &proto.CacheTouchResponse{
+			Touched: value.Touched,
+		}
+		return out
+	})
 }
 
 func FromWireCacheTouchResponse(value *proto.CacheTouchResponse) *CacheTouchResponse {
-	if value == nil {
-		return nil
-	}
-	out := &CacheTouchResponse{
-		Touched: value.Touched,
-	}
-	return out
+	return convertMessage(value, func(value *proto.CacheTouchResponse) *CacheTouchResponse {
+		out := &CacheTouchResponse{
+			Touched: value.Touched,
+		}
+		return out
+	})
 }
