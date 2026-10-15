@@ -375,7 +375,7 @@ func runSync(args []string) error {
 	switch {
 	case *outputFormat == syncOutputFormatJSON:
 		return writeSyncJSON(os.Stdout, metrics.Snapshot())
-	case *outputFormat != syncOutputFormatJSON && verbose && !quiet:
+	case verbose && !quiet:
 		return writeSyncText(os.Stderr, metrics.Snapshot())
 	default:
 		return nil
