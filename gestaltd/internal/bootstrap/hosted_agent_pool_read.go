@@ -9,10 +9,11 @@ import (
 func getHostedAgentValue[T any](
 	p *hostedAgentProviderPool,
 	preferred *hostedAgentPoolBackend,
-	read func(*hostedAgentPoolBackend) (*T, error),
+	read func(*hostedAgentPoolBackend) (T, error),
 	forget func(),
-	record func(*T, *hostedAgentPoolBackend),
-) (*T, error) {
+	record func(T, *hostedAgentPoolBackend),
+) (T, error) {
+	var zero T
 	var retryableErr error
 	var lastNotFound error
 	tried := map[*hostedAgentPoolBackend]struct{}{}
@@ -29,7 +30,7 @@ func getHostedAgentValue[T any](
 		case isHostedAgentReadRetryableError(err):
 			retryableErr = err
 		default:
-			return nil, err
+			return zero, err
 		}
 	}
 	for _, backend := range p.availableBackends(true) {
@@ -49,15 +50,15 @@ func getHostedAgentValue[T any](
 			retryableErr = err
 			continue
 		}
-		return nil, err
+		return zero, err
 	}
 	if retryableErr != nil {
-		return nil, retryableErr
+		return zero, retryableErr
 	}
 	if lastNotFound != nil {
-		return nil, lastNotFound
+		return zero, lastNotFound
 	}
-	return nil, core.ErrNotFound
+	return zero, core.ErrNotFound
 }
 
 func listHostedAgentValues[T any](
