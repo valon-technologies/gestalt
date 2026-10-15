@@ -241,9 +241,6 @@ func WorkflowContextFromContext(ctx context.Context) map[string]any {
 }
 
 func CloneWorkflowContext(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
-	}
 	out := make(map[string]any, len(src))
 	for key, value := range src {
 		key = strings.TrimSpace(key)

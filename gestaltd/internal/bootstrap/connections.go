@@ -23,12 +23,12 @@ type ConnectionMaps struct {
 }
 
 func agentConnectionBindings(cfg *config.Config) map[string][]string {
-	if cfg == nil || len(cfg.Providers.Agent) == 0 {
+	if cfg == nil {
 		return nil
 	}
 	out := make(map[string][]string, len(cfg.Providers.Agent))
 	for providerName, entry := range cfg.Providers.Agent {
-		if entry == nil || len(entry.Connections) == 0 {
+		if entry == nil {
 			continue
 		}
 		names := make([]string, 0, len(entry.Connections))
@@ -300,9 +300,6 @@ func ExternalCredentialAuthConfig(auth config.ConnectionAuthDef) core.ExternalCr
 }
 
 func connectionParamDefaults(params map[string]config.ConnectionParamDef) map[string]string {
-	if len(params) == 0 {
-		return nil
-	}
 	out := make(map[string]string, len(params))
 	for name, param := range params {
 		if strings.TrimSpace(param.Default) != "" {
