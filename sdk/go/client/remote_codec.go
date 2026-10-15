@@ -14,9 +14,7 @@ func ToWireCreateRemoteRequest(value *CreateRemoteRequest) *proto.CreateRemoteRe
 		Tunnel:             ToWireTunnelEndpoint(value.Tunnel),
 		ExpectedGeneration: value.ExpectedGeneration,
 	}
-	for _, item := range value.Providers {
-		out.Providers = append(out.Providers, ToWireRemoteProviderDefinition(item))
-	}
+	appendMessageSlice(&out.Providers, value.Providers, ToWireRemoteProviderDefinition)
 	return out
 }
 
@@ -28,9 +26,7 @@ func FromWireCreateRemoteRequest(value *proto.CreateRemoteRequest) *CreateRemote
 		Tunnel:             FromWireTunnelEndpoint(value.Tunnel),
 		ExpectedGeneration: value.ExpectedGeneration,
 	}
-	for _, item := range value.Providers {
-		out.Providers = append(out.Providers, FromWireRemoteProviderDefinition(item))
-	}
+	appendMessageSlice(&out.Providers, value.Providers, FromWireRemoteProviderDefinition)
 	return out
 }
 
@@ -81,9 +77,7 @@ func ToWireListRemotesResponse(value *ListRemotesResponse) *proto.ListRemotesRes
 		Tunnel:         ToWireTunnelBootstrap(value.Tunnel),
 		LeaseDuration:  ToWireDuration(value.LeaseDuration),
 	}
-	for _, item := range value.Remotes {
-		out.Remotes = append(out.Remotes, ToWireRemote(item))
-	}
+	appendMessageSlice(&out.Remotes, value.Remotes, ToWireRemote)
 	return out
 }
 
@@ -96,9 +90,7 @@ func FromWireListRemotesResponse(value *proto.ListRemotesResponse) *ListRemotesR
 		Tunnel:         FromWireTunnelBootstrap(value.Tunnel),
 		LeaseDuration:  FromWireDuration(value.LeaseDuration),
 	}
-	for _, item := range value.Remotes {
-		out.Remotes = append(out.Remotes, FromWireRemote(item))
-	}
+	appendMessageSlice(&out.Remotes, value.Remotes, FromWireRemote)
 	return out
 }
 
@@ -132,9 +124,7 @@ func ToWireRegistrationCheckRequest(value *RegistrationCheckRequest) *proto.Regi
 		RegistrationId: value.RegistrationId,
 		Generation:     value.Generation,
 	}
-	for _, item := range value.Providers {
-		out.Providers = append(out.Providers, ToWireProviderRef(item))
-	}
+	appendMessageSlice(&out.Providers, value.Providers, ToWireProviderRef)
 	return out
 }
 
@@ -146,9 +136,7 @@ func FromWireRegistrationCheckRequest(value *proto.RegistrationCheckRequest) *Re
 		RegistrationId: value.RegistrationId,
 		Generation:     value.Generation,
 	}
-	for _, item := range value.Providers {
-		out.Providers = append(out.Providers, FromWireProviderRef(item))
-	}
+	appendMessageSlice(&out.Providers, value.Providers, FromWireProviderRef)
 	return out
 }
 
@@ -192,9 +180,7 @@ func ToWireRemote(value *Remote) *proto.Remote {
 		LeaseExpiresAt:            ToWireTimestamp(value.LeaseExpiresAt),
 		ConnectUrl:                value.ConnectUrl,
 	}
-	for _, item := range value.Providers {
-		out.Providers = append(out.Providers, ToWireRemoteProviderSummary(item))
-	}
+	appendMessageSlice(&out.Providers, value.Providers, ToWireRemoteProviderSummary)
 	return out
 }
 
@@ -216,9 +202,7 @@ func FromWireRemote(value *proto.Remote) *Remote {
 		LeaseExpiresAt:            FromWireTimestamp(value.LeaseExpiresAt),
 		ConnectUrl:                value.ConnectUrl,
 	}
-	for _, item := range value.Providers {
-		out.Providers = append(out.Providers, FromWireRemoteProviderSummary(item))
-	}
+	appendMessageSlice(&out.Providers, value.Providers, FromWireRemoteProviderSummary)
 	return out
 }
 

@@ -448,6 +448,11 @@ func (r *renderer) fieldToWire(f *model.Field) conversionParts {
 		if identityValue(f.Elem) {
 			return conversionParts{entry: name + ": " + expr}
 		}
+		if f.Elem.Kind == model.KindMessage {
+			return conversionParts{post: []string{
+				"appendMessageSlice(&out." + name + ", " + expr + ", " + r.toWireFuncName(f.Elem.Message) + ")",
+			}}
+		}
 		return conversionParts{post: []string{
 			"for _, item := range " + expr + " {",
 			"\tout." + name + " = append(out." + name + ", " + r.valueToWire(f.Elem, "item") + ")",
@@ -516,6 +521,11 @@ func (r *renderer) fieldFromWire(f *model.Field) conversionParts {
 	case model.KindRepeated:
 		if identityValue(f.Elem) {
 			return conversionParts{entry: name + ": " + expr}
+		}
+		if f.Elem.Kind == model.KindMessage {
+			return conversionParts{post: []string{
+				"appendMessageSlice(&out." + name + ", " + expr + ", " + r.fromWireFuncName(f.Elem.Message) + ")",
+			}}
 		}
 		return conversionParts{post: []string{
 			"for _, item := range " + expr + " {",

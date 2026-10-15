@@ -111,9 +111,7 @@ func ToWireCacheGetManyResponse(value *CacheGetManyResponse) *proto.CacheGetMany
 		return nil
 	}
 	out := &proto.CacheGetManyResponse{}
-	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, ToWireCacheResult(item))
-	}
+	appendMessageSlice(&out.Entries, value.Entries, ToWireCacheResult)
 	return out
 }
 
@@ -122,9 +120,7 @@ func FromWireCacheGetManyResponse(value *proto.CacheGetManyResponse) *CacheGetMa
 		return nil
 	}
 	out := &CacheGetManyResponse{}
-	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, FromWireCacheResult(item))
-	}
+	appendMessageSlice(&out.Entries, value.Entries, FromWireCacheResult)
 	return out
 }
 
@@ -223,9 +219,7 @@ func ToWireCacheSetManyRequest(value *CacheSetManyRequest) *proto.CacheSetManyRe
 	out := &proto.CacheSetManyRequest{
 		Ttl: ToWireDuration(value.Ttl),
 	}
-	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, ToWireCacheSetEntry(item))
-	}
+	appendMessageSlice(&out.Entries, value.Entries, ToWireCacheSetEntry)
 	return out
 }
 
@@ -236,9 +230,7 @@ func FromWireCacheSetManyRequest(value *proto.CacheSetManyRequest) *CacheSetMany
 	out := &CacheSetManyRequest{
 		Ttl: FromWireDuration(value.Ttl),
 	}
-	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, FromWireCacheSetEntry(item))
-	}
+	appendMessageSlice(&out.Entries, value.Entries, FromWireCacheSetEntry)
 	return out
 }
 

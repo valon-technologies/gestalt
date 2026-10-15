@@ -170,9 +170,7 @@ func ToWireCatalog(value *Catalog) *proto.Catalog {
 		Description: value.Description,
 		IconSvg:     value.IconSvg,
 	}
-	for _, item := range value.Operations {
-		out.Operations = append(out.Operations, ToWireCatalogOperation(item))
-	}
+	appendMessageSlice(&out.Operations, value.Operations, ToWireCatalogOperation)
 	return out
 }
 
@@ -186,9 +184,7 @@ func FromWireCatalog(value *proto.Catalog) *Catalog {
 		Description: value.Description,
 		IconSvg:     value.IconSvg,
 	}
-	for _, item := range value.Operations {
-		out.Operations = append(out.Operations, FromWireCatalogOperation(item))
-	}
+	appendMessageSlice(&out.Operations, value.Operations, FromWireCatalogOperation)
 	return out
 }
 
@@ -213,9 +209,7 @@ func ToWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
 		Api:            value.Api,
 		Mcp:            value.Mcp,
 	}
-	for _, item := range value.Parameters {
-		out.Parameters = append(out.Parameters, ToWireCatalogParameter(item))
-	}
+	appendMessageSlice(&out.Parameters, value.Parameters, ToWireCatalogParameter)
 	if value.ApiMode != nil {
 		wireValue := proto.APIExposureMode(*value.ApiMode)
 		out.ApiMode = &wireValue
@@ -244,9 +238,7 @@ func FromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
 		Api:            value.Api,
 		Mcp:            value.Mcp,
 	}
-	for _, item := range value.Parameters {
-		out.Parameters = append(out.Parameters, FromWireCatalogParameter(item))
-	}
+	appendMessageSlice(&out.Parameters, value.Parameters, FromWireCatalogParameter)
 	if value.ApiMode != nil {
 		nativeValue := APIExposureMode(*value.ApiMode)
 		out.ApiMode = &nativeValue
@@ -765,9 +757,7 @@ func ToWireRequestContext(value *RequestContext) *proto.RequestContext {
 		RequestMeta:  ToWireRequestMetaContext(value.RequestMeta),
 		Agent:        ToWireAgentInvocationContext(value.Agent),
 	}
-	for _, item := range value.ToolRefs {
-		out.ToolRefs = append(out.ToolRefs, ToWireAgentToolRef(item))
-	}
+	appendMessageSlice(&out.ToolRefs, value.ToolRefs, ToWireAgentToolRef)
 	return out
 }
 
@@ -788,9 +778,7 @@ func FromWireRequestContext(value *proto.RequestContext) *RequestContext {
 		RequestMeta:  FromWireRequestMetaContext(value.RequestMeta),
 		Agent:        FromWireAgentInvocationContext(value.Agent),
 	}
-	for _, item := range value.ToolRefs {
-		out.ToolRefs = append(out.ToolRefs, FromWireAgentToolRef(item))
-	}
+	appendMessageSlice(&out.ToolRefs, value.ToolRefs, FromWireAgentToolRef)
 	return out
 }
 
@@ -960,9 +948,7 @@ func ToWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
 		DisplayName: value.DisplayName,
 		Scopes:      value.Scopes,
 	}
-	for _, item := range value.Permissions {
-		out.Permissions = append(out.Permissions, ToWireSubjectPermissionContext(item))
-	}
+	appendMessageSlice(&out.Permissions, value.Permissions, ToWireSubjectPermissionContext)
 	return out
 }
 
@@ -976,9 +962,7 @@ func FromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
 		DisplayName: value.DisplayName,
 		Scopes:      value.Scopes,
 	}
-	for _, item := range value.Permissions {
-		out.Permissions = append(out.Permissions, FromWireSubjectPermissionContext(item))
-	}
+	appendMessageSlice(&out.Permissions, value.Permissions, FromWireSubjectPermissionContext)
 	return out
 }
 

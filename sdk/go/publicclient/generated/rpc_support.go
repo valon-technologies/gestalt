@@ -13,3 +13,10 @@ type (
 func toGestaltError(err error) *GestaltError {
 	return gestaltclient.ToGestaltError(err)
 }
+
+// appendMessageSlice preserves the original destination-field append behavior.
+func appendMessageSlice[Input, Output any](out *[]*Output, values []*Input, convert func(*Input) *Output) {
+	for _, item := range values {
+		*out = append(*out, convert(item))
+	}
+}

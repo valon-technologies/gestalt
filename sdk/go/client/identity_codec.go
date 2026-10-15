@@ -83,9 +83,7 @@ func ToWireGetGrantResponse(value *GetGrantResponse) *proto.GetGrantResponse {
 		ExpiresAt: value.ExpiresAt,
 		Name:      value.Name,
 	}
-	for _, item := range value.Scopes {
-		out.Scopes = append(out.Scopes, ToWireGrantScope(item))
-	}
+	appendMessageSlice(&out.Scopes, value.Scopes, ToWireGrantScope)
 	return out
 }
 
@@ -98,9 +96,7 @@ func FromWireGetGrantResponse(value *proto.GetGrantResponse) *GetGrantResponse {
 		ExpiresAt: value.ExpiresAt,
 		Name:      value.Name,
 	}
-	for _, item := range value.Scopes {
-		out.Scopes = append(out.Scopes, FromWireGrantScope(item))
-	}
+	appendMessageSlice(&out.Scopes, value.Scopes, FromWireGrantScope)
 	return out
 }
 

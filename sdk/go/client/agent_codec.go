@@ -11,12 +11,8 @@ func ToWireAgentCatalogToolConfig(value *AgentCatalogToolConfig) *proto.AgentCat
 		return nil
 	}
 	out := &proto.AgentCatalogToolConfig{}
-	for _, item := range value.Refs {
-		out.Refs = append(out.Refs, ToWireAgentToolRef(item))
-	}
-	for _, item := range value.Tools {
-		out.Tools = append(out.Tools, ToWireListedAgentTool(item))
-	}
+	appendMessageSlice(&out.Refs, value.Refs, ToWireAgentToolRef)
+	appendMessageSlice(&out.Tools, value.Tools, ToWireListedAgentTool)
 	return out
 }
 
@@ -25,12 +21,8 @@ func FromWireAgentCatalogToolConfig(value *proto.AgentCatalogToolConfig) *AgentC
 		return nil
 	}
 	out := &AgentCatalogToolConfig{}
-	for _, item := range value.Refs {
-		out.Refs = append(out.Refs, FromWireAgentToolRef(item))
-	}
-	for _, item := range value.Tools {
-		out.Tools = append(out.Tools, FromWireListedAgentTool(item))
-	}
+	appendMessageSlice(&out.Refs, value.Refs, FromWireAgentToolRef)
+	appendMessageSlice(&out.Tools, value.Tools, FromWireListedAgentTool)
 	return out
 }
 
@@ -83,9 +75,7 @@ func ToWireAgentMessage(value *AgentMessage) *proto.AgentMessage {
 		Text:     value.Text,
 		Metadata: ToWireStruct(value.Metadata),
 	}
-	for _, item := range value.Parts {
-		out.Parts = append(out.Parts, ToWireAgentMessagePart(item))
-	}
+	appendMessageSlice(&out.Parts, value.Parts, ToWireAgentMessagePart)
 	return out
 }
 
@@ -98,9 +88,7 @@ func FromWireAgentMessage(value *proto.AgentMessage) *AgentMessage {
 		Text:     value.Text,
 		Metadata: FromWireStruct(value.Metadata),
 	}
-	for _, item := range value.Parts {
-		out.Parts = append(out.Parts, FromWireAgentMessagePart(item))
-	}
+	appendMessageSlice(&out.Parts, value.Parts, FromWireAgentMessagePart)
 	return out
 }
 
@@ -335,9 +323,7 @@ func ToWireAgentSessionStartConfig(value *AgentSessionStartConfig) *proto.AgentS
 		return nil
 	}
 	out := &proto.AgentSessionStartConfig{}
-	for _, item := range value.Hooks {
-		out.Hooks = append(out.Hooks, ToWireAgentSessionStartHook(item))
-	}
+	appendMessageSlice(&out.Hooks, value.Hooks, ToWireAgentSessionStartHook)
 	return out
 }
 
@@ -346,9 +332,7 @@ func FromWireAgentSessionStartConfig(value *proto.AgentSessionStartConfig) *Agen
 		return nil
 	}
 	out := &AgentSessionStartConfig{}
-	for _, item := range value.Hooks {
-		out.Hooks = append(out.Hooks, FromWireAgentSessionStartHook(item))
-	}
+	appendMessageSlice(&out.Hooks, value.Hooks, FromWireAgentSessionStartHook)
 	return out
 }
 
@@ -487,9 +471,7 @@ func ToWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
 		CompletedAt:        ToWireTimestamp(value.CompletedAt),
 		ExecutionRef:       value.ExecutionRef,
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, ToWireAgentMessage(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, ToWireAgentMessage)
 	switch variant := value.Output.(type) {
 	case *AgentTurnOutputText:
 		out.Output = &proto.AgentTurn_Text{Text: ToWireAgentTurnTextOutput(variant.Value)}
@@ -516,9 +498,7 @@ func FromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
 		CompletedAt:        FromWireTimestamp(value.CompletedAt),
 		ExecutionRef:       value.ExecutionRef,
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, FromWireAgentMessage(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, FromWireAgentMessage)
 	switch variant := value.Output.(type) {
 	case *proto.AgentTurn_Text:
 		out.Output = &AgentTurnOutputText{Value: FromWireAgentTurnTextOutput(variant.Text)}
@@ -655,9 +635,7 @@ func ToWireAgentWorkspace(value *AgentWorkspace) *proto.AgentWorkspace {
 	out := &proto.AgentWorkspace{
 		Cwd: value.Cwd,
 	}
-	for _, item := range value.Checkouts {
-		out.Checkouts = append(out.Checkouts, ToWireAgentWorkspaceGitCheckout(item))
-	}
+	appendMessageSlice(&out.Checkouts, value.Checkouts, ToWireAgentWorkspaceGitCheckout)
 	return out
 }
 
@@ -668,9 +646,7 @@ func FromWireAgentWorkspace(value *proto.AgentWorkspace) *AgentWorkspace {
 	out := &AgentWorkspace{
 		Cwd: value.Cwd,
 	}
-	for _, item := range value.Checkouts {
-		out.Checkouts = append(out.Checkouts, FromWireAgentWorkspaceGitCheckout(item))
-	}
+	appendMessageSlice(&out.Checkouts, value.Checkouts, FromWireAgentWorkspaceGitCheckout)
 	return out
 }
 
@@ -781,9 +757,7 @@ func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest)
 		Context:        ToWireRequestContext(value.Context),
 		ProviderName:   value.ProviderName,
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, ToWireAgentMessage(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, ToWireAgentMessage)
 	return out
 }
 
@@ -804,9 +778,7 @@ func FromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurn
 		Context:        FromWireRequestContext(value.Context),
 		ProviderName:   value.ProviderName,
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, FromWireAgentMessage(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, FromWireAgentMessage)
 	return out
 }
 
@@ -927,9 +899,7 @@ func ToWireListAgentProviderInteractionsResponse(value *ListAgentProviderInterac
 		return nil
 	}
 	out := &proto.ListAgentProviderInteractionsResponse{}
-	for _, item := range value.Interactions {
-		out.Interactions = append(out.Interactions, ToWireAgentInteraction(item))
-	}
+	appendMessageSlice(&out.Interactions, value.Interactions, ToWireAgentInteraction)
 	return out
 }
 
@@ -938,9 +908,7 @@ func FromWireListAgentProviderInteractionsResponse(value *proto.ListAgentProvide
 		return nil
 	}
 	out := &ListAgentProviderInteractionsResponse{}
-	for _, item := range value.Interactions {
-		out.Interactions = append(out.Interactions, FromWireAgentInteraction(item))
-	}
+	appendMessageSlice(&out.Interactions, value.Interactions, FromWireAgentInteraction)
 	return out
 }
 
@@ -979,9 +947,7 @@ func ToWireListAgentProviderSessionsResponse(value *ListAgentProviderSessionsRes
 		return nil
 	}
 	out := &proto.ListAgentProviderSessionsResponse{}
-	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, ToWireAgentSession(item))
-	}
+	appendMessageSlice(&out.Sessions, value.Sessions, ToWireAgentSession)
 	return out
 }
 
@@ -990,9 +956,7 @@ func FromWireListAgentProviderSessionsResponse(value *proto.ListAgentProviderSes
 		return nil
 	}
 	out := &ListAgentProviderSessionsResponse{}
-	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, FromWireAgentSession(item))
-	}
+	appendMessageSlice(&out.Sessions, value.Sessions, FromWireAgentSession)
 	return out
 }
 
@@ -1031,9 +995,7 @@ func ToWireListAgentProviderTurnEventsResponse(value *ListAgentProviderTurnEvent
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnEventsResponse{}
-	for _, item := range value.Events {
-		out.Events = append(out.Events, ToWireAgentTurnEvent(item))
-	}
+	appendMessageSlice(&out.Events, value.Events, ToWireAgentTurnEvent)
 	return out
 }
 
@@ -1042,9 +1004,7 @@ func FromWireListAgentProviderTurnEventsResponse(value *proto.ListAgentProviderT
 		return nil
 	}
 	out := &ListAgentProviderTurnEventsResponse{}
-	for _, item := range value.Events {
-		out.Events = append(out.Events, FromWireAgentTurnEvent(item))
-	}
+	appendMessageSlice(&out.Events, value.Events, FromWireAgentTurnEvent)
 	return out
 }
 
@@ -1085,9 +1045,7 @@ func ToWireListAgentProviderTurnsResponse(value *ListAgentProviderTurnsResponse)
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnsResponse{}
-	for _, item := range value.Turns {
-		out.Turns = append(out.Turns, ToWireAgentTurn(item))
-	}
+	appendMessageSlice(&out.Turns, value.Turns, ToWireAgentTurn)
 	return out
 }
 
@@ -1096,9 +1054,7 @@ func FromWireListAgentProviderTurnsResponse(value *proto.ListAgentProviderTurnsR
 		return nil
 	}
 	out := &ListAgentProviderTurnsResponse{}
-	for _, item := range value.Turns {
-		out.Turns = append(out.Turns, FromWireAgentTurn(item))
-	}
+	appendMessageSlice(&out.Turns, value.Turns, FromWireAgentTurn)
 	return out
 }
 

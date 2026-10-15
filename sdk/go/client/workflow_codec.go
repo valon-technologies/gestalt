@@ -38,9 +38,7 @@ func ToWireBoundWorkflowTarget(value *BoundWorkflowTarget) *proto.BoundWorkflowT
 		return nil
 	}
 	out := &proto.BoundWorkflowTarget{}
-	for _, item := range value.Steps {
-		out.Steps = append(out.Steps, ToWireWorkflowStep(item))
-	}
+	appendMessageSlice(&out.Steps, value.Steps, ToWireWorkflowStep)
 	return out
 }
 
@@ -49,9 +47,7 @@ func FromWireBoundWorkflowTarget(value *proto.BoundWorkflowTarget) *BoundWorkflo
 		return nil
 	}
 	out := &BoundWorkflowTarget{}
-	for _, item := range value.Steps {
-		out.Steps = append(out.Steps, FromWireWorkflowStep(item))
-	}
+	appendMessageSlice(&out.Steps, value.Steps, FromWireWorkflowStep)
 	return out
 }
 
@@ -182,9 +178,7 @@ func ToWireGetWorkflowProviderRunEventsResponse(value *GetWorkflowProviderRunEve
 		return nil
 	}
 	out := &proto.GetWorkflowProviderRunEventsResponse{}
-	for _, item := range value.Events {
-		out.Events = append(out.Events, ToWireWorkflowRunEvent(item))
-	}
+	appendMessageSlice(&out.Events, value.Events, ToWireWorkflowRunEvent)
 	return out
 }
 
@@ -193,9 +187,7 @@ func FromWireGetWorkflowProviderRunEventsResponse(value *proto.GetWorkflowProvid
 		return nil
 	}
 	out := &GetWorkflowProviderRunEventsResponse{}
-	for _, item := range value.Events {
-		out.Events = append(out.Events, FromWireWorkflowRunEvent(item))
-	}
+	appendMessageSlice(&out.Events, value.Events, FromWireWorkflowRunEvent)
 	return out
 }
 
@@ -294,9 +286,7 @@ func ToWireListWorkflowProviderDefinitionsResponse(value *ListWorkflowProviderDe
 		return nil
 	}
 	out := &proto.ListWorkflowProviderDefinitionsResponse{}
-	for _, item := range value.Definitions {
-		out.Definitions = append(out.Definitions, ToWireWorkflowDefinition(item))
-	}
+	appendMessageSlice(&out.Definitions, value.Definitions, ToWireWorkflowDefinition)
 	return out
 }
 
@@ -305,9 +295,7 @@ func FromWireListWorkflowProviderDefinitionsResponse(value *proto.ListWorkflowPr
 		return nil
 	}
 	out := &ListWorkflowProviderDefinitionsResponse{}
-	for _, item := range value.Definitions {
-		out.Definitions = append(out.Definitions, FromWireWorkflowDefinition(item))
-	}
+	appendMessageSlice(&out.Definitions, value.Definitions, FromWireWorkflowDefinition)
 	return out
 }
 
@@ -354,9 +342,7 @@ func ToWireListWorkflowProviderRunsResponse(value *ListWorkflowProviderRunsRespo
 		TotalCount:    value.TotalCount,
 		StatusCounts:  ToWireWorkflowRunStatusCounts(value.StatusCounts),
 	}
-	for _, item := range value.Runs {
-		out.Runs = append(out.Runs, ToWireWorkflowRun(item))
-	}
+	appendMessageSlice(&out.Runs, value.Runs, ToWireWorkflowRun)
 	return out
 }
 
@@ -369,9 +355,7 @@ func FromWireListWorkflowProviderRunsResponse(value *proto.ListWorkflowProviderR
 		TotalCount:    value.TotalCount,
 		StatusCounts:  FromWireWorkflowRunStatusCounts(value.StatusCounts),
 	}
-	for _, item := range value.Runs {
-		out.Runs = append(out.Runs, FromWireWorkflowRun(item))
-	}
+	appendMessageSlice(&out.Runs, value.Runs, FromWireWorkflowRun)
 	return out
 }
 
@@ -612,9 +596,7 @@ func ToWireWorkflowArray(value *WorkflowArray) *proto.WorkflowArray {
 		return nil
 	}
 	out := &proto.WorkflowArray{}
-	for _, item := range value.Values {
-		out.Values = append(out.Values, ToWireWorkflowValue(item))
-	}
+	appendMessageSlice(&out.Values, value.Values, ToWireWorkflowValue)
 	return out
 }
 
@@ -623,9 +605,7 @@ func FromWireWorkflowArray(value *proto.WorkflowArray) *WorkflowArray {
 		return nil
 	}
 	out := &WorkflowArray{}
-	for _, item := range value.Values {
-		out.Values = append(out.Values, FromWireWorkflowValue(item))
-	}
+	appendMessageSlice(&out.Values, value.Values, FromWireWorkflowValue)
 	return out
 }
 
@@ -643,9 +623,7 @@ func ToWireWorkflowDefinition(value *WorkflowDefinition) *proto.WorkflowDefiniti
 		Provider:   value.Provider,
 		RunAs:      value.RunAs,
 	}
-	for _, item := range value.Activations {
-		out.Activations = append(out.Activations, ToWireWorkflowActivation(item))
-	}
+	appendMessageSlice(&out.Activations, value.Activations, ToWireWorkflowActivation)
 	return out
 }
 
@@ -663,9 +641,7 @@ func FromWireWorkflowDefinition(value *proto.WorkflowDefinition) *WorkflowDefini
 		Provider:   value.Provider,
 		RunAs:      value.RunAs,
 	}
-	for _, item := range value.Activations {
-		out.Activations = append(out.Activations, FromWireWorkflowActivation(item))
-	}
+	appendMessageSlice(&out.Activations, value.Activations, FromWireWorkflowActivation)
 	return out
 }
 
@@ -679,9 +655,7 @@ func ToWireWorkflowDefinitionSpec(value *WorkflowDefinitionSpec) *proto.Workflow
 		Paused: value.Paused,
 		RunAs:  value.RunAs,
 	}
-	for _, item := range value.Activations {
-		out.Activations = append(out.Activations, ToWireWorkflowActivation(item))
-	}
+	appendMessageSlice(&out.Activations, value.Activations, ToWireWorkflowActivation)
 	return out
 }
 
@@ -695,9 +669,7 @@ func FromWireWorkflowDefinitionSpec(value *proto.WorkflowDefinitionSpec) *Workfl
 		Paused: value.Paused,
 		RunAs:  value.RunAs,
 	}
-	for _, item := range value.Activations {
-		out.Activations = append(out.Activations, FromWireWorkflowActivation(item))
-	}
+	appendMessageSlice(&out.Activations, value.Activations, FromWireWorkflowActivation)
 	return out
 }
 
@@ -899,9 +871,7 @@ func ToWireWorkflowRun(value *WorkflowRun) *proto.WorkflowRun {
 		DefinitionGeneration: value.DefinitionGeneration,
 		CurrentStepId:        value.CurrentStepId,
 	}
-	for _, item := range value.Steps {
-		out.Steps = append(out.Steps, ToWireWorkflowStepExecution(item))
-	}
+	appendMessageSlice(&out.Steps, value.Steps, ToWireWorkflowStepExecution)
 	return out
 }
 
@@ -927,9 +897,7 @@ func FromWireWorkflowRun(value *proto.WorkflowRun) *WorkflowRun {
 		DefinitionGeneration: value.DefinitionGeneration,
 		CurrentStepId:        value.CurrentStepId,
 	}
-	for _, item := range value.Steps {
-		out.Steps = append(out.Steps, FromWireWorkflowStepExecution(item))
-	}
+	appendMessageSlice(&out.Steps, value.Steps, FromWireWorkflowStepExecution)
 	return out
 }
 
@@ -1161,12 +1129,8 @@ func ToWireWorkflowStepAgentTurn(value *WorkflowStepAgentTurn) *proto.WorkflowSt
 		Output:       ToWireAgentOutput(value.Output),
 		ModelOptions: ToWireStruct(value.ModelOptions),
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, ToWireWorkflowAgentMessage(item))
-	}
-	for _, item := range value.Tools {
-		out.Tools = append(out.Tools, ToWireAgentToolRef(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, ToWireWorkflowAgentMessage)
+	appendMessageSlice(&out.Tools, value.Tools, ToWireAgentToolRef)
 	return out
 }
 
@@ -1182,12 +1146,8 @@ func FromWireWorkflowStepAgentTurn(value *proto.WorkflowStepAgentTurn) *Workflow
 		Output:       FromWireAgentOutput(value.Output),
 		ModelOptions: FromWireStruct(value.ModelOptions),
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, FromWireWorkflowAgentMessage(item))
-	}
-	for _, item := range value.Tools {
-		out.Tools = append(out.Tools, FromWireAgentToolRef(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, FromWireWorkflowAgentMessage)
+	appendMessageSlice(&out.Tools, value.Tools, FromWireAgentToolRef)
 	return out
 }
 
@@ -1269,9 +1229,7 @@ func ToWireWorkflowStepExecution(value *WorkflowStepExecution) *proto.WorkflowSt
 		StartedAt:     ToWireTimestamp(value.StartedAt),
 		CompletedAt:   ToWireTimestamp(value.CompletedAt),
 	}
-	for _, item := range value.Attempts {
-		out.Attempts = append(out.Attempts, ToWireWorkflowStepAttempt(item))
-	}
+	appendMessageSlice(&out.Attempts, value.Attempts, ToWireWorkflowStepAttempt)
 	return out
 }
 
@@ -1289,9 +1247,7 @@ func FromWireWorkflowStepExecution(value *proto.WorkflowStepExecution) *Workflow
 		StartedAt:     FromWireTimestamp(value.StartedAt),
 		CompletedAt:   FromWireTimestamp(value.CompletedAt),
 	}
-	for _, item := range value.Attempts {
-		out.Attempts = append(out.Attempts, FromWireWorkflowStepAttempt(item))
-	}
+	appendMessageSlice(&out.Attempts, value.Attempts, FromWireWorkflowStepAttempt)
 	return out
 }
 

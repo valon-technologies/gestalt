@@ -345,9 +345,7 @@ func ToWireIndexQueryRequest(value *IndexQueryRequest) *proto.IndexQueryRequest 
 		Query: ToWireIndexedDBQuery(value.Query),
 		Count: value.Count,
 	}
-	for _, item := range value.Queries {
-		out.Queries = append(out.Queries, ToWireIndexedDBQuery(item))
-	}
+	appendMessageSlice(&out.Queries, value.Queries, ToWireIndexedDBQuery)
 	return out
 }
 
@@ -361,9 +359,7 @@ func FromWireIndexQueryRequest(value *proto.IndexQueryRequest) *IndexQueryReques
 		Query: FromWireIndexedDBQuery(value.Query),
 		Count: value.Count,
 	}
-	for _, item := range value.Queries {
-		out.Queries = append(out.Queries, FromWireIndexedDBQuery(item))
-	}
+	appendMessageSlice(&out.Queries, value.Queries, FromWireIndexedDBQuery)
 	return out
 }
 
@@ -498,9 +494,7 @@ func ToWireKeyValueArray(value *KeyValueArray) *proto.KeyValueArray {
 		return nil
 	}
 	out := &proto.KeyValueArray{}
-	for _, item := range value.Elements {
-		out.Elements = append(out.Elements, ToWireKeyValue(item))
-	}
+	appendMessageSlice(&out.Elements, value.Elements, ToWireKeyValue)
 	return out
 }
 
@@ -509,9 +503,7 @@ func FromWireKeyValueArray(value *proto.KeyValueArray) *KeyValueArray {
 		return nil
 	}
 	out := &KeyValueArray{}
-	for _, item := range value.Elements {
-		out.Elements = append(out.Elements, FromWireKeyValue(item))
-	}
+	appendMessageSlice(&out.Elements, value.Elements, FromWireKeyValue)
 	return out
 }
 
@@ -606,12 +598,8 @@ func ToWireObjectStoreSchema(value *ObjectStoreSchema) *proto.ObjectStoreSchema 
 		return nil
 	}
 	out := &proto.ObjectStoreSchema{}
-	for _, item := range value.Indexes {
-		out.Indexes = append(out.Indexes, ToWireIndexSchema(item))
-	}
-	for _, item := range value.Columns {
-		out.Columns = append(out.Columns, ToWireColumnDef(item))
-	}
+	appendMessageSlice(&out.Indexes, value.Indexes, ToWireIndexSchema)
+	appendMessageSlice(&out.Columns, value.Columns, ToWireColumnDef)
 	return out
 }
 
@@ -620,12 +608,8 @@ func FromWireObjectStoreSchema(value *proto.ObjectStoreSchema) *ObjectStoreSchem
 		return nil
 	}
 	out := &ObjectStoreSchema{}
-	for _, item := range value.Indexes {
-		out.Indexes = append(out.Indexes, FromWireIndexSchema(item))
-	}
-	for _, item := range value.Columns {
-		out.Columns = append(out.Columns, FromWireColumnDef(item))
-	}
+	appendMessageSlice(&out.Indexes, value.Indexes, FromWireIndexSchema)
+	appendMessageSlice(&out.Columns, value.Columns, FromWireColumnDef)
 	return out
 }
 
@@ -732,9 +716,7 @@ func ToWireRecordsResponse(value *RecordsResponse) *proto.RecordsResponse {
 		return nil
 	}
 	out := &proto.RecordsResponse{}
-	for _, item := range value.Records {
-		out.Records = append(out.Records, ToWireRecord(item))
-	}
+	appendMessageSlice(&out.Records, value.Records, ToWireRecord)
 	return out
 }
 
@@ -743,9 +725,7 @@ func FromWireRecordsResponse(value *proto.RecordsResponse) *RecordsResponse {
 		return nil
 	}
 	out := &RecordsResponse{}
-	for _, item := range value.Records {
-		out.Records = append(out.Records, FromWireRecord(item))
-	}
+	appendMessageSlice(&out.Records, value.Records, FromWireRecord)
 	return out
 }
 
