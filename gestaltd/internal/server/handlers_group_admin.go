@@ -217,29 +217,14 @@ func (s *Server) groupAdminAuthorizationMiddleware(next http.Handler) http.Handl
 }
 
 func (s *Server) groupAdminListAuthorizationMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.authorization == nil {
-			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
-			return
-		}
-		subjectID, ok := s.resolveGroupAdminSubjectID(w, r)
-		if !ok {
-			return
-		}
-		allowed, err := s.canListGroupAdminGroups(r.Context(), subjectID)
-		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
-			return
-		}
-		if !allowed {
-			writeError(w, http.StatusForbidden, "group access denied")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return s.groupAdminCollectionAuthorizationMiddleware(next, s.canListGroupAdminGroups)
 }
 
 func (s *Server) groupAdminCreateAuthorizationMiddleware(next http.Handler) http.Handler {
+	return s.groupAdminCollectionAuthorizationMiddleware(next, s.canCreateGroupAdminGroup)
+}
+
+func (s *Server) groupAdminCollectionAuthorizationMiddleware(next http.Handler, authorize func(context.Context, string) (bool, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.authorization == nil {
 			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
@@ -249,7 +234,7 @@ func (s *Server) groupAdminCreateAuthorizationMiddleware(next http.Handler) http
 		if !ok {
 			return
 		}
-		allowed, err := s.canCreateGroupAdminGroup(r.Context(), subjectID)
+		allowed, err := authorize(r.Context(), subjectID)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "authorization is unavailable")
 			return
