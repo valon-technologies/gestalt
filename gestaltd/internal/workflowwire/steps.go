@@ -113,21 +113,20 @@ func workflowStepFromProto(step *proto.WorkflowStep) coreworkflow.Step {
 }
 
 func workflowStepAppCallToProto(target *coreworkflow.AppCall) (*proto.WorkflowStepAppCall, error) {
-	if target == nil {
-		return nil, nil
-	}
-	input, err := workflowValueToProto(target.Input)
-	if err != nil {
-		return nil, fmt.Errorf("input: %w", err)
-	}
-	return &proto.WorkflowStepAppCall{
-		Name:           target.Name,
-		Operation:      target.Operation,
-		Input:          input,
-		Connection:     target.Connection,
-		Instance:       target.Instance,
-		CredentialMode: string(target.CredentialMode),
-	}, nil
+	return protoutil.ConvertMessageErr(target, func(target *coreworkflow.AppCall) (*proto.WorkflowStepAppCall, error) {
+		input, err := workflowValueToProto(target.Input)
+		if err != nil {
+			return nil, fmt.Errorf("input: %w", err)
+		}
+		return &proto.WorkflowStepAppCall{
+			Name:           target.Name,
+			Operation:      target.Operation,
+			Input:          input,
+			Connection:     target.Connection,
+			Instance:       target.Instance,
+			CredentialMode: string(target.CredentialMode),
+		}, nil
+	})
 }
 
 func workflowStepAppCallFromProto(target *proto.WorkflowStepAppCall) *coreworkflow.AppCall {
@@ -144,31 +143,30 @@ func workflowStepAppCallFromProto(target *proto.WorkflowStepAppCall) *coreworkfl
 }
 
 func workflowStepAgentTurnToProto(target *coreworkflow.AgentTurn) (*proto.WorkflowStepAgentTurn, error) {
-	if target == nil {
-		return nil, nil
-	}
-	messages, err := workflowAgentMessagesToProto(target.Messages)
-	if err != nil {
-		return nil, err
-	}
-	output, err := workflowAgentOutputToProto(target.Output)
-	if err != nil {
-		return nil, fmt.Errorf("output: %w", err)
-	}
-	modelOptions, err := protoutil.StructFromMap(target.ModelOptions)
-	if err != nil {
-		return nil, fmt.Errorf("model_options: %w", err)
-	}
-	return &proto.WorkflowStepAgentTurn{
-		Provider:     target.ProviderName,
-		Model:        target.Model,
-		SessionKey:   target.SessionKey,
-		Prompt:       workflowTextToProto(target.Prompt),
-		Messages:     messages,
-		Tools:        agentwire.ToolRefsToProto(target.ToolRefs),
-		Output:       output,
-		ModelOptions: modelOptions,
-	}, nil
+	return protoutil.ConvertMessageErr(target, func(target *coreworkflow.AgentTurn) (*proto.WorkflowStepAgentTurn, error) {
+		messages, err := workflowAgentMessagesToProto(target.Messages)
+		if err != nil {
+			return nil, err
+		}
+		output, err := workflowAgentOutputToProto(target.Output)
+		if err != nil {
+			return nil, fmt.Errorf("output: %w", err)
+		}
+		modelOptions, err := protoutil.StructFromMap(target.ModelOptions)
+		if err != nil {
+			return nil, fmt.Errorf("model_options: %w", err)
+		}
+		return &proto.WorkflowStepAgentTurn{
+			Provider:     target.ProviderName,
+			Model:        target.Model,
+			SessionKey:   target.SessionKey,
+			Prompt:       workflowTextToProto(target.Prompt),
+			Messages:     messages,
+			Tools:        agentwire.ToolRefsToProto(target.ToolRefs),
+			Output:       output,
+			ModelOptions: modelOptions,
+		}, nil
+	})
 }
 
 func workflowStepAgentTurnFromProto(target *proto.WorkflowStepAgentTurn) *coreworkflow.AgentTurn {
@@ -277,21 +275,20 @@ func workflowTextFromProto(text *proto.WorkflowText) coreworkflow.Text {
 }
 
 func workflowStepWhenToProto(when *coreworkflow.StepWhen) (*proto.WorkflowStepWhen, error) {
-	if when == nil {
-		return nil, nil
-	}
-	if !when.EqualsSet {
-		return nil, fmt.Errorf("equals is required")
-	}
-	value, err := workflowValueToProto(when.Value)
-	if err != nil {
-		return nil, fmt.Errorf("value: %w", err)
-	}
-	equals, err := protoutil.ValueFromAny(when.Equals)
-	if err != nil {
-		return nil, fmt.Errorf("equals: %w", err)
-	}
-	return &proto.WorkflowStepWhen{Value: value, Equals: equals}, nil
+	return protoutil.ConvertMessageErr(when, func(when *coreworkflow.StepWhen) (*proto.WorkflowStepWhen, error) {
+		if !when.EqualsSet {
+			return nil, fmt.Errorf("equals is required")
+		}
+		value, err := workflowValueToProto(when.Value)
+		if err != nil {
+			return nil, fmt.Errorf("value: %w", err)
+		}
+		equals, err := protoutil.ValueFromAny(when.Equals)
+		if err != nil {
+			return nil, fmt.Errorf("equals: %w", err)
+		}
+		return &proto.WorkflowStepWhen{Value: value, Equals: equals}, nil
+	})
 }
 
 func workflowStepWhenFromProto(when *proto.WorkflowStepWhen) *coreworkflow.StepWhen {

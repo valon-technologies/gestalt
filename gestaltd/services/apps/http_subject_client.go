@@ -61,28 +61,27 @@ func (p *remoteProviderBase) ResolveHTTPSubject(ctx context.Context, req *core.H
 }
 
 func httpSubjectRequestProto(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSubjectRequest, error) {
-	if req == nil {
-		return nil, nil
-	}
+	return protoutil.ConvertMessageErr(req, func(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSubjectRequest, error) {
 
-	params, err := protoutil.StructFromMap(req.Params)
-	if err != nil {
-		return nil, err
-	}
+		params, err := protoutil.StructFromMap(req.Params)
+		if err != nil {
+			return nil, err
+		}
 
-	return &proto.HTTPSubjectRequest{
-		Binding:         req.Binding,
-		Method:          req.Method,
-		Path:            req.Path,
-		ContentType:     req.ContentType,
-		Headers:         protoutil.StringSlicesToProto(req.Headers),
-		Query:           protoutil.StringSlicesToProto(req.Query),
-		Params:          params,
-		RawBody:         append([]byte(nil), req.RawBody...),
-		SecurityScheme:  req.SecurityScheme,
-		VerifiedSubject: req.VerifiedSubject,
-		VerifiedClaims:  cloneStringMap(req.VerifiedClaims),
-	}, nil
+		return &proto.HTTPSubjectRequest{
+			Binding:         req.Binding,
+			Method:          req.Method,
+			Path:            req.Path,
+			ContentType:     req.ContentType,
+			Headers:         protoutil.StringSlicesToProto(req.Headers),
+			Query:           protoutil.StringSlicesToProto(req.Query),
+			Params:          params,
+			RawBody:         append([]byte(nil), req.RawBody...),
+			SecurityScheme:  req.SecurityScheme,
+			VerifiedSubject: req.VerifiedSubject,
+			VerifiedClaims:  cloneStringMap(req.VerifiedClaims),
+		}, nil
+	})
 }
 
 func cloneStringMap(values map[string]string) map[string]string {

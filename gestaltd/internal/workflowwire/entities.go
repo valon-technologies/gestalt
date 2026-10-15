@@ -158,83 +158,81 @@ func StepStatusFromProto(status proto.WorkflowStepStatus) (coreworkflow.StepStat
 }
 
 func RunFromProto(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
-	if run == nil {
-		return nil, nil
-	}
-	status, err := RunStatusFromProto(run.GetStatus())
-	if err != nil {
-		return nil, err
-	}
-	trigger, err := RunTriggerFromProto(run.GetTrigger())
-	if err != nil {
-		return nil, err
-	}
-	steps, err := StepExecutionsFromProto(run.GetSteps())
-	if err != nil {
-		return nil, err
-	}
-	return &coreworkflow.Run{
-		ID:                   run.GetId(),
-		Status:               status,
-		WorkflowKey:          run.GetWorkflowKey(),
-		Target:               TargetFromProto(run.GetTarget()),
-		DefinitionID:         run.GetDefinitionId(),
-		DefinitionGeneration: run.GetDefinitionGeneration(),
-		Input:                protoutil.MapFromStruct(run.GetInput()),
-		CurrentStepID:        run.GetCurrentStepId(),
-		Steps:                steps,
-		Trigger:              trigger,
-		RunAs:                strings.TrimSpace(run.GetRunAs()),
-		CreatedAt:            TimeFromProto(run.GetCreatedAt()),
-		StartedAt:            TimeFromProto(run.GetStartedAt()),
-		CompletedAt:          TimeFromProto(run.GetCompletedAt()),
-		StatusMessage:        run.GetStatusMessage(),
-		Output:               protoutil.ValueToAny(run.GetOutput()),
-	}, nil
+	return protoutil.ConvertMessageErr(run, func(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
+		status, err := RunStatusFromProto(run.GetStatus())
+		if err != nil {
+			return nil, err
+		}
+		trigger, err := RunTriggerFromProto(run.GetTrigger())
+		if err != nil {
+			return nil, err
+		}
+		steps, err := StepExecutionsFromProto(run.GetSteps())
+		if err != nil {
+			return nil, err
+		}
+		return &coreworkflow.Run{
+			ID:                   run.GetId(),
+			Status:               status,
+			WorkflowKey:          run.GetWorkflowKey(),
+			Target:               TargetFromProto(run.GetTarget()),
+			DefinitionID:         run.GetDefinitionId(),
+			DefinitionGeneration: run.GetDefinitionGeneration(),
+			Input:                protoutil.MapFromStruct(run.GetInput()),
+			CurrentStepID:        run.GetCurrentStepId(),
+			Steps:                steps,
+			Trigger:              trigger,
+			RunAs:                strings.TrimSpace(run.GetRunAs()),
+			CreatedAt:            TimeFromProto(run.GetCreatedAt()),
+			StartedAt:            TimeFromProto(run.GetStartedAt()),
+			CompletedAt:          TimeFromProto(run.GetCompletedAt()),
+			StatusMessage:        run.GetStatusMessage(),
+			Output:               protoutil.ValueToAny(run.GetOutput()),
+		}, nil
+	})
 }
 
 func RunToProto(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
-	if run == nil {
-		return nil, nil
-	}
-	target, err := TargetToProto(run.Target)
-	if err != nil {
-		return nil, err
-	}
-	trigger, err := RunTriggerToProto(run.Trigger)
-	if err != nil {
-		return nil, err
-	}
-	output, err := protoutil.ValueFromAny(run.Output)
-	if err != nil {
-		return nil, fmt.Errorf("workflow run output: %w", err)
-	}
-	inputStruct, err := protoutil.StructFromMap(run.Input)
-	if err != nil {
-		return nil, fmt.Errorf("workflow run input: %w", err)
-	}
-	steps, err := StepExecutionsToProto(run.Steps)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowRun{
-		Id:                   run.ID,
-		Status:               RunStatusToProto(run.Status),
-		Target:               target,
-		Trigger:              trigger,
-		CreatedAt:            TimeToProto(run.CreatedAt),
-		StartedAt:            TimeToProto(run.StartedAt),
-		CompletedAt:          TimeToProto(run.CompletedAt),
-		StatusMessage:        run.StatusMessage,
-		Output:               output,
-		WorkflowKey:          run.WorkflowKey,
-		DefinitionId:         run.DefinitionID,
-		DefinitionGeneration: run.DefinitionGeneration,
-		Input:                inputStruct,
-		CurrentStepId:        run.CurrentStepID,
-		Steps:                steps,
-		RunAs:                strings.TrimSpace(run.RunAs),
-	}, nil
+	return protoutil.ConvertMessageErr(run, func(run *coreworkflow.Run) (*proto.WorkflowRun, error) {
+		target, err := TargetToProto(run.Target)
+		if err != nil {
+			return nil, err
+		}
+		trigger, err := RunTriggerToProto(run.Trigger)
+		if err != nil {
+			return nil, err
+		}
+		output, err := protoutil.ValueFromAny(run.Output)
+		if err != nil {
+			return nil, fmt.Errorf("workflow run output: %w", err)
+		}
+		inputStruct, err := protoutil.StructFromMap(run.Input)
+		if err != nil {
+			return nil, fmt.Errorf("workflow run input: %w", err)
+		}
+		steps, err := StepExecutionsToProto(run.Steps)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowRun{
+			Id:                   run.ID,
+			Status:               RunStatusToProto(run.Status),
+			Target:               target,
+			Trigger:              trigger,
+			CreatedAt:            TimeToProto(run.CreatedAt),
+			StartedAt:            TimeToProto(run.StartedAt),
+			CompletedAt:          TimeToProto(run.CompletedAt),
+			StatusMessage:        run.StatusMessage,
+			Output:               output,
+			WorkflowKey:          run.WorkflowKey,
+			DefinitionId:         run.DefinitionID,
+			DefinitionGeneration: run.DefinitionGeneration,
+			Input:                inputStruct,
+			CurrentStepId:        run.CurrentStepID,
+			Steps:                steps,
+			RunAs:                strings.TrimSpace(run.RunAs),
+		}, nil
+	})
 }
 
 func DefinitionSpecFromProto(definition *proto.WorkflowDefinitionSpec) (*coreworkflow.DefinitionSpec, error) {
@@ -255,24 +253,23 @@ func DefinitionSpecFromProto(definition *proto.WorkflowDefinitionSpec) (*corewor
 }
 
 func DefinitionSpecToProto(definition *coreworkflow.DefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
-	if definition == nil {
-		return nil, nil
-	}
-	target, err := TargetToProto(definition.Target)
-	if err != nil {
-		return nil, err
-	}
-	activations, err := ActivationsToProto(definition.Activations)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowDefinitionSpec{
-		Id:          definition.ID,
-		Target:      target,
-		Activations: activations,
-		Paused:      definition.Paused,
-		RunAs:       strings.TrimSpace(definition.RunAs),
-	}, nil
+	return protoutil.ConvertMessageErr(definition, func(definition *coreworkflow.DefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
+		target, err := TargetToProto(definition.Target)
+		if err != nil {
+			return nil, err
+		}
+		activations, err := ActivationsToProto(definition.Activations)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowDefinitionSpec{
+			Id:          definition.ID,
+			Target:      target,
+			Activations: activations,
+			Paused:      definition.Paused,
+			RunAs:       strings.TrimSpace(definition.RunAs),
+		}, nil
+	})
 }
 
 func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.Definition, error) {
@@ -297,28 +294,27 @@ func DefinitionFromProto(definition *proto.WorkflowDefinition) (*coreworkflow.De
 }
 
 func DefinitionToProto(definition *coreworkflow.Definition) (*proto.WorkflowDefinition, error) {
-	if definition == nil {
-		return nil, nil
-	}
-	target, err := TargetToProto(definition.Target)
-	if err != nil {
-		return nil, err
-	}
-	activations, err := ActivationsToProto(definition.Activations)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowDefinition{
-		Id:          definition.ID,
-		Generation:  definition.Generation,
-		Target:      target,
-		Activations: activations,
-		Paused:      definition.Paused,
-		CreatedAt:   TimeToProto(definition.CreatedAt),
-		UpdatedAt:   TimeToProto(definition.UpdatedAt),
-		Provider:    definition.ProviderName,
-		RunAs:       strings.TrimSpace(definition.RunAs),
-	}, nil
+	return protoutil.ConvertMessageErr(definition, func(definition *coreworkflow.Definition) (*proto.WorkflowDefinition, error) {
+		target, err := TargetToProto(definition.Target)
+		if err != nil {
+			return nil, err
+		}
+		activations, err := ActivationsToProto(definition.Activations)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.WorkflowDefinition{
+			Id:          definition.ID,
+			Generation:  definition.Generation,
+			Target:      target,
+			Activations: activations,
+			Paused:      definition.Paused,
+			CreatedAt:   TimeToProto(definition.CreatedAt),
+			UpdatedAt:   TimeToProto(definition.UpdatedAt),
+			Provider:    definition.ProviderName,
+			RunAs:       strings.TrimSpace(definition.RunAs),
+		}, nil
+	})
 }
 
 func ActivationsToProto(values []coreworkflow.Activation) ([]*proto.WorkflowActivation, error) {
@@ -584,19 +580,18 @@ func SignalFromProto(signal *proto.WorkflowSignal) coreworkflow.Signal {
 }
 
 func SignalRunResponseFromProto(resp *proto.SignalWorkflowRunResponse) (*coreworkflow.SignalRunResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	run, err := RunFromProto(resp.GetRun())
-	if err != nil {
-		return nil, err
-	}
-	return &coreworkflow.SignalRunResponse{
-		Run:         run,
-		Signal:      SignalFromProto(resp.GetSignal()),
-		StartedRun:  resp.GetStartedRun(),
-		WorkflowKey: resp.GetWorkflowKey(),
-	}, nil
+	return protoutil.ConvertMessageErr(resp, func(resp *proto.SignalWorkflowRunResponse) (*coreworkflow.SignalRunResponse, error) {
+		run, err := RunFromProto(resp.GetRun())
+		if err != nil {
+			return nil, err
+		}
+		return &coreworkflow.SignalRunResponse{
+			Run:         run,
+			Signal:      SignalFromProto(resp.GetSignal()),
+			StartedRun:  resp.GetStartedRun(),
+			WorkflowKey: resp.GetWorkflowKey(),
+		}, nil
+	})
 }
 
 func RunTriggerFromProto(trigger *proto.WorkflowRunTrigger) (coreworkflow.RunTrigger, error) {
@@ -671,23 +666,22 @@ func RunTriggerToProto(trigger coreworkflow.RunTrigger) (*proto.WorkflowRunTrigg
 }
 
 func SignalRunResponseToProto(resp *coreworkflow.SignalRunResponse) (*proto.SignalWorkflowRunResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	run, err := RunToProto(resp.Run)
-	if err != nil {
-		return nil, err
-	}
-	signal, err := SignalToProto(resp.Signal)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.SignalWorkflowRunResponse{
-		Run:         run,
-		Signal:      signal,
-		StartedRun:  resp.StartedRun,
-		WorkflowKey: resp.WorkflowKey,
-	}, nil
+	return protoutil.ConvertMessageErr(resp, func(resp *coreworkflow.SignalRunResponse) (*proto.SignalWorkflowRunResponse, error) {
+		run, err := RunToProto(resp.Run)
+		if err != nil {
+			return nil, err
+		}
+		signal, err := SignalToProto(resp.Signal)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.SignalWorkflowRunResponse{
+			Run:         run,
+			Signal:      signal,
+			StartedRun:  resp.StartedRun,
+			WorkflowKey: resp.WorkflowKey,
+		}, nil
+	})
 }
 
 func workflowExtensionsFromProto(values map[string]*structpb.Value) map[string]any {
