@@ -70,44 +70,12 @@ func valueFromAny(value any) (*structpb.Value, error) {
 	return structpb.NewValue(normalized)
 }
 
-// anyFromValue converts a protobuf Value into its Go representation.
-func anyFromValue(value *structpb.Value) any {
-	if value == nil {
-		return nil
-	}
-	return value.AsInterface()
-}
-
-// valuesFromMap converts a JSON-compatible map into protobuf Value entries.
-func valuesFromMap(values map[string]any) (map[string]*structpb.Value, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make(map[string]*structpb.Value, len(values))
-	for key, value := range values {
-		pbValue, err := valueFromAny(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
-		}
-		out[key] = pbValue
-	}
-	return out, nil
-}
-
 // mapFromValues converts protobuf Value entries into their Go representation.
 func mapFromValues(values map[string]*structpb.Value) map[string]any {
 	if len(values) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(values))
-	for key, value := range values {
-		if value == nil {
-			out[key] = nil
-			continue
-		}
-		out[key] = value.AsInterface()
-	}
-	return out
+	return (&structpb.Struct{Fields: values}).AsMap()
 }
 
 // timeFromTimestamp converts a protobuf Timestamp into a Go time.
@@ -343,4 +311,20 @@ func convertProtoNonNilSlice[Input, Output any](values []*Input, convert func(*I
 		out = append(out, convert(value))
 	}
 	return out
+}
+
+// convertProtoMap preserves empty-map normalization and key-qualified conversion errors.
+func convertProtoMap[Input, Output any](values map[string]Input, convert func(Input) (Output, error)) (map[string]Output, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]Output, len(values))
+	for key, value := range values {
+		converted, err := convert(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", key, err)
+		}
+		out[key] = converted
+	}
+	return out, nil
 }
