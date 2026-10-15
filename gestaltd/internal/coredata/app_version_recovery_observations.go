@@ -40,22 +40,7 @@ func (s *AppVersionRecoveryObservationService) GetMany(ctx context.Context, chan
 	if s == nil {
 		return nil, fmt.Errorf("get app version recovery observations: service is not configured")
 	}
-	out := make(map[string]*core.AppVersionRecoveryObservation, len(changeRequestIDs))
-	for _, id := range changeRequestIDs {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		observation, err := s.Get(ctx, id)
-		if errors.Is(err, core.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		out[id] = observation
-	}
-	return out, nil
+	return getStoredValues(ctx, changeRequestIDs, s.Get)
 }
 
 // Record persists the first recovery observation for a change request. Later

@@ -43,14 +43,7 @@ func (s *ConnectionInstancePreferenceService) Get(ctx context.Context, subjectID
 	if subjectID == "" || connectionID == "" {
 		return nil, fmt.Errorf("get connection instance preference: subject_id and connection_id are required")
 	}
-	rec, err := s.store.Get(ctx, connectionInstancePreferenceKey(subjectID, connectionID))
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get connection instance preference: %w", err)
-	}
-	return recordToConnectionInstancePreference(rec), nil
+	return getStoredValue(ctx, s.store, connectionInstancePreferenceKey(subjectID, connectionID), "get connection instance preference", recordToConnectionInstancePreference)
 }
 
 func (s *ConnectionInstancePreferenceService) ListForSubject(ctx context.Context, subjectID string) (map[string]string, error) {
