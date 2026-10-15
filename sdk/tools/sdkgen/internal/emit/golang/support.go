@@ -25,6 +25,20 @@ func appendMessageSlice[Input, Output any](out *[]*Output, values []*Input, conv
 }
 `
 
+// messageMapSupportFile preserves map presence while converting message values.
+const messageMapSupportFile = `
+func convertMessageMap[Key comparable, Input, Output any](values map[Key]*Input, convert func(*Input) *Output) map[Key]*Output {
+	if values == nil {
+		return nil
+	}
+	out := make(map[Key]*Output, len(values))
+	for key, item := range values {
+		out[key] = convert(item)
+	}
+	return out
+}
+`
+
 const publicRPCSupportFile = `package generated
 
 import gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"

@@ -806,12 +806,7 @@ func ToWireWorkflowObject(value *WorkflowObject) *proto.WorkflowObject {
 		return nil
 	}
 	out := &proto.WorkflowObject{}
-	if value.Fields != nil {
-		out.Fields = make(map[string]*proto.WorkflowValue, len(value.Fields))
-		for key, item := range value.Fields {
-			out.Fields[key] = ToWireWorkflowValue(item)
-		}
-	}
+	out.Fields = convertMessageMap(value.Fields, ToWireWorkflowValue)
 	return out
 }
 
@@ -820,12 +815,7 @@ func FromWireWorkflowObject(value *proto.WorkflowObject) *WorkflowObject {
 		return nil
 	}
 	out := &WorkflowObject{}
-	if value.Fields != nil {
-		out.Fields = make(map[string]*WorkflowValue, len(value.Fields))
-		for key, item := range value.Fields {
-			out.Fields[key] = FromWireWorkflowValue(item)
-		}
-	}
+	out.Fields = convertMessageMap(value.Fields, FromWireWorkflowValue)
 	return out
 }
 
@@ -1077,12 +1067,7 @@ func ToWireWorkflowStep(value *WorkflowStep) *proto.WorkflowStep {
 		TimeoutSeconds: value.TimeoutSeconds,
 		Metadata:       ToWireStruct(value.Metadata),
 	}
-	if value.Inputs != nil {
-		out.Inputs = make(map[string]*proto.WorkflowValue, len(value.Inputs))
-		for key, item := range value.Inputs {
-			out.Inputs[key] = ToWireWorkflowValue(item)
-		}
-	}
+	out.Inputs = convertMessageMap(value.Inputs, ToWireWorkflowValue)
 	switch variant := value.Action.(type) {
 	case *WorkflowStepActionApp:
 		out.Action = &proto.WorkflowStep_App{App: ToWireWorkflowStepAppCall(variant.Value)}
@@ -1102,12 +1087,7 @@ func FromWireWorkflowStep(value *proto.WorkflowStep) *WorkflowStep {
 		TimeoutSeconds: value.TimeoutSeconds,
 		Metadata:       FromWireStruct(value.Metadata),
 	}
-	if value.Inputs != nil {
-		out.Inputs = make(map[string]*WorkflowValue, len(value.Inputs))
-		for key, item := range value.Inputs {
-			out.Inputs[key] = FromWireWorkflowValue(item)
-		}
-	}
+	out.Inputs = convertMessageMap(value.Inputs, FromWireWorkflowValue)
 	switch variant := value.Action.(type) {
 	case *proto.WorkflowStep_App:
 		out.Action = &WorkflowStepActionApp{Value: FromWireWorkflowStepAppCall(variant.App)}
