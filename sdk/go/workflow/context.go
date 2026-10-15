@@ -294,15 +294,11 @@ func WorkflowSignalsContext(signals []gestalt.WorkflowSignal) []map[string]any {
 		if name := strings.TrimSpace(signal.Name); name != "" {
 			value["name"] = name
 		}
-		if signal.Payload != nil {
-			if payload := compactWorkflowSignalPayload(workflowMapValue(signal.Payload)); len(payload) > 0 {
-				value["payload"] = payload
-			}
+		if payload := compactWorkflowSignalPayload(workflowMapValue(signal.Payload)); len(payload) > 0 {
+			value["payload"] = payload
 		}
-		if signal.Metadata != nil {
-			if metadata, ok := compactWorkflowJSONValue(signal.Metadata, workflowSignalContextMaxDepth).(map[string]any); ok && len(metadata) > 0 {
-				value["metadata"] = metadata
-			}
+		if metadata, _ := compactWorkflowJSONValue(signal.Metadata, workflowSignalContextMaxDepth).(map[string]any); len(metadata) > 0 {
+			value["metadata"] = metadata
 		}
 		if createdBySubjectID := strings.TrimSpace(signal.CreatedBy); createdBySubjectID != "" {
 			value["createdBy"] = createdBySubjectID
