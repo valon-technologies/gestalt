@@ -1661,9 +1661,6 @@ func (e *ProviderEntry) SourceTreeURL() string {
 		return ""
 	}
 	git := e.Source.GitSource()
-	if git == nil {
-		return ""
-	}
 	return git.TreeURL()
 }
 

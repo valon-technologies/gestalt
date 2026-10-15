@@ -816,7 +816,7 @@ func providerEntryMatchesTarget(entry *config.ProviderEntry, targetManifestPath 
 		}
 		return canonicalSource == targetCanonical
 	}
-	if entry.HasGitSource() && entry.Source.Git != nil {
+	if entry.HasGitSource() {
 		_, _, gitManifestPath := entry.Source.Git.NormalizedLocationParts()
 		return manifestPathSuffixMatch(gitManifestPath, targetCanonical)
 	}
