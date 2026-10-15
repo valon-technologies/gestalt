@@ -344,46 +344,39 @@ func convertProtoSlice[Input, Output any](values []Input, convert func(Input) Ou
 
 // convertProtoSliceErr stops at the first conversion error and discards partial results.
 func convertProtoSliceErr[Input, Output any](values []Input, convert func(Input) (Output, error)) ([]Output, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]Output, 0, len(values))
-	for _, value := range values {
-		converted, err := convert(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, converted)
-	}
-	return out, nil
+	return collectProtoSlice(len(values), func(index int) (Output, error) {
+		return convert(values[index])
+	})
 }
 
 // convertProtoSlicePointers converts the original elements without copying them.
 func convertProtoSlicePointers[Input, Output any](values []Input, convert func(*Input) (Output, error)) ([]Output, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]Output, 0, len(values))
-	for index := range values {
-		converted, err := convert(&values[index])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, converted)
-	}
-	return out, nil
+	return collectProtoSlice(len(values), func(index int) (Output, error) {
+		return convert(&values[index])
+	})
 }
 
 // convertProtoSliceIndexed keeps the failing element's path in conversion errors.
 func convertProtoSliceIndexed[Input, Output any](values []Input, path string, convert func(Input) (Output, error)) ([]Output, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]Output, 0, len(values))
-	for index := range values {
+	return collectProtoSlice(len(values), func(index int) (Output, error) {
 		converted, err := convert(values[index])
 		if err != nil {
-			return nil, fmt.Errorf("%s[%d]: %w", path, index, err)
+			return converted, fmt.Errorf("%s[%d]: %w", path, index, err)
+		}
+		return converted, nil
+	})
+}
+
+// collectProtoSlice keeps ordered conversion, empty results, and early errors consistent.
+func collectProtoSlice[Output any](size int, convert func(int) (Output, error)) ([]Output, error) {
+	if size == 0 {
+		return nil, nil
+	}
+	out := make([]Output, 0, size)
+	for index := range size {
+		converted, err := convert(index)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, converted)
 	}
