@@ -21,44 +21,32 @@ func NewProviderServer(provider core.IdentityProvider) proto.IdentityServer {
 }
 
 func (s *providerServer) Authorize(ctx context.Context, req *proto.AuthorizeRequest) (*proto.AuthorizeResponse, error) {
-	if err := s.requireProvider(); err != nil {
+	if err := requireIdentityRequest(s, req); err != nil {
 		return nil, err
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.Authorize(ctx, authorizeRequestFromProto(req))
 	return identityResponse(resp, err, "authorize", authorizeResponseToProto)
 }
 
 func (s *providerServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto.TokenResponse, error) {
-	if err := s.requireProvider(); err != nil {
+	if err := requireIdentityRequest(s, req); err != nil {
 		return nil, err
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.Token(gestalt.AuthCallContextFromIncoming(ctx), tokenRequestFromProto(req))
 	return identityResponse(resp, err, "token", tokenResponseToProto)
 }
 
 func (s *providerServer) Introspect(ctx context.Context, req *proto.IntrospectRequest) (*proto.IntrospectResponse, error) {
-	if err := s.requireProvider(); err != nil {
+	if err := requireIdentityRequest(s, req); err != nil {
 		return nil, err
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.Introspect(ctx, introspectRequestFromProto(req))
 	return identityResponse(resp, err, "introspect", introspectResponseToProto)
 }
 
 func (s *providerServer) UserInfo(ctx context.Context, req *proto.UserInfoRequest) (*proto.UserInfoResponse, error) {
-	if err := s.requireProvider(); err != nil {
+	if err := requireIdentityRequest(s, req); err != nil {
 		return nil, err
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.UserInfo(gestalt.AuthCallContextFromIncoming(ctx), userInfoRequestFromProto(req))
 	return identityResponse(resp, err, "userinfo", userInfoResponseToProto)
@@ -73,22 +61,16 @@ func (s *providerServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequ
 }
 
 func (s *providerServer) GetGrant(ctx context.Context, req *proto.GetGrantRequest) (*proto.GetGrantResponse, error) {
-	if err := s.requireProvider(); err != nil {
+	if err := requireIdentityRequest(s, req); err != nil {
 		return nil, err
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	resp, err := s.provider.GetGrant(gestalt.AuthCallContextFromIncoming(ctx), getGrantRequestFromProto(req))
 	return identityResponse(resp, err, "get grant", getGrantResponseToProto)
 }
 
 func (s *providerServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrantRequest) (*proto.RevokeGrantResponse, error) {
-	if err := s.requireProvider(); err != nil {
+	if err := requireIdentityRequest(s, req); err != nil {
 		return nil, err
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	if _, err := s.provider.RevokeGrant(gestalt.AuthCallContextFromIncoming(ctx), revokeGrantRequestFromProto(req)); err != nil {
 		return nil, identityToGRPCError("revoke grant", err)
@@ -106,6 +88,16 @@ func identityResponse[T, R any](resp *T, err error, operation string, encode fun
 	return encode(resp), nil
 }
 
+func requireIdentityRequest[T any](s *providerServer, req *T) error {
+	if err := s.requireProvider(); err != nil {
+		return err
+	}
+	if req == nil {
+		return status.Error(codes.InvalidArgument, "request is required")
+	}
+	return nil
+}
+
 func (s *providerServer) requireProvider() error {
 	if s == nil || s.provider == nil {
 		return status.Error(codes.FailedPrecondition, "identity provider is not configured")
@@ -114,9 +106,6 @@ func (s *providerServer) requireProvider() error {
 }
 
 func identityToGRPCError(operation string, err error) error {
-	if err == nil {
-		return nil
-	}
 	if errors.Is(err, core.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
@@ -129,33 +118,25 @@ func identityToGRPCError(operation string, err error) error {
 	return status.Errorf(codes.Unknown, "%s: %v", operation, err)
 }
 
+var identityGRPCCodes = map[gestalt.StatusCode]codes.Code{
+	gestalt.CodeCanceled:           codes.Canceled,
+	gestalt.CodeInvalidArgument:    codes.InvalidArgument,
+	gestalt.CodeNotFound:           codes.NotFound,
+	gestalt.CodeAlreadyExists:      codes.AlreadyExists,
+	gestalt.CodeFailedPrecondition: codes.FailedPrecondition,
+	gestalt.CodeOutOfRange:         codes.OutOfRange,
+	gestalt.CodeUnauthenticated:    codes.Unauthenticated,
+	gestalt.CodePermissionDenied:   codes.PermissionDenied,
+	gestalt.CodeUnavailable:        codes.Unavailable,
+	gestalt.CodeUnimplemented:      codes.Unimplemented,
+	gestalt.CodeInternal:           codes.Internal,
+}
+
 func identityGRPCCode(code gestalt.StatusCode) codes.Code {
-	switch code {
-	case gestalt.CodeCanceled:
-		return codes.Canceled
-	case gestalt.CodeInvalidArgument:
-		return codes.InvalidArgument
-	case gestalt.CodeNotFound:
-		return codes.NotFound
-	case gestalt.CodeAlreadyExists:
-		return codes.AlreadyExists
-	case gestalt.CodeFailedPrecondition:
-		return codes.FailedPrecondition
-	case gestalt.CodeOutOfRange:
-		return codes.OutOfRange
-	case gestalt.CodeUnauthenticated:
-		return codes.Unauthenticated
-	case gestalt.CodePermissionDenied:
-		return codes.PermissionDenied
-	case gestalt.CodeUnavailable:
-		return codes.Unavailable
-	case gestalt.CodeUnimplemented:
-		return codes.Unimplemented
-	case gestalt.CodeInternal:
-		return codes.Internal
-	default:
-		return codes.Unknown
+	if mapped, ok := identityGRPCCodes[code]; ok {
+		return mapped
 	}
+	return codes.Unknown
 }
 
 func authorizeRequestFromProto(req *proto.AuthorizeRequest) *core.AuthorizeRequest {
