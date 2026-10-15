@@ -668,26 +668,18 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 		return fmt.Errorf("config validation: %s %q only provider-release.yaml metadata URLs are supported for remote sources", kind, name)
 	}
 	modeCount := 0
-	if src.IsLocal() {
-		modeCount++
-	}
-	if src.IsMetadataURL() {
-		modeCount++
-	}
-	if src.IsGitHubRelease() {
-		modeCount++
-	}
-	if src.IsGit() {
-		modeCount++
-	}
-	if src.IsRegistry() {
-		modeCount++
-	}
-	if src.IsPackage() {
-		modeCount++
-	}
-	if src.IsLocalMetadataPath() {
-		modeCount++
+	for _, selected := range []bool{
+		src.IsLocal(),
+		src.IsMetadataURL(),
+		src.IsGitHubRelease(),
+		src.IsGit(),
+		src.IsRegistry(),
+		src.IsPackage(),
+		src.IsLocalMetadataPath(),
+	} {
+		if selected {
+			modeCount++
+		}
 	}
 	if modeCount == 0 {
 		return fmt.Errorf("config validation: %s %q source.path or provider-release metadata URL is required", kind, name)
@@ -719,8 +711,6 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsGitHubRelease() {
 		release := src.GitHubReleaseSource()
 		switch {
-		case release == nil:
-			return fmt.Errorf("config validation: %s %q githubRelease source is required", kind, name)
 		case strings.TrimSpace(release.Repo) == "":
 			return fmt.Errorf("config validation: %s %q source.githubRelease.repo is required", kind, name)
 		case strings.TrimSpace(release.Tag) == "":
@@ -736,8 +726,6 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsGit() {
 		git := src.GitSource()
 		switch {
-		case git == nil:
-			return fmt.Errorf("config validation: %s %q source.git is required", kind, name)
 		case strings.TrimSpace(git.Repo) == "":
 			return fmt.Errorf("config validation: %s %q source.git.repo is required", kind, name)
 		case strings.TrimSpace(git.Ref) == "":
