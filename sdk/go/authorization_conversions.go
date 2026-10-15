@@ -194,9 +194,6 @@ func protoListRelationshipsResponse(in *ListRelationshipsResponse) (*proto.ListR
 }
 
 func relationshipUpdateFromProto(in *proto.RelationshipUpdate) *RelationshipUpdate {
-	if in == nil {
-		return nil
-	}
 	return &RelationshipUpdate{
 		Operation:    RelationshipUpdateOperation(in.GetOperation()),
 		Relationship: relationshipFromProto(in.GetRelationship()),
@@ -204,9 +201,6 @@ func relationshipUpdateFromProto(in *proto.RelationshipUpdate) *RelationshipUpda
 }
 
 func preconditionFromProto(in *proto.Precondition) *Precondition {
-	if in == nil {
-		return nil
-	}
 	return &Precondition{
 		Operation: PreconditionOperation(in.GetOperation()),
 		Filter:    relationshipFilterFromProto(in.GetFilter()),
@@ -387,9 +381,6 @@ func protoSetActiveModelResponse(in *SetActiveModelResponse) *proto.SetActiveMod
 }
 
 func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
-	if in == nil {
-		return nil
-	}
 	return &AuthorizationModelResourceType{
 		Name:        in.GetName(),
 		Relations:   modelRelationsFromProto(in.GetRelations()),
@@ -400,9 +391,6 @@ func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourc
 }
 
 func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
-	if in == nil {
-		return nil
-	}
 	allowedRelations := protoModelRelations(in.Relations)
 	return &proto.AuthorizationModelResourceType{
 		Name:        in.Name,
@@ -415,18 +403,12 @@ func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) *pr
 
 func modelRelationsFromProto(in []*proto.ModelRelation) []*ModelRelation {
 	return convertAllocatedProtoSlice(in, func(item *proto.ModelRelation) *ModelRelation {
-		if item == nil {
-			return nil
-		}
 		return &ModelRelation{Name: item.GetName(), AllowedTargets: modelAllowedTargetsFromProto(item.GetAllowedTargets())}
 	})
 }
 
 func protoModelRelations(in []*ModelRelation) []*proto.ModelRelation {
 	return convertAllocatedProtoSlice(in, func(item *ModelRelation) *proto.ModelRelation {
-		if item == nil {
-			return nil
-		}
 		allowedTargets := convertAllocatedProtoSlice(item.AllowedTargets, protoModelAllowedTarget)
 		return &proto.ModelRelation{Name: item.Name, AllowedTargets: allowedTargets}
 	})
@@ -434,27 +416,18 @@ func protoModelRelations(in []*ModelRelation) []*proto.ModelRelation {
 
 func modelActionsFromProto(in []*proto.ModelAction) []*ModelAction {
 	return convertAllocatedProtoSlice(in, func(item *proto.ModelAction) *ModelAction {
-		if item == nil {
-			return nil
-		}
 		return &ModelAction{Name: item.GetName(), Relations: append([]string(nil), item.GetRelations()...)}
 	})
 }
 
 func protoModelActions(in []*ModelAction) []*proto.ModelAction {
 	return convertAllocatedProtoSlice(in, func(item *ModelAction) *proto.ModelAction {
-		if item == nil {
-			return nil
-		}
 		return &proto.ModelAction{Name: item.Name, Relations: append([]string(nil), item.Relations...)}
 	})
 }
 
 func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []*ModelAllowedTarget {
 	return convertAllocatedProtoSlice(in, func(item *proto.ModelAllowedTarget) *ModelAllowedTarget {
-		if item == nil {
-			return nil
-		}
 		switch kind := item.GetKind().(type) {
 		case *proto.ModelAllowedTarget_SubjectType:
 			return &ModelAllowedTarget{SubjectType: kind.SubjectType}
@@ -469,9 +442,6 @@ func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []*ModelAllowe
 }
 
 func protoModelAllowedTarget(in *ModelAllowedTarget) *proto.ModelAllowedTarget {
-	if in == nil {
-		return nil
-	}
 	if in.SubjectType != "" {
 		return &proto.ModelAllowedTarget{Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: in.SubjectType}}
 	}
