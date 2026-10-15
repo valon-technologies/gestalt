@@ -82,14 +82,7 @@ func NewEmptyRetentionIndex() *RetentionIndex {
 }
 
 func DecodeRetentionIndex(data []byte) (*RetentionIndex, error) {
-	var index RetentionIndex
-	if err := json.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("decode retention index: %w", err)
-	}
-	if err := validateRetentionIndex(&index); err != nil {
-		return nil, err
-	}
-	return &index, nil
+	return decodeRegistryDocument(data, "retention index", validateRetentionIndex)
 }
 
 func validateRetentionIndex(index *RetentionIndex) error {

@@ -1,7 +1,6 @@
 package appregistry
 
 import (
-	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
@@ -83,25 +82,11 @@ func NewEmptyFailedIndex(appName string) *FailedIndex {
 }
 
 func DecodePendingIndex(data []byte) (*PendingIndex, error) {
-	var index PendingIndex
-	if err := json.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("decode pending index: %w", err)
-	}
-	if err := validatePendingIndex(&index); err != nil {
-		return nil, err
-	}
-	return &index, nil
+	return decodeRegistryDocument(data, "pending index", validatePendingIndex)
 }
 
 func DecodeFailedIndex(data []byte) (*FailedIndex, error) {
-	var index FailedIndex
-	if err := json.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("decode failed index: %w", err)
-	}
-	if err := validateFailedIndex(&index); err != nil {
-		return nil, err
-	}
-	return &index, nil
+	return decodeRegistryDocument(data, "failed index", validateFailedIndex)
 }
 
 func validatePendingIndex(index *PendingIndex) error {
