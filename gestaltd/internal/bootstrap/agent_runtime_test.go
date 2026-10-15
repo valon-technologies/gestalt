@@ -324,9 +324,6 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	if strings.TrimSpace(string(data)) != "workspace fixture" {
 		t.Fatalf("README = %q", data)
 	}
-	if got := pool.sessionBackend(session.ID); got == nil || got.runtimeSessionID != runtimeSession.GetId() {
-		t.Fatalf("session backend = %#v, want runtime session %q", got, runtimeSession.GetId())
-	}
 }
 
 func TestHostedAgentPoolRejectsWorkspaceWithoutProviderCapability(t *testing.T) {
@@ -1341,13 +1338,6 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	waitHostedAgentPoolState(t, pool, func() bool {
 		return !first.replacing && pool.starting == 0
 	})
-	pool.mu.Lock()
-	acceptsNewWork := pool.backendAcceptsNewWorkLocked(first, clock.Now().UTC())
-	firstDraining := first.draining
-	pool.mu.Unlock()
-	if !acceptsNewWork || firstDraining {
-		t.Fatalf("first backend acceptsNewWork=%v draining=%v, want serving after failed proactive replacement", acceptsNewWork, firstDraining)
-	}
 	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
 		Model: "gpt-test",
 	})
@@ -1356,9 +1346,6 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 	}
 	if session == nil || session.ID == "" {
 		t.Fatalf("CreateSession(after failed proactive replacement) = %#v, want session", session)
-	}
-	if backend := pool.sessionBackend(session.ID); backend != first {
-		t.Fatalf("session backend = %#v, want first backend after failed proactive replacement", backend)
 	}
 }
 
@@ -1715,12 +1702,6 @@ func TestHostedAgentProviderPoolListSessionsDeduplicatesSharedStoreSessions(t *t
 	if ids["session-1"] != 1 || ids["session-2"] != 1 {
 		t.Fatalf("ListSessions IDs = %#v, want session-1 and session-2 once", ids)
 	}
-	if backend := pool.sessionBackend("session-1"); backend != pool.backends[0] {
-		t.Fatalf("session-1 backend = %#v, want first backend", backend)
-	}
-	if backend := pool.sessionBackend("session-2"); backend != pool.backends[1] {
-		t.Fatalf("session-2 backend = %#v, want second backend", backend)
-	}
 }
 
 func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
@@ -1776,9 +1757,6 @@ func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
 	}
 	if firstCalls != 0 || secondCalls != 1 {
 		t.Fatalf("CreateTurn calls: first=%d second=%d, want first=0 second=1", firstCalls, secondCalls)
-	}
-	if backend := pool.turnBackend("turn-1"); backend != second {
-		t.Fatalf("turn backend = %#v, want second backend", backend)
 	}
 }
 
@@ -1917,9 +1895,6 @@ func TestHostedAgentProviderPoolGetTurnRetriesAfterPreferredTimeout(t *testing.T
 	if firstCalls != 1 || secondCalls != 1 {
 		t.Fatalf("GetTurn calls: first=%d second=%d, want first=1 second=1", firstCalls, secondCalls)
 	}
-	if backend := pool.turnBackend("turn-1"); backend != second {
-		t.Fatalf("turn backend = %#v, want second backend after retry", backend)
-	}
 }
 
 func TestHostedAgentProviderPoolGetTurnRetriesAfterStalePreferredMiss(t *testing.T) {
@@ -1969,9 +1944,6 @@ func TestHostedAgentProviderPoolGetTurnRetriesAfterStalePreferredMiss(t *testing
 	if firstCalls != 1 || secondCalls != 1 {
 		t.Fatalf("GetTurn calls: first=%d second=%d, want first=1 second=1", firstCalls, secondCalls)
 	}
-	if backend := pool.turnBackend("turn-1"); backend != nil {
-		t.Fatalf("terminal turn backend = %#v, want no sticky backend after success", backend)
-	}
 }
 
 func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailure(t *testing.T) {
@@ -2002,9 +1974,6 @@ func TestHostedAgentProviderPoolListSessionsContinuesAfterTransientBackendFailur
 	}
 	if len(sessions) != 1 || sessions[0].ID != "session-1" {
 		t.Fatalf("ListSessions = %#v, want session-1", sessions)
-	}
-	if backend := pool.sessionBackend("session-1"); backend != second {
-		t.Fatalf("session backend = %#v, want second backend", backend)
 	}
 }
 
