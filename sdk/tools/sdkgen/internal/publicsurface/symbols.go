@@ -3,7 +3,6 @@ package publicsurface
 import (
 	"fmt"
 	"strings"
-	"unicode"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
 )
@@ -31,34 +30,17 @@ func manifestSymbols(pm PublicMethod) ManifestSymbols {
 		},
 		Python: ManifestSymbol{
 			Service: serviceLocal + "Client",
-			Method:  snakeCase(pm.Method),
+			Method:  naming.SnakeCase(pm.Method),
 		},
 		Rust: ManifestSymbol{
 			Service: serviceLocal + "Client",
-			Method:  snakeCase(pm.Method),
+			Method:  naming.SnakeCase(pm.Method),
 		},
 		TypeScript: ManifestSymbol{
 			Service: serviceLocal + "Client",
 			Method:  naming.LowerFirst(pm.Method),
 		},
 	}
-}
-
-func snakeCase(s string) string {
-	s = strings.ReplaceAll(s, "GraphQL", "Graphql")
-	runes := []rune(s)
-	var b strings.Builder
-	for i, r := range runes {
-		if unicode.IsUpper(r) && i > 0 {
-			prevLower := !unicode.IsUpper(runes[i-1]) && runes[i-1] != '_'
-			nextLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
-			if prevLower || (unicode.IsUpper(runes[i-1]) && nextLower) {
-				b.WriteByte('_')
-			}
-		}
-		b.WriteRune(unicode.ToLower(r))
-	}
-	return b.String()
 }
 
 // MarshalAvailabilityDoc renders human-readable API availability from a manifest.
