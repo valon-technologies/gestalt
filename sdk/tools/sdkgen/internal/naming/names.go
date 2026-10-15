@@ -3,6 +3,7 @@ package naming
 
 import (
 	"strings"
+	"unicode"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
@@ -34,4 +35,25 @@ func LowerFirst(s string) string {
 		return s
 	}
 	return strings.ToLower(s[:1]) + s[1:]
+}
+
+// SnakeCase converts a PascalCase or camelCase identifier to snake_case,
+// keeping acronym runs together: "GetAllKeys" becomes "get_all_keys" and
+// "CreateObjectAccessURL" becomes "create_object_access_url". Compound
+// acronyms stay one word: "InvokeGraphQL" becomes "invoke_graphql".
+func SnakeCase(s string) string {
+	s = strings.ReplaceAll(s, "GraphQL", "Graphql")
+	runes := []rune(s)
+	var b strings.Builder
+	for i, r := range runes {
+		if unicode.IsUpper(r) && i > 0 {
+			prevLower := !unicode.IsUpper(runes[i-1]) && runes[i-1] != '_'
+			nextLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+			if prevLower || (unicode.IsUpper(runes[i-1]) && nextLower) {
+				b.WriteByte('_')
+			}
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }

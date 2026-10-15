@@ -166,7 +166,7 @@ func (r *renderer) renderAppRESTClientProtocol(svc *model.Service, isAsync bool)
 
 func (r *renderer) renderAppClientMethod(svc *model.Service, m *model.Method, isAsync bool) {
 	constName := appClientMethodConst(svc, m)
-	methodName := pyName(snakeCase(m.Name))
+	methodName := pyName(naming.SnakeCase(m.Name))
 
 	if m.JsonResult != nil {
 		r.renderAppClientRawMethod(m, constName, methodName+"_raw", isAsync)
@@ -191,7 +191,7 @@ func (r *renderer) renderAppClientStreamMethod(svc *model.Service, m *model.Meth
 		return
 	}
 	constName := appClientMethodConst(svc, m)
-	methodName := pyName(snakeCase(m.Name))
+	methodName := pyName(naming.SnakeCase(m.Name))
 	r.useMetadataMethod(constName)
 	r.features.wire = true
 	r.features.serverStream = true
@@ -362,17 +362,17 @@ func (r *renderer) renderAppClientGraphQLDecodedMethod(m *model.Method, methodNa
 
 func (r *renderer) renderAppRESTProtocolMethod(m *model.Method, isAsync bool) {
 	if m.JsonResult != nil {
-		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name))+"_raw", false, isAsync)
-		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name)), true, isAsync)
+		r.renderAppRESTProtocolSignature(m, pyName(naming.SnakeCase(m.Name))+"_raw", false, isAsync)
+		r.renderAppRESTProtocolSignature(m, pyName(naming.SnakeCase(m.Name)), true, isAsync)
 		return
 	}
 	if m.Name == "InvokeGraphQL" {
-		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name)), false, isAsync)
-		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name))+"_raw", false, isAsync)
-		r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name))+"_decoded", true, isAsync)
+		r.renderAppRESTProtocolSignature(m, pyName(naming.SnakeCase(m.Name)), false, isAsync)
+		r.renderAppRESTProtocolSignature(m, pyName(naming.SnakeCase(m.Name))+"_raw", false, isAsync)
+		r.renderAppRESTProtocolSignature(m, pyName(naming.SnakeCase(m.Name))+"_decoded", true, isAsync)
 		return
 	}
-	r.renderAppRESTProtocolSignature(m, pyName(snakeCase(m.Name)), false, isAsync)
+	r.renderAppRESTProtocolSignature(m, pyName(naming.SnakeCase(m.Name)), false, isAsync)
 }
 
 func (r *renderer) renderAppRESTProtocolSignature(m *model.Method, methodName string, decoded bool, isAsync bool) {
@@ -398,7 +398,7 @@ func (r *renderer) renderAppRESTProtocolSignature(m *model.Method, methodName st
 		return
 	}
 	requestType := r.messageType(m.Input.FullName)
-	if m.JsonResult != nil && methodName == pyName(snakeCase(m.Name)) {
+	if m.JsonResult != nil && methodName == pyName(naming.SnakeCase(m.Name)) {
 		r.features.anyType = true
 		fmt.Fprintf(&r.body, "    %s %s(self, request: %s) -> Any: ...\n", kw, methodName, requestType)
 		return

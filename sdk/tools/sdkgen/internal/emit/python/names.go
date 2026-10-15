@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path"
 	"strings"
-	"unicode"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/naming"
@@ -49,29 +48,8 @@ func generatedFileBase(protoFile string) string {
 	return strings.TrimSuffix(path.Base(protoFile), ".proto")
 }
 
-// snakeCase converts a PascalCase or camelCase identifier to snake_case,
-// keeping acronym runs together: "GetAllKeys" becomes "get_all_keys" and
-// "CreateObjectAccessURL" becomes "create_object_access_url". Compound
-// acronyms stay one word: "InvokeGraphQL" becomes "invoke_graphql".
-func snakeCase(s string) string {
-	s = strings.ReplaceAll(s, "GraphQL", "Graphql")
-	runes := []rune(s)
-	var b strings.Builder
-	for i, r := range runes {
-		if unicode.IsUpper(r) && i > 0 {
-			prevLower := !unicode.IsUpper(runes[i-1]) && runes[i-1] != '_'
-			nextLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
-			if prevLower || (unicode.IsUpper(runes[i-1]) && nextLower) {
-				b.WriteByte('_')
-			}
-		}
-		b.WriteRune(unicode.ToLower(r))
-	}
-	return b.String()
-}
-
 func screamingSnake(s string) string {
-	return strings.ToUpper(snakeCase(s))
+	return strings.ToUpper(naming.SnakeCase(s))
 }
 
 // pascalCase converts a snake_case identifier to PascalCase: "json_value"
@@ -210,11 +188,11 @@ func enumValuesClassName(e *model.Enum) string {
 // internal by the SDK's underscore convention (like _gen), so their names
 // carry no leading underscore.
 func toWireFunc(messageFullName string) string {
-	return "to_wire_" + snakeCase(naming.LocalName(messageFullName))
+	return "to_wire_" + naming.SnakeCase(naming.LocalName(messageFullName))
 }
 
 func fromWireFunc(messageFullName string) string {
-	return "from_wire_" + snakeCase(naming.LocalName(messageFullName))
+	return "from_wire_" + naming.SnakeCase(naming.LocalName(messageFullName))
 }
 
 func pythonStringTuple(values []string) string {
