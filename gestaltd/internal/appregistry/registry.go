@@ -445,9 +445,6 @@ func EntryFileEquivalentIgnoringPublishedAt(localPath string, existing []byte) (
 }
 
 func validateEntry(entry *Entry) error {
-	if entry == nil {
-		return fmt.Errorf("registry entry is required")
-	}
 	if entry.SchemaVersion != EntrySchemaVersion {
 		return fmt.Errorf("unsupported registry entry schema version %d", entry.SchemaVersion)
 	}
@@ -490,9 +487,6 @@ func validateEntry(entry *Entry) error {
 }
 
 func validateIndex(index *Index) error {
-	if index == nil {
-		return fmt.Errorf("app registry index is required")
-	}
 	if index.SchemaVersion != IndexSchemaVersion {
 		return fmt.Errorf("unsupported app registry index schema version %d", index.SchemaVersion)
 	}

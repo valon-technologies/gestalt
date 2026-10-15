@@ -93,9 +93,6 @@ func DecodeRetentionIndex(data []byte) (*RetentionIndex, error) {
 }
 
 func validateRetentionIndex(index *RetentionIndex) error {
-	if index == nil {
-		return fmt.Errorf("retention index is required")
-	}
 	if index.SchemaVersion != RetentionIndexSchemaVersion {
 		return fmt.Errorf("unsupported retention index schema version %d", index.SchemaVersion)
 	}

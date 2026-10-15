@@ -150,9 +150,6 @@ func validatePublication(publication *Publication) error {
 }
 
 func validateEntrySourceRef(entry *Entry) error {
-	if entry == nil {
-		return fmt.Errorf("registry entry is required")
-	}
 	sourceRef := strings.TrimSpace(entry.SourceRef)
 	if sourceRef != "" {
 		if err := validateSourceRef(sourceRef); err != nil {
