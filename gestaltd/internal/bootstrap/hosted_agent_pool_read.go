@@ -59,3 +59,58 @@ func getHostedAgentValue[T any](
 	}
 	return nil, core.ErrNotFound
 }
+
+func listHostedAgentValues[T any](
+	p *hostedAgentProviderPool,
+	preferred *hostedAgentPoolBackend,
+	read func(*hostedAgentPoolBackend) ([]*T, error),
+	forget func(),
+) ([]*T, error) {
+	var retryableErr error
+	var lastNotFound error
+	succeeded := false
+	tried := map[*hostedAgentPoolBackend]struct{}{}
+	if backend := preferred; backend != nil {
+		tried[backend] = struct{}{}
+		values, err := read(backend)
+		if err == nil {
+			return values, nil
+		}
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			forget()
+			lastNotFound = err
+		case isHostedAgentReadRetryableError(err):
+			retryableErr = err
+		default:
+			return nil, err
+		}
+	}
+	var out []*T
+	for _, backend := range p.availableBackends(true) {
+		if _, ok := tried[backend]; ok {
+			continue
+		}
+		values, err := read(backend)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				lastNotFound = err
+				continue
+			}
+			if isHostedAgentReadRetryableError(err) {
+				retryableErr = err
+				continue
+			}
+			return nil, err
+		}
+		succeeded = true
+		out = append(out, values...)
+	}
+	if !succeeded && retryableErr != nil {
+		return nil, retryableErr
+	}
+	if !succeeded && lastNotFound != nil {
+		return nil, lastNotFound
+	}
+	return out, nil
+}
