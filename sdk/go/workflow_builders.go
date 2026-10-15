@@ -481,9 +481,9 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 		text := workflowTextFromProto(typed.Template)
 		return WorkflowValue{Template: &text}
 	case *proto.WorkflowValue_Input:
-		return WorkflowValue{Input: workflowPathSourcePath(typed.Input)}
+		return WorkflowValue{Input: typed.Input.GetPath()}
 	case *proto.WorkflowValue_Signal:
-		return WorkflowValue{Signal: workflowPathSourcePath(typed.Signal)}
+		return WorkflowValue{Signal: typed.Signal.GetPath()}
 	case *proto.WorkflowValue_StepOutput:
 		if typed.StepOutput == nil {
 			return WorkflowValue{StepOutput: &WorkflowStepOutputSource{}}
@@ -503,13 +503,6 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 	default:
 		return WorkflowValue{}
 	}
-}
-
-func workflowPathSourcePath(value *proto.WorkflowPathSource) string {
-	if value == nil {
-		return ""
-	}
-	return value.GetPath()
 }
 
 // WorkflowEvent contains fields for constructing a WorkflowEvent.

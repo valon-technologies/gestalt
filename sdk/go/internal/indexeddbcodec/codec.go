@@ -99,7 +99,7 @@ func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 
 // AnyFromTypedValue converts a wire TypedValue to its native value.
 func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
-	if v == nil || v.GetKind() == nil {
+	if v.GetKind() == nil {
 		return nil, nil
 	}
 
