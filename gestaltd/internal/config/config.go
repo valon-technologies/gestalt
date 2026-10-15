@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -2507,12 +2508,8 @@ func CloneAuthMapping(src *AuthMappingDef) *AuthMappingDef {
 	if src == nil {
 		return nil
 	}
-	dst := &AuthMappingDef{}
-	if len(src.Headers) > 0 {
-		dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
-		for name, value := range src.Headers {
-			dst.Headers[name] = cloneAuthValue(value)
-		}
+	dst := &AuthMappingDef{
+		Headers: maputil.ConvertNonEmpty(src.Headers, cloneAuthValue),
 	}
 	if src.Basic != nil {
 		dst.Basic = &BasicAuthMappingDef{
