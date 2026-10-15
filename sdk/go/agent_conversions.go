@@ -25,7 +25,7 @@ func agentMessageToProto(value AgentMessage) (*proto.AgentMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	parts, err := agentMessagePartsToProto(value.Parts)
+	parts, err := convertProtoSliceErr(value.Parts, agentMessagePartToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -35,21 +35,6 @@ func agentMessageToProto(value AgentMessage) (*proto.AgentMessage, error) {
 		Parts:    parts,
 		Metadata: metadata,
 	}, nil
-}
-
-func agentMessagesToProto(values []AgentMessage) ([]*proto.AgentMessage, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentMessage, 0, len(values))
-	for _, value := range values {
-		pbValue, err := agentMessageToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
-	}
-	return out, nil
 }
 
 func agentMessagePartFromProto(value *proto.AgentMessagePart) AgentMessagePart {
@@ -64,21 +49,6 @@ func agentMessagePartFromProto(value *proto.AgentMessagePart) AgentMessagePart {
 		ToolResult: agentMessagePartToolResultFromProto(value.GetToolResult()),
 		ImageRef:   agentMessagePartImageRefFromProto(value.GetImageRef()),
 	}
-}
-
-func agentMessagePartsToProto(values []AgentMessagePart) ([]*proto.AgentMessagePart, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentMessagePart, 0, len(values))
-	for _, value := range values {
-		pbValue, err := agentMessagePartToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
-	}
-	return out, nil
 }
 
 func agentMessagePartToProto(value AgentMessagePart) (*proto.AgentMessagePart, error) {
@@ -522,7 +492,7 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 	if value == nil {
 		return nil, nil
 	}
-	messages, err := agentMessagesToProto(value.Messages)
+	messages, err := convertProtoSliceErr(value.Messages, agentMessageToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -655,21 +625,6 @@ func agentTurnEventToProto(value AgentTurnEvent) (*proto.AgentTurnEvent, error) 
 	}, nil
 }
 
-func agentTurnEventsToProto(values []AgentTurnEvent) ([]*proto.AgentTurnEvent, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentTurnEvent, 0, len(values))
-	for _, value := range values {
-		pbValue, err := agentTurnEventToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
-	}
-	return out, nil
-}
-
 func agentTurnDisplayToProto(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, error) {
 	if value == nil {
 		return nil, nil
@@ -719,7 +674,7 @@ func listAgentProviderTurnEventsResponseToProto(value *ListAgentProviderTurnEven
 	if value == nil {
 		return nil, nil
 	}
-	events, err := agentTurnEventsToProto(value.Events)
+	events, err := convertProtoSliceErr(value.Events, agentTurnEventToProto)
 	if err != nil {
 		return nil, err
 	}
