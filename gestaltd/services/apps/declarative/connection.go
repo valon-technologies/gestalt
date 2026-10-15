@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -48,12 +49,8 @@ func cloneAuthMapping(src *AuthMappingDef) *AuthMappingDef {
 	if src == nil {
 		return nil
 	}
-	dst := &AuthMappingDef{}
-	if len(src.Headers) > 0 {
-		dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
-		for name, value := range src.Headers {
-			dst.Headers[name] = cloneAuthValue(value)
-		}
+	dst := &AuthMappingDef{
+		Headers: maputil.ConvertNonEmpty(src.Headers, cloneAuthValue),
 	}
 	if src.Basic != nil {
 		dst.Basic = &BasicAuthMappingDef{
