@@ -3,29 +3,15 @@ package egress
 import (
 	"context"
 	"net/http"
-	"strings"
+
+	"github.com/valon-technologies/gestalt/server/internal/httpheaders"
 )
 
 type outboundHeaderOverridesCtxKey struct{}
 
 // WithOutboundHeaderOverrides attaches per-invoke outbound HTTP header overrides.
 func WithOutboundHeaderOverrides(ctx context.Context, headers map[string]string) context.Context {
-	if ctx == nil || len(headers) == 0 {
-		return ctx
-	}
-	normalized := make(map[string]string, len(headers))
-	for name, value := range headers {
-		name = strings.TrimSpace(name)
-		value = strings.TrimSpace(value)
-		if name == "" || value == "" {
-			continue
-		}
-		normalized[http.CanonicalHeaderKey(name)] = value
-	}
-	if len(normalized) == 0 {
-		return ctx
-	}
-	return context.WithValue(ctx, outboundHeaderOverridesCtxKey{}, normalized)
+	return httpheaders.WithOverrides(ctx, outboundHeaderOverridesCtxKey{}, headers)
 }
 
 // OutboundHeaderOverridesFromContext returns outbound header overrides for the
