@@ -788,7 +788,7 @@ func (b *Broker) InvokeMaybeStream(ctx context.Context, p *principal.Principal, 
 		return fail(err)
 	}
 
-	if opMeta.Response != nil && opMeta.Response.IsStream() {
+	if opMeta.Response.IsStream() {
 		streamExec, ok := prov.(core.StreamingExecutor)
 		if !ok {
 			return fail(fmt.Errorf("%w: %s.%s does not support streaming", ErrStreamingUnsupported, providerName, opMeta.ID))

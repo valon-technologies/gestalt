@@ -969,7 +969,7 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 		}
 		hasRun := providerpkg.HasExplicitSourceRun(manifest)
 		switch {
-		case hasRun && manifest.Spec != nil && manifest.Spec.IsManifestBacked():
+		case hasRun && manifest.Spec.IsManifestBacked():
 			return fmt.Errorf("app %q: local-source apps cannot combine run: with a declarative surface", name)
 		case hasRun:
 			configMap, err := config.NodeToMap(entry.Config)
@@ -979,7 +979,7 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 			if err := bindResolvedProviderManifest(name, entry, normalized.manifestPath, manifest, configMap); err != nil {
 				return fmt.Errorf("app %q: %w", name, err)
 			}
-			if l != nil && l.shouldMarkAppForDev(name) {
+			if l.shouldMarkAppForDev(name) {
 				if l.remotePreviewServe {
 					ui, err := providerpkg.RemotePreviewUIRunCommand(normalized.manifestPath)
 					if err != nil {
@@ -1012,7 +1012,7 @@ func (l *Lifecycle) markSourceRunAppProviders(cfg *config.Config) error {
 			if l != nil && l.forcedDevAppKeys[name] {
 				return fmt.Errorf("PATH argument %q has no run: block; cannot dev-serve under --locked", name)
 			}
-			if l != nil && l.shouldMarkAppForDev(name) {
+			if l.shouldMarkAppForDev(name) {
 				return fmt.Errorf("app %q: local-source apps must declare run", name)
 			}
 		}
