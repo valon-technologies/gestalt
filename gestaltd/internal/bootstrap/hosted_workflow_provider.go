@@ -56,7 +56,7 @@ func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *conf
 	return newHostedWorkflowWorkerPool(launch, hostServices, deps, policy)
 }
 
-func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func(), stopTimeout time.Duration) (*hostedWorkflowProviderInstance, error) {
+func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, stopTimeout time.Duration) (*hostedWorkflowProviderInstance, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted workflow launch is required")
 	}
@@ -67,26 +67,15 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProv
 	name := launch.name
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindWorkflow, name, launch.runtimeConfig))
 	if err != nil {
-		closeOwnedRuntime(runtimeProvider, closeRuntime)
-		if cleanup != nil {
-			cleanup()
-		}
 		return nil, fmt.Errorf("start workflow runtime session: %w", err)
 	}
 	sessionID := session.GetId()
 	stopSession := true
-	closeOnFailure := closeRuntime
 	defer func() {
 		if !stopSession {
 			return
 		}
 		_ = stopRuntimeSessionWithTimeout(runtimeProvider, sessionID, stopTimeout)
-		if closeOnFailure {
-			_ = runtimeProvider.Close()
-		}
-		if cleanup != nil {
-			cleanup()
-		}
 	}()
 	readySession, err := waitForRuntimeSessionReady(ctx, runtimeProvider, sessionID)
 	if err != nil {
@@ -152,12 +141,10 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProv
 		Client:  proto.NewWorkflowClient(gwConn),
 		Runtime: conn.Lifecycle(),
 		Closer: &runtimeBackedHostedCloser{
-			conn:         conn,
-			runtime:      runtimeProvider,
-			sessionID:    sessionID,
-			closeRuntime: closeRuntime,
-			cleanup:      cleanup,
-			stopTimeout:  stopTimeout,
+			conn:        conn,
+			runtime:     runtimeProvider,
+			sessionID:   sessionID,
+			stopTimeout: stopTimeout,
 		},
 		Config: launch.cfg.Config,
 		Name:   name,
@@ -167,8 +154,6 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProv
 		return nil, err
 	}
 	stopSession = false
-	closeOnFailure = false
-	cleanup = nil
 	return &hostedWorkflowProviderInstance{
 		provider:         provider,
 		runtimeProvider:  runtimeProvider,
@@ -426,7 +411,7 @@ func (p *hostedWorkflowWorkerPool) Close() error {
 func (p *hostedWorkflowWorkerPool) startWorker(ctx context.Context) (*hostedWorkflowWorker, error) {
 	startCtx, cancel := context.WithTimeout(ctx, p.policy.StartupTimeout)
 	defer cancel()
-	instance, err := startHostedWorkflowProviderInstance(startCtx, p.launch, p.hostServices, p.deps, false, nil, p.policy.DrainTimeout)
+	instance, err := startHostedWorkflowProviderInstance(startCtx, p.launch, p.hostServices, p.deps, p.policy.DrainTimeout)
 	if err != nil {
 		return nil, err
 	}

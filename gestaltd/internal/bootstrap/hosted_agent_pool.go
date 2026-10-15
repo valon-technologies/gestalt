@@ -1972,7 +1972,7 @@ func (p *hostedAgentProviderPool) ensureMinReady(ctx context.Context) error {
 func (p *hostedAgentProviderPool) startBackend(ctx context.Context) (*hostedAgentPoolBackend, error) {
 	startCtx, cancel := context.WithTimeout(ctx, p.policy.StartupTimeout)
 	defer cancel()
-	instance, err := startHostedAgentProviderInstance(startCtx, p.launch, p.hostServices, p.deps, false, nil)
+	instance, err := startHostedAgentProviderInstance(startCtx, p.launch, p.hostServices, p.deps)
 	if err != nil {
 		return nil, err
 	}

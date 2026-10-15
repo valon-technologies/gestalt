@@ -1579,7 +1579,7 @@ type hostedAgentProviderInstance struct {
 	runtimeSession   *proto.RuntimeSession
 }
 
-func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func()) (*hostedAgentProviderInstance, error) {
+func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps) (*hostedAgentProviderInstance, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted agent launch is required")
 	}
@@ -1595,26 +1595,15 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProvide
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindAgent, name, launch.runtimeConfig))
 	recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_start", phaseStarted, err)
 	if err != nil {
-		closeOwnedRuntime(runtimeProvider, closeRuntime)
-		if cleanup != nil {
-			cleanup()
-		}
 		return nil, fmt.Errorf("start agent runtime session: %w", err)
 	}
 	sessionID := session.GetId()
 	stopSession := true
-	closeOnFailure := closeRuntime
 	defer func() {
 		if !stopSession {
 			return
 		}
 		_ = stopRuntimeSession(runtimeProvider, sessionID)
-		if closeOnFailure {
-			_ = runtimeProvider.Close()
-		}
-		if cleanup != nil {
-			cleanup()
-		}
 	}()
 	phaseStarted = time.Now()
 	readySession, err := waitForRuntimeSessionReady(ctx, runtimeProvider, sessionID)
@@ -1692,11 +1681,9 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProvide
 		Client:  proto.NewAgentClient(gwConn),
 		Runtime: conn.Lifecycle(),
 		Closer: &runtimeBackedHostedCloser{
-			conn:         conn,
-			runtime:      runtimeProvider,
-			sessionID:    sessionID,
-			closeRuntime: closeRuntime,
-			cleanup:      cleanup,
+			conn:      conn,
+			runtime:   runtimeProvider,
+			sessionID: sessionID,
 		},
 		Config: cfg.Config,
 		Name:   name,
@@ -1708,8 +1695,6 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedProvide
 	}
 
 	stopSession = false
-	closeOnFailure = false
-	cleanup = nil
 	return &hostedAgentProviderInstance{
 		provider:         provider,
 		runtimeProvider:  runtimeProvider,
