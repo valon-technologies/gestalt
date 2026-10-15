@@ -22,19 +22,19 @@ const (
 // features tracks which imports a generated file needs; the use header is
 // assembled after the body renders.
 type features struct {
-	v1           bool                       // the crate::generated::v1 wire alias
-	restMetadata bool                       // public clients import method metadata constants
-	unaryTransport bool                     // public AppClient imports UnaryTransport
-	streamExt    bool                       // tokio_stream::StreamExt for stream mapping
-	supportTypes map[string]bool            // imported from the public rpc_support module
-	supportFns   map[string]bool            // imported from the codec support module
-	invokeUses   map[string]bool            // imported from the public invoke_support module
-	prostTypes   bool                       // google.protobuf.Empty via prost_types
-	crossPublic  map[string]map[string]bool // public module base -> imported native type names
- 	crossShared  map[string]map[string]bool
-	crossCodec   map[string]map[string]bool // codec module base -> imported converter names
- 	crossSharedCodec map[string]map[string]bool
-	wireJSONDone map[string]bool            // wire message full names with protobuf JSON helpers
+	v1               bool                       // the crate::generated::v1 wire alias
+	restMetadata     bool                       // public clients import method metadata constants
+	unaryTransport   bool                       // public AppClient imports UnaryTransport
+	streamExt        bool                       // tokio_stream::StreamExt for stream mapping
+	supportTypes     map[string]bool            // imported from the public rpc_support module
+	supportFns       map[string]bool            // imported from the codec support module
+	invokeUses       map[string]bool            // imported from the public invoke_support module
+	prostTypes       bool                       // google.protobuf.Empty via prost_types
+	crossPublic      map[string]map[string]bool // public module base -> imported native type names
+	crossShared      map[string]map[string]bool
+	crossCodec       map[string]map[string]bool // codec module base -> imported converter names
+	crossSharedCodec map[string]map[string]bool
+	wireJSONDone     map[string]bool // wire message full names with protobuf JSON helpers
 }
 
 type renderer struct {
@@ -44,13 +44,13 @@ type renderer struct {
 	kind         moduleKind
 	publicClient bool
 	shared       map[string]bool
- 	sharedCodec  map[string]bool
+	sharedCodec  map[string]bool
 	docIntro     string
 	features     features
 	body         strings.Builder
 }
 
- func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicClient bool, shared, sharedCodec map[string]bool) *renderer {
+func newRenderer(idx *index, base, wireBase string, kind moduleKind, publicClient bool, shared, sharedCodec map[string]bool) *renderer {
 	if wireBase == "" {
 		wireBase = base
 	}
@@ -61,16 +61,16 @@ type renderer struct {
 		kind:         kind,
 		publicClient: publicClient,
 		shared:       shared,
- 		sharedCodec:  sharedCodec,
+		sharedCodec:  sharedCodec,
 		features: features{
-			supportTypes: map[string]bool{},
-			supportFns:   map[string]bool{},
-			invokeUses:   map[string]bool{},
-			crossPublic:  map[string]map[string]bool{},
- 			crossShared:  map[string]map[string]bool{},
-			crossCodec:   map[string]map[string]bool{},
- 			crossSharedCodec: map[string]map[string]bool{},
-			wireJSONDone: map[string]bool{},
+			supportTypes:     map[string]bool{},
+			supportFns:       map[string]bool{},
+			invokeUses:       map[string]bool{},
+			crossPublic:      map[string]map[string]bool{},
+			crossShared:      map[string]map[string]bool{},
+			crossCodec:       map[string]map[string]bool{},
+			crossSharedCodec: map[string]map[string]bool{},
+			wireJSONDone:     map[string]bool{},
 		},
 	}
 }
@@ -110,16 +110,16 @@ func (r *renderer) useInvoke(name string) {
 // types from their public siblings.
 func (r *renderer) typeRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	if r.publicClient && r.shared != nil && r.shared[name] {
+	if r.publicClient && r.shared[name] {
 		if r.features.crossShared[base] == nil {
 			r.features.crossShared[base] = map[string]bool{}
 		}
 		r.features.crossShared[base][name] = true
 		return name
 	}
- 	if r.kind == modulePublic && base == r.base {
- 		return name
- 	}
+	if r.kind == modulePublic && base == r.base {
+		return name
+	}
 	if r.features.crossPublic[base] == nil {
 		r.features.crossPublic[base] = map[string]bool{}
 	}
@@ -142,16 +142,16 @@ func (r *renderer) hostRef(name string) string {
 // converters are not imports.
 func (r *renderer) convRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
-	if r.publicClient && r.sharedCodec != nil && r.sharedCodec[name] {
+	if r.publicClient && r.sharedCodec[name] {
 		if r.features.crossSharedCodec[base] == nil {
 			r.features.crossSharedCodec[base] = map[string]bool{}
 		}
 		r.features.crossSharedCodec[base][name] = true
 		return name
 	}
- 	if r.kind == moduleCodec && base == r.base {
- 		return name
- 	}
+	if r.kind == moduleCodec && base == r.base {
+		return name
+	}
 	if r.features.crossCodec[base] == nil {
 		r.features.crossCodec[base] = map[string]bool{}
 	}
@@ -170,51 +170,34 @@ func (r *renderer) enumType(fullName string) string {
 // fnToWire returns the converter function for reference kinds converted by a
 // unary function, or "" when conversion is identity or inline.
 func (r *renderer) fnToWire(ref *model.TypeRef) string {
-	switch ref.Kind {
-	case model.KindMessage:
-		return r.convRef(r.idx.messages[ref.Message].ProtoFile, toWireFunc(ref.Message))
-	case model.KindTimestamp:
-		r.useFn("to_wire_timestamp")
-		return "to_wire_timestamp"
-	case model.KindDuration:
-		r.useFn("to_wire_duration")
-		return "to_wire_duration"
-	case model.KindJSONStruct:
-		r.useFn("to_wire_struct")
-		return "to_wire_struct"
-	case model.KindJSONValue:
-		r.useFn("to_wire_value")
-		return "to_wire_value"
-	case model.KindRPCStatus:
-		r.useFn("to_wire_status")
-		return "to_wire_status"
-	default:
-		return ""
-	}
+	return r.converterFunc(ref, "to_wire_", toWireFunc)
 }
 
 func (r *renderer) fnFromWire(ref *model.TypeRef) string {
+	return r.converterFunc(ref, "from_wire_", fromWireFunc)
+}
+
+func (r *renderer) converterFunc(ref *model.TypeRef, prefix string, messageFunc func(string) string) string {
+	var name string
 	switch ref.Kind {
 	case model.KindMessage:
-		return r.convRef(r.idx.messages[ref.Message].ProtoFile, fromWireFunc(ref.Message))
+		return r.convRef(r.idx.messages[ref.Message].ProtoFile, messageFunc(ref.Message))
 	case model.KindTimestamp:
-		r.useFn("from_wire_timestamp")
-		return "from_wire_timestamp"
+		name = "timestamp"
 	case model.KindDuration:
-		r.useFn("from_wire_duration")
-		return "from_wire_duration"
+		name = "duration"
 	case model.KindJSONStruct:
-		r.useFn("from_wire_struct")
-		return "from_wire_struct"
+		name = "struct"
 	case model.KindJSONValue:
-		r.useFn("from_wire_value")
-		return "from_wire_value"
+		name = "value"
 	case model.KindRPCStatus:
-		r.useFn("from_wire_status")
-		return "from_wire_status"
+		name = "status"
 	default:
 		return ""
 	}
+	name = prefix + name
+	r.useFn(name)
+	return name
 }
 
 // toWireExpr renders the wire-bound conversion of a singular value. Scalars,
@@ -252,62 +235,40 @@ func identityConv(ref *model.TypeRef) bool {
 
 // fieldToWire renders the conversion of a whole field value.
 func (r *renderer) fieldToWire(f *model.Field, expr string) string {
-	switch f.Kind {
-	case model.KindRepeated:
-		if identityConv(f.Elem) {
-			return expr
-		}
-		if fn := r.fnToWire(f.Elem); fn != "" {
-			return expr + ".into_iter().map(" + fn + ").collect()"
-		}
-		return expr + ".into_iter().map(|item| " + r.toWireExpr(f.Elem, "item") + ").collect()"
-	case model.KindMap:
-		if identityConv(f.MapValue) {
-			return expr
-		}
-		return expr + ".into_iter().map(|(key, item)| (key, " + r.toWireExpr(f.MapValue, "item") + ")).collect()"
-	default:
-		ref := fieldRef(f)
-		if f.Presence == model.ExplicitPresence {
-			if identityConv(ref) {
-				return expr
-			}
-			if fn := r.fnToWire(ref); fn != "" {
-				return expr + ".map(" + fn + ")"
-			}
-			return expr + ".map(|item| " + r.toWireExpr(ref, "item") + ")"
-		}
-		return r.toWireExpr(ref, expr)
-	}
+	return fieldConversion(f, expr, r.fnToWire, r.toWireExpr)
 }
 
 func (r *renderer) fieldFromWire(f *model.Field, expr string) string {
+	return fieldConversion(f, expr, r.fnFromWire, r.fromWireExpr)
+}
+
+func fieldConversion(f *model.Field, expr string, converterFunc func(*model.TypeRef) string, convertExpr func(*model.TypeRef, string) string) string {
 	switch f.Kind {
 	case model.KindRepeated:
 		if identityConv(f.Elem) {
 			return expr
 		}
-		if fn := r.fnFromWire(f.Elem); fn != "" {
+		if fn := converterFunc(f.Elem); fn != "" {
 			return expr + ".into_iter().map(" + fn + ").collect()"
 		}
-		return expr + ".into_iter().map(|item| " + r.fromWireExpr(f.Elem, "item") + ").collect()"
+		return expr + ".into_iter().map(|item| " + convertExpr(f.Elem, "item") + ").collect()"
 	case model.KindMap:
 		if identityConv(f.MapValue) {
 			return expr
 		}
-		return expr + ".into_iter().map(|(key, item)| (key, " + r.fromWireExpr(f.MapValue, "item") + ")).collect()"
+		return expr + ".into_iter().map(|(key, item)| (key, " + convertExpr(f.MapValue, "item") + ")).collect()"
 	default:
 		ref := fieldRef(f)
 		if f.Presence == model.ExplicitPresence {
 			if identityConv(ref) {
 				return expr
 			}
-			if fn := r.fnFromWire(ref); fn != "" {
+			if fn := converterFunc(ref); fn != "" {
 				return expr + ".map(" + fn + ")"
 			}
-			return expr + ".map(|item| " + r.fromWireExpr(ref, "item") + ")"
+			return expr + ".map(|item| " + convertExpr(ref, "item") + ")"
 		}
-		return r.fromWireExpr(ref, expr)
+		return convertExpr(ref, expr)
 	}
 }
 
@@ -397,7 +358,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 	for _, o := range m.Oneofs {
 		fmt.Fprintf(&r.body, "/// Values of the `%s` oneof in `%s`; the message field is None when unset.\n", o.Name, name)
 		r.body.WriteString("#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]\n")
- 		r.body.WriteString("#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]\n")
+		r.body.WriteString("#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]\n")
 		fmt.Fprintf(&r.body, "pub enum %s {\n", oneofTypeName(m, o))
 		for _, f := range oneofFields(m, o) {
 			r.docComment("    ", f.Doc)
@@ -412,20 +373,20 @@ func (r *renderer) renderMessage(m *model.Message) {
 	}
 	r.docComment("", m.Doc)
 	fmt.Fprintf(&r.body, "/// Native message type for `%s`.\n", m.FullName)
- 	r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]\n")
- 	r.body.WriteString("#[serde(rename_all = \"camelCase\")]\n")
+	r.body.WriteString("#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]\n")
+	r.body.WriteString("#[serde(rename_all = \"camelCase\")]\n")
 	fmt.Fprintf(&r.body, "pub struct %s {\n", name)
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
 			continue
 		}
 		r.docComment("    ", f.Doc)
- 		if fieldRef(f).Kind == model.KindTimestamp {
+		if fieldRef(f).Kind == model.KindTimestamp {
 			r.body.WriteString("    #[serde(with = \"crate::serde_time\")]\n")
 		}
- 		if fieldRef(f).Kind == model.KindDuration {
- 			r.body.WriteString("    #[serde(with = \"crate::serde_duration\")]\n")
- 		}
+		if fieldRef(f).Kind == model.KindDuration {
+			r.body.WriteString("    #[serde(with = \"crate::serde_duration\")]\n")
+		}
 		if f.Presence == model.ExplicitPresence {
 			fmt.Fprintf(&r.body, "    /// The `%s` field; None when unset.\n", f.Name)
 			fmt.Fprintf(&r.body, "    pub %s: Option<%s>,\n", escapeIdent(f.Name), r.fieldType(f))
@@ -447,16 +408,16 @@ func (r *renderer) renderMessage(m *model.Message) {
 func (r *renderer) renderConversions(m *model.Message) {
 	needTo := r.idx.needToWire[m.FullName]
 	needFrom := r.idx.needFromWire[m.FullName]
- 	isShared := r.publicClient && r.shared != nil && r.shared[localName(m.FullName)]
- 	if isShared {
- 		needTo = false
- 		needFrom = false
- 	}
+	isShared := r.publicClient && r.shared[localName(m.FullName)]
+	if isShared {
+		needTo = false
+		needFrom = false
+	}
 	if !needTo && !needFrom {
- 		if r.publicClient && r.idx.needWireJSON[m.FullName] {
- 			r.ensureWireProtoJSON(m.FullName)
- 		}
- 		return
+		if r.publicClient && r.idx.needWireJSON[m.FullName] {
+			r.ensureWireProtoJSON(m.FullName)
+		}
+		return
 	}
 	if r.publicClient {
 		needFrom = false
@@ -1342,10 +1303,10 @@ func (r *renderer) assemble() string {
 			uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
 		}
 	}
- 	for _, base := range sortedKeys2(r.features.crossShared) {
- 		names := sortedKeys(r.features.crossShared[base])
- 		uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
- 	}
+	for _, base := range sortedKeys2(r.features.crossShared) {
+		names := sortedKeys(r.features.crossShared[base])
+		uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
+	}
 	for _, base := range sortedKeys2(r.features.crossCodec) {
 		names := sortedKeys(r.features.crossCodec[base])
 		if r.publicClient {
@@ -1354,12 +1315,12 @@ func (r *renderer) assemble() string {
 			uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
 		}
 	}
- 	for _, base := range sortedKeys2(r.features.crossSharedCodec) {
- 		names := sortedKeys(r.features.crossSharedCodec[base])
- 		uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
- 	}
+	for _, base := range sortedKeys2(r.features.crossSharedCodec) {
+		names := sortedKeys(r.features.crossSharedCodec[base])
+		uses = append(uses, fmt.Sprintf("use crate::codec::%s::{%s};", base, strings.Join(names, ", ")))
+	}
 	if len(r.features.supportFns) > 0 {
- 		uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
+		uses = append(uses, fmt.Sprintf("use crate::codec::support::{%s};", strings.Join(sortedKeys(r.features.supportFns), ", ")))
 	}
 	if len(r.features.supportTypes) > 0 {
 		rpcPath := "crate::rpc_support"
