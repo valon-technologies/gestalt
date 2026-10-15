@@ -428,7 +428,7 @@ func NewGitSource(src GitSourceDef) ProviderSource {
 }
 
 func cloneSourceAuthDef(src *SourceAuthDef) *SourceAuthDef {
-	return cloneOptionalConfig(src, func(src *SourceAuthDef) *SourceAuthDef {
+	return withOptionalConfig(src, func(src *SourceAuthDef) *SourceAuthDef {
 		cloned := *src
 		cloned.Token = strings.TrimSpace(cloned.Token)
 		return &cloned
@@ -436,7 +436,7 @@ func cloneSourceAuthDef(src *SourceAuthDef) *SourceAuthDef {
 }
 
 func cloneGitHubReleaseSourceDef(src *GitHubReleaseSourceDef) *GitHubReleaseSourceDef {
-	return cloneOptionalConfig(src, func(src *GitHubReleaseSourceDef) *GitHubReleaseSourceDef {
+	return withOptionalConfig(src, func(src *GitHubReleaseSourceDef) *GitHubReleaseSourceDef {
 		cloned := *src
 		cloned.Repo = strings.TrimSpace(cloned.Repo)
 		cloned.Tag = strings.TrimSpace(cloned.Tag)
@@ -446,7 +446,7 @@ func cloneGitHubReleaseSourceDef(src *GitHubReleaseSourceDef) *GitHubReleaseSour
 }
 
 func cloneGitSourceDef(src *GitSourceDef) *GitSourceDef {
-	return cloneOptionalConfig(src, func(src *GitSourceDef) *GitSourceDef {
+	return withOptionalConfig(src, func(src *GitSourceDef) *GitSourceDef {
 		cloned := *src
 		cloned.Repo = strings.TrimSpace(cloned.Repo)
 		cloned.Ref = strings.TrimSpace(cloned.Ref)
@@ -1217,7 +1217,7 @@ func decodeYAMLNodeKnownFields(node *yaml.Node, out any) error {
 }
 
 func cloneYAMLNode(node *yaml.Node) *yaml.Node {
-	return cloneOptionalConfig(node, func(node *yaml.Node) *yaml.Node {
+	return withOptionalConfig(node, func(node *yaml.Node) *yaml.Node {
 		cloned := *node
 		if len(node.Content) > 0 {
 			cloned.Content = make([]*yaml.Node, len(node.Content))
@@ -1230,7 +1230,7 @@ func cloneYAMLNode(node *yaml.Node) *yaml.Node {
 }
 
 func cloneRouteAuthDef(src *RouteAuthDef) *RouteAuthDef {
-	return cloneOptionalConfig(src, func(src *RouteAuthDef) *RouteAuthDef {
+	return withOptionalConfig(src, func(src *RouteAuthDef) *RouteAuthDef {
 		cloned := *src
 		cloned.Provider = strings.TrimSpace(cloned.Provider)
 		return &cloned
@@ -1251,7 +1251,7 @@ func providerEntryFieldsFromEntry(e ProviderEntry) providerEntryFields {
 }
 
 func cloneAgentProviderLifecycleConfig(src *AgentProviderLifecycleConfig) *AgentProviderLifecycleConfig {
-	return cloneOptionalConfig(src, func(src *AgentProviderLifecycleConfig) *AgentProviderLifecycleConfig {
+	return withOptionalConfig(src, func(src *AgentProviderLifecycleConfig) *AgentProviderLifecycleConfig {
 		dst := &AgentProviderLifecycleConfig{
 			SessionStart: make([]AgentProviderSessionStartHookConfig, len(src.SessionStart)),
 		}
@@ -1277,7 +1277,7 @@ func cloneProviderEntryHarnessConfigMap(src map[string]*ProviderEntryHarnessConf
 }
 
 func cloneProviderEntryHarnessConfig(src *ProviderEntryHarnessConfig) *ProviderEntryHarnessConfig {
-	return cloneOptionalConfig(src, func(src *ProviderEntryHarnessConfig) *ProviderEntryHarnessConfig {
+	return withOptionalConfig(src, func(src *ProviderEntryHarnessConfig) *ProviderEntryHarnessConfig {
 		dst := *src
 		dst.Args = slices.Clone(src.Args)
 		dst.Env = maps.Clone(src.Env)
@@ -1288,7 +1288,7 @@ func cloneProviderEntryHarnessConfig(src *ProviderEntryHarnessConfig) *ProviderE
 }
 
 func cloneProviderEntryHarnessInstallConfig(src *ProviderEntryHarnessInstallConfig) *ProviderEntryHarnessInstallConfig {
-	return cloneOptionalConfig(src, func(src *ProviderEntryHarnessInstallConfig) *ProviderEntryHarnessInstallConfig {
+	return withOptionalConfig(src, func(src *ProviderEntryHarnessInstallConfig) *ProviderEntryHarnessInstallConfig {
 		dst := *src
 		dst.Commands = slices.Clone(src.Commands)
 		for i := range dst.Commands {
@@ -1424,13 +1424,13 @@ func (e *ProviderEntry) RuntimePlacementConfig() *RuntimePlacementConfig {
 }
 
 func cloneProviderEgressConfig(src *ProviderEgressConfig) *ProviderEgressConfig {
-	return cloneOptionalConfig(src, func(src *ProviderEgressConfig) *ProviderEgressConfig {
+	return withOptionalConfig(src, func(src *ProviderEgressConfig) *ProviderEgressConfig {
 		return &ProviderEgressConfig{AllowedHosts: slices.Clone(src.AllowedHosts)}
 	})
 }
 
 func cloneRuntimePlacementConfig(src *RuntimePlacementConfig) *RuntimePlacementConfig {
-	return cloneOptionalConfig(src, func(src *RuntimePlacementConfig) *RuntimePlacementConfig {
+	return withOptionalConfig(src, func(src *RuntimePlacementConfig) *RuntimePlacementConfig {
 		return &RuntimePlacementConfig{
 			Provider:      src.Provider,
 			Template:      src.Template,
@@ -1444,7 +1444,7 @@ func cloneRuntimePlacementConfig(src *RuntimePlacementConfig) *RuntimePlacementC
 }
 
 func cloneRuntimePlacementImagePullAuth(src *RuntimePlacementImagePullAuth) *RuntimePlacementImagePullAuth {
-	return cloneOptionalConfig(src, func(src *RuntimePlacementImagePullAuth) *RuntimePlacementImagePullAuth {
+	return withOptionalConfig(src, func(src *RuntimePlacementImagePullAuth) *RuntimePlacementImagePullAuth {
 		return &RuntimePlacementImagePullAuth{
 			DockerConfigJSON: src.DockerConfigJSON,
 		}
@@ -1452,7 +1452,7 @@ func cloneRuntimePlacementImagePullAuth(src *RuntimePlacementImagePullAuth) *Run
 }
 
 func cloneRuntimePlacementPoolConfig(src *RuntimePlacementPoolConfig) *RuntimePlacementPoolConfig {
-	return cloneOptionalConfig(src, func(src *RuntimePlacementPoolConfig) *RuntimePlacementPoolConfig {
+	return withOptionalConfig(src, func(src *RuntimePlacementPoolConfig) *RuntimePlacementPoolConfig {
 		return &RuntimePlacementPoolConfig{
 			MinReadyInstances:   src.MinReadyInstances,
 			MaxReadyInstances:   src.MaxReadyInstances,
@@ -1465,7 +1465,7 @@ func cloneRuntimePlacementPoolConfig(src *RuntimePlacementPoolConfig) *RuntimePl
 }
 
 func cloneRuntimePlacementWorkspaceConfig(src *RuntimePlacementWorkspaceConfig) *RuntimePlacementWorkspaceConfig {
-	return cloneOptionalConfig(src, func(src *RuntimePlacementWorkspaceConfig) *RuntimePlacementWorkspaceConfig {
+	return withOptionalConfig(src, func(src *RuntimePlacementWorkspaceConfig) *RuntimePlacementWorkspaceConfig {
 		return &RuntimePlacementWorkspaceConfig{
 			PrepareTimeout: src.PrepareTimeout,
 			Git:            cloneRuntimePlacementWorkspaceGitConfig(src.Git),
@@ -1474,7 +1474,7 @@ func cloneRuntimePlacementWorkspaceConfig(src *RuntimePlacementWorkspaceConfig) 
 }
 
 func cloneRuntimePlacementWorkspaceGitConfig(src *RuntimePlacementWorkspaceGitConfig) *RuntimePlacementWorkspaceGitConfig {
-	return cloneOptionalConfig(src, func(src *RuntimePlacementWorkspaceGitConfig) *RuntimePlacementWorkspaceGitConfig {
+	return withOptionalConfig(src, func(src *RuntimePlacementWorkspaceGitConfig) *RuntimePlacementWorkspaceGitConfig {
 		return &RuntimePlacementWorkspaceGitConfig{
 			AllowedRepositories: slices.Clone(src.AllowedRepositories),
 		}
@@ -1524,11 +1524,11 @@ func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
 }
 
 func cloneHTTPRequestBody(src *providermanifestv1.HTTPRequestBody) *providermanifestv1.HTTPRequestBody {
-	return cloneOptionalConfig(src, func(src *providermanifestv1.HTTPRequestBody) *providermanifestv1.HTTPRequestBody {
+	return withOptionalConfig(src, func(src *providermanifestv1.HTTPRequestBody) *providermanifestv1.HTTPRequestBody {
 		cloned := *src
 		cloned.Content = maps.Clone(src.Content)
 		for mediaType, value := range cloned.Content {
-			cloned.Content[mediaType] = cloneOptionalConfig(value, func(value *providermanifestv1.HTTPMediaType) *providermanifestv1.HTTPMediaType {
+			cloned.Content[mediaType] = withOptionalConfig(value, func(value *providermanifestv1.HTTPMediaType) *providermanifestv1.HTTPMediaType {
 				copyMediaType := *value
 				return &copyMediaType
 			})
@@ -2452,37 +2452,36 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 }
 
 func ManifestAuthToConnectionAuthDef(auth *providermanifestv1.ProviderAuth) ConnectionAuthDef {
-	if auth == nil {
-		return ConnectionAuthDef{}
-	}
-	out := ConnectionAuthDef{
-		Type:                 auth.Type,
-		AuthorizationURL:     auth.AuthorizationURL,
-		TokenURL:             auth.TokenURL,
-		ClientID:             auth.ClientID,
-		ClientSecret:         auth.ClientSecret,
-		ClientAuth:           auth.ClientAuth,
-		TokenExchange:        auth.TokenExchange,
-		TokenPrefix:          auth.TokenPrefix,
-		Scopes:               slices.Clone(auth.Scopes),
-		ScopeParam:           auth.ScopeParam,
-		ScopeSeparator:       auth.ScopeSeparator,
-		PKCE:                 auth.PKCE,
-		AuthorizationParams:  maps.Clone(auth.AuthorizationParams),
-		TokenParams:          maps.Clone(auth.TokenParams),
-		RefreshParams:        maps.Clone(auth.RefreshParams),
-		AcceptHeader:         auth.AcceptHeader,
-		AccessTokenPath:      auth.AccessTokenPath,
-		TokenMetadata:        slices.Clone(auth.TokenMetadata),
-		TokenExchangeDrivers: slices.Clone(auth.TokenExchangeDrivers),
-		Credentials:          slices.Clone(auth.Credentials),
-		AuthMapping:          CloneAuthMapping(auth.AuthMapping),
-	}
-	return out
+	return withOptionalConfig(auth, func(auth *providermanifestv1.ProviderAuth) ConnectionAuthDef {
+		out := ConnectionAuthDef{
+			Type:                 auth.Type,
+			AuthorizationURL:     auth.AuthorizationURL,
+			TokenURL:             auth.TokenURL,
+			ClientID:             auth.ClientID,
+			ClientSecret:         auth.ClientSecret,
+			ClientAuth:           auth.ClientAuth,
+			TokenExchange:        auth.TokenExchange,
+			TokenPrefix:          auth.TokenPrefix,
+			Scopes:               slices.Clone(auth.Scopes),
+			ScopeParam:           auth.ScopeParam,
+			ScopeSeparator:       auth.ScopeSeparator,
+			PKCE:                 auth.PKCE,
+			AuthorizationParams:  maps.Clone(auth.AuthorizationParams),
+			TokenParams:          maps.Clone(auth.TokenParams),
+			RefreshParams:        maps.Clone(auth.RefreshParams),
+			AcceptHeader:         auth.AcceptHeader,
+			AccessTokenPath:      auth.AccessTokenPath,
+			TokenMetadata:        slices.Clone(auth.TokenMetadata),
+			TokenExchangeDrivers: slices.Clone(auth.TokenExchangeDrivers),
+			Credentials:          slices.Clone(auth.Credentials),
+			AuthMapping:          CloneAuthMapping(auth.AuthMapping),
+		}
+		return out
+	})
 }
 
 func CloneAuthMapping(src *AuthMappingDef) *AuthMappingDef {
-	return cloneOptionalConfig(src, func(src *AuthMappingDef) *AuthMappingDef {
+	return withOptionalConfig(src, func(src *AuthMappingDef) *AuthMappingDef {
 		dst := &AuthMappingDef{}
 		if len(src.Headers) > 0 {
 			dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
@@ -2490,7 +2489,7 @@ func CloneAuthMapping(src *AuthMappingDef) *AuthMappingDef {
 				dst.Headers[name] = cloneAuthValue(value)
 			}
 		}
-		dst.Basic = cloneOptionalConfig(src.Basic, func(basic *BasicAuthMappingDef) *BasicAuthMappingDef {
+		dst.Basic = withOptionalConfig(src.Basic, func(basic *BasicAuthMappingDef) *BasicAuthMappingDef {
 			return &BasicAuthMappingDef{
 				Username: cloneAuthValue(basic.Username),
 				Password: cloneAuthValue(basic.Password),
@@ -2791,13 +2790,12 @@ func overlayRemoteEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject 
 }
 
 func documentValueNode(node *yaml.Node) *yaml.Node {
-	if node == nil {
-		return nil
-	}
-	if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
-		return node.Content[0]
-	}
-	return node
+	return withOptionalConfig(node, func(node *yaml.Node) *yaml.Node {
+		if node.Kind == yaml.DocumentNode && len(node.Content) == 1 {
+			return node.Content[0]
+		}
+		return node
+	})
 }
 
 func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
@@ -4171,10 +4169,11 @@ func NodeToMap(node yaml.Node) (map[string]any, error) {
 	return out, nil
 }
 
-// cloneOptionalConfig preserves absence before cloning configuration values.
-func cloneOptionalConfig[T any](src *T, clone func(*T) *T) *T {
+// withOptionalConfig returns the zero value for absent configuration.
+func withOptionalConfig[Input, Output any](src *Input, use func(*Input) Output) Output {
 	if src == nil {
-		return nil
+		var zero Output
+		return zero
 	}
-	return clone(src)
+	return use(src)
 }

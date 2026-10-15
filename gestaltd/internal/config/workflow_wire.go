@@ -67,10 +67,9 @@ func WorkflowStepsToCore(steps []WorkflowStepConfig) coreworkflow.Target {
 
 // WorkflowTargetToCore converts config target form into core workflow target form.
 func WorkflowTargetToCore(target *WorkflowTargetConfig) coreworkflow.Target {
-	if target == nil {
-		return coreworkflow.Target{}
-	}
-	return WorkflowStepsToCore(target.Steps)
+	return withOptionalConfig(target, func(target *WorkflowTargetConfig) coreworkflow.Target {
+		return WorkflowStepsToCore(target.Steps)
+	})
 }
 
 func workflowStepsToCore(steps []WorkflowStepConfig) []coreworkflow.Step {
@@ -100,82 +99,78 @@ func workflowStepsToCore(steps []WorkflowStepConfig) []coreworkflow.Step {
 }
 
 func workflowAppCallToCore(app *WorkflowStepAppCallConfig) *coreworkflow.AppCall {
-	if app == nil {
-		return nil
-	}
-	return &coreworkflow.AppCall{
-		Name:           strings.TrimSpace(app.Name),
-		Operation:      strings.TrimSpace(app.Operation),
-		Connection:     strings.TrimSpace(app.Connection),
-		Instance:       strings.TrimSpace(app.Instance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(app.CredentialMode)),
-		Input:          WorkflowValueToCore(app.Input),
-	}
+	return withOptionalConfig(app, func(app *WorkflowStepAppCallConfig) *coreworkflow.AppCall {
+		return &coreworkflow.AppCall{
+			Name:           strings.TrimSpace(app.Name),
+			Operation:      strings.TrimSpace(app.Operation),
+			Connection:     strings.TrimSpace(app.Connection),
+			Instance:       strings.TrimSpace(app.Instance),
+			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(app.CredentialMode)),
+			Input:          WorkflowValueToCore(app.Input),
+		}
+	})
 }
 
 func workflowAgentTurnToCore(agent *WorkflowStepAgentConfig) *coreworkflow.AgentTurn {
-	if agent == nil {
-		return nil
-	}
-	messages := make([]coreworkflow.AgentMessage, 0, len(agent.Messages))
-	for _, message := range agent.Messages {
-		messages = append(messages, coreworkflow.AgentMessage{
-			Role:     strings.TrimSpace(message.Role),
-			Text:     coreworkflow.Text{Template: strings.TrimSpace(message.Text.Template)},
-			Metadata: maps.Clone(message.Metadata),
-		})
-	}
-	tools := make([]coreagent.ToolRef, 0, len(agent.Tools))
-	for i := range agent.Tools {
-		tool := &agent.Tools[i]
-		tools = append(tools, coreagent.ToolRef{
-			System:         strings.TrimSpace(tool.System),
-			App:            strings.TrimSpace(tool.App),
-			Operation:      strings.TrimSpace(tool.Operation),
-			Connection:     strings.TrimSpace(tool.Connection),
-			Instance:       strings.TrimSpace(tool.Instance),
-			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(tool.CredentialMode)),
-			Title:          strings.TrimSpace(tool.Title),
-			Description:    strings.TrimSpace(tool.Description),
-		})
-	}
-	return &coreworkflow.AgentTurn{
-		ProviderName: strings.TrimSpace(agent.Provider),
-		Model:        strings.TrimSpace(agent.Model),
-		SessionKey:   strings.TrimSpace(agent.SessionKey),
-		Prompt:       coreworkflow.Text{Template: strings.TrimSpace(agent.Prompt.Template)},
-		Messages:     messages,
-		ToolRefs:     tools,
-		Output:       WorkflowAgentOutputToCore(agent.Output),
-		ModelOptions: maps.Clone(agent.ModelOptions),
-	}
+	return withOptionalConfig(agent, func(agent *WorkflowStepAgentConfig) *coreworkflow.AgentTurn {
+		messages := make([]coreworkflow.AgentMessage, 0, len(agent.Messages))
+		for _, message := range agent.Messages {
+			messages = append(messages, coreworkflow.AgentMessage{
+				Role:     strings.TrimSpace(message.Role),
+				Text:     coreworkflow.Text{Template: strings.TrimSpace(message.Text.Template)},
+				Metadata: maps.Clone(message.Metadata),
+			})
+		}
+		tools := make([]coreagent.ToolRef, 0, len(agent.Tools))
+		for i := range agent.Tools {
+			tool := &agent.Tools[i]
+			tools = append(tools, coreagent.ToolRef{
+				System:         strings.TrimSpace(tool.System),
+				App:            strings.TrimSpace(tool.App),
+				Operation:      strings.TrimSpace(tool.Operation),
+				Connection:     strings.TrimSpace(tool.Connection),
+				Instance:       strings.TrimSpace(tool.Instance),
+				CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(tool.CredentialMode)),
+				Title:          strings.TrimSpace(tool.Title),
+				Description:    strings.TrimSpace(tool.Description),
+			})
+		}
+		return &coreworkflow.AgentTurn{
+			ProviderName: strings.TrimSpace(agent.Provider),
+			Model:        strings.TrimSpace(agent.Model),
+			SessionKey:   strings.TrimSpace(agent.SessionKey),
+			Prompt:       coreworkflow.Text{Template: strings.TrimSpace(agent.Prompt.Template)},
+			Messages:     messages,
+			ToolRefs:     tools,
+			Output:       WorkflowAgentOutputToCore(agent.Output),
+			ModelOptions: maps.Clone(agent.ModelOptions),
+		}
+	})
 }
 
 func WorkflowAgentOutputToCore(output *WorkflowAgentOutputConfig) coreagent.Output {
-	if output == nil {
-		return coreagent.Output{}
-	}
-	if output.Structured != nil {
-		return coreagent.Output{
-			Structured: &coreagent.StructuredOutput{
-				Schema: maps.Clone(output.Structured.Schema),
-			},
+	return withOptionalConfig(output, func(output *WorkflowAgentOutputConfig) coreagent.Output {
+		if output.Structured != nil {
+			return coreagent.Output{
+				Structured: &coreagent.StructuredOutput{
+					Schema: maps.Clone(output.Structured.Schema),
+				},
+			}
 		}
-	}
-	if output.Text != nil {
-		return coreagent.Output{Text: &coreagent.TextOutput{}}
-	}
-	return coreagent.Output{}
+		if output.Text != nil {
+			return coreagent.Output{Text: &coreagent.TextOutput{}}
+		}
+		return coreagent.Output{}
+	})
 }
 
 // WorkflowStepWhenToCore converts config YAML step-when form into core workflow form.
 func WorkflowStepWhenToCore(when *WorkflowStepWhenConfig) *coreworkflow.StepWhen {
-	if when == nil {
-		return nil
-	}
-	return &coreworkflow.StepWhen{
-		Value:     WorkflowValueToCore(when.Value),
-		Equals:    when.Equals,
-		EqualsSet: when.EqualsSet(),
-	}
+	return withOptionalConfig(when, func(when *WorkflowStepWhenConfig) *coreworkflow.StepWhen {
+		return &coreworkflow.StepWhen{
+			Value:     WorkflowValueToCore(when.Value),
+			Equals:    when.Equals,
+			EqualsSet: when.EqualsSet(),
+		}
+	})
 }
