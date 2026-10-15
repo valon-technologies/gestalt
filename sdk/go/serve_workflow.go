@@ -298,17 +298,15 @@ func deliverWorkflowProviderEventRequestFromProto(req *proto.DeliverWorkflowProv
 }
 
 func workflowRunInputToProto(input *WorkflowRun) (*proto.WorkflowRun, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowRunToProto(*input)
+	return convertProtoMessageErr(input, func(input *WorkflowRun) (*proto.WorkflowRun, error) {
+		return workflowRunToProto(*input)
+	})
 }
 
 func workflowDefinitionInputToProto(input *WorkflowDefinition) (*proto.WorkflowDefinition, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowDefinitionToProto(*input)
+	return convertProtoMessageErr(input, func(input *WorkflowDefinition) (*proto.WorkflowDefinition, error) {
+		return workflowDefinitionToProto(*input)
+	})
 }
 
 func workflowDefinitionInputsToProto(values []WorkflowDefinition) ([]*proto.WorkflowDefinition, error) {
@@ -357,28 +355,26 @@ func workflowRunEventsToProto(values []WorkflowRunEvent) ([]*proto.WorkflowRunEv
 }
 
 func workflowSignalInputToProto(input *WorkflowSignal) (*proto.WorkflowSignal, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowSignalToProto(*input)
+	return convertProtoMessageErr(input, func(input *WorkflowSignal) (*proto.WorkflowSignal, error) {
+		return workflowSignalToProto(*input)
+	})
 }
 
 func signalWorkflowRunResponseToProto(resp *SignalWorkflowRunResponse) (*proto.SignalWorkflowRunResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	run, err := workflowRunInputToProto(resp.Run)
-	if err != nil {
-		return nil, err
-	}
-	signal, err := workflowSignalInputToProto(resp.Signal)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.SignalWorkflowRunResponse{
-		Run:         run,
-		Signal:      signal,
-		StartedRun:  resp.StartedRun,
-		WorkflowKey: resp.WorkflowKey,
-	}, nil
+	return convertProtoMessageErr(resp, func(resp *SignalWorkflowRunResponse) (*proto.SignalWorkflowRunResponse, error) {
+		run, err := workflowRunInputToProto(resp.Run)
+		if err != nil {
+			return nil, err
+		}
+		signal, err := workflowSignalInputToProto(resp.Signal)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.SignalWorkflowRunResponse{
+			Run:         run,
+			Signal:      signal,
+			StartedRun:  resp.StartedRun,
+			WorkflowKey: resp.WorkflowKey,
+		}, nil
+	})
 }
