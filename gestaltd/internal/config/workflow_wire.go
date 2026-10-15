@@ -12,30 +12,23 @@ import (
 
 // WorkflowValueToCore converts config YAML value form into core workflow value form.
 func WorkflowValueToCore(value WorkflowValueConfig) coreworkflow.Value {
-	out := coreworkflow.Value{
+	return coreworkflow.Value{
 		Literal:    value.Literal,
 		LiteralSet: value.LiteralSet,
 		Object:     workflowValueMapToCore(value.Object),
 		Array:      workflowValueArrayToCore(value.Array),
 		Input:      strings.TrimSpace(value.Input),
 		Signal:     strings.TrimSpace(value.Signal),
+		Template: withOptionalConfig(value.Template, func(template *WorkflowTextConfig) *coreworkflow.Text {
+			return &coreworkflow.Text{Template: strings.TrimSpace(template.Template)}
+		}),
+		StepOutput: withOptionalConfig(value.StepOutput, func(output *WorkflowStepOutputSourceConfig) *coreworkflow.StepOutputSource {
+			return &coreworkflow.StepOutputSource{StepID: strings.TrimSpace(output.StepID), Path: strings.TrimSpace(output.Path)}
+		}),
+		StepInput: withOptionalConfig(value.StepInput, func(input *WorkflowStepInputSourceConfig) *coreworkflow.StepInputSource {
+			return &coreworkflow.StepInputSource{StepID: strings.TrimSpace(input.StepID), Path: strings.TrimSpace(input.Path)}
+		}),
 	}
-	if value.Template != nil {
-		out.Template = &coreworkflow.Text{Template: strings.TrimSpace(value.Template.Template)}
-	}
-	if value.StepOutput != nil {
-		out.StepOutput = &coreworkflow.StepOutputSource{
-			StepID: strings.TrimSpace(value.StepOutput.StepID),
-			Path:   strings.TrimSpace(value.StepOutput.Path),
-		}
-	}
-	if value.StepInput != nil {
-		out.StepInput = &coreworkflow.StepInputSource{
-			StepID: strings.TrimSpace(value.StepInput.StepID),
-			Path:   strings.TrimSpace(value.StepInput.Path),
-		}
-	}
-	return out
 }
 
 func workflowValueMapToCore(values map[string]WorkflowValueConfig) map[string]coreworkflow.Value {
@@ -157,10 +150,9 @@ func WorkflowAgentOutputToCore(output *WorkflowAgentOutputConfig) coreagent.Outp
 				},
 			}
 		}
-		if output.Text != nil {
+		return withOptionalConfig(output.Text, func(_ *WorkflowAgentTextOutputConfig) coreagent.Output {
 			return coreagent.Output{Text: &coreagent.TextOutput{}}
-		}
-		return coreagent.Output{}
+		})
 	})
 }
 

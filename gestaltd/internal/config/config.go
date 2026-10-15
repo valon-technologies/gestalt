@@ -775,10 +775,9 @@ func (c *RuntimePlacementConfig) LifecyclePolicy() (RuntimePlacementLifecyclePol
 
 func (c *RuntimePlacementConfig) lifecyclePolicyConfig() RuntimePlacementPoolConfig {
 	return withOptionalConfig(c, func(c *RuntimePlacementConfig) RuntimePlacementPoolConfig {
-		if c.Pool != nil {
-			return *c.Pool
-		}
-		return RuntimePlacementPoolConfig{}
+		return withOptionalConfig(c.Pool, func(pool *RuntimePlacementPoolConfig) RuntimePlacementPoolConfig {
+			return *pool
+		})
 	})
 }
 
@@ -1398,10 +1397,9 @@ func trimStringSlice(values []string) []string {
 
 func (e *ProviderEntry) EffectiveAllowedHosts() []string {
 	return withOptionalConfig(e, func(e *ProviderEntry) []string {
-		if e.Egress != nil {
-			return slices.Clone(e.Egress.AllowedHosts)
-		}
-		return nil
+		return withOptionalConfig(e.Egress, func(egress *ProviderEgressConfig) []string {
+			return slices.Clone(egress.AllowedHosts)
+		})
 	})
 }
 
@@ -1796,11 +1794,9 @@ func (e *ProviderEntry) DeclaresMCP() bool {
 		if e.MCP {
 			return true
 		}
-		spec := e.ManifestSpec()
-		if spec == nil {
-			return false
-		}
-		return spec.MCP
+		return withOptionalConfig(e.ManifestSpec(), func(spec *providermanifestv1.Spec) bool {
+			return spec.MCP
+		})
 	})
 }
 
