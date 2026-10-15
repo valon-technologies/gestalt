@@ -111,30 +111,18 @@ func (r *renderer) useInvoke(name string) {
 func (r *renderer) typeRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
 	if r.publicClient && r.shared[name] {
-		if r.features.crossShared[base] == nil {
-			r.features.crossShared[base] = map[string]bool{}
-		}
-		r.features.crossShared[base][name] = true
-		return name
+		return recordReference(r.features.crossShared, base, name)
 	}
 	if r.kind == modulePublic && base == r.base {
 		return name
 	}
-	if r.features.crossPublic[base] == nil {
-		r.features.crossPublic[base] = map[string]bool{}
-	}
-	r.features.crossPublic[base][name] = true
-	return name
+	return recordReference(r.features.crossPublic, base, name)
 }
 
 // hostRef records an import of a helper from the shared crate-private
 // host-service transport module and returns the name unchanged.
 func (r *renderer) hostRef(name string) string {
-	if r.features.crossCodec["host_service"] == nil {
-		r.features.crossCodec["host_service"] = map[string]bool{}
-	}
-	r.features.crossCodec["host_service"][name] = true
-	return name
+	return recordReference(r.features.crossCodec, "host_service", name)
 }
 
 // convRef records an import of a converter from protoFile's codec module and
@@ -143,19 +131,19 @@ func (r *renderer) hostRef(name string) string {
 func (r *renderer) convRef(protoFile, name string) string {
 	base := r.publicBase(protoFile)
 	if r.publicClient && r.sharedCodec[name] {
-		if r.features.crossSharedCodec[base] == nil {
-			r.features.crossSharedCodec[base] = map[string]bool{}
-		}
-		r.features.crossSharedCodec[base][name] = true
-		return name
+		return recordReference(r.features.crossSharedCodec, base, name)
 	}
 	if r.kind == moduleCodec && base == r.base {
 		return name
 	}
-	if r.features.crossCodec[base] == nil {
-		r.features.crossCodec[base] = map[string]bool{}
+	return recordReference(r.features.crossCodec, base, name)
+}
+
+func recordReference(imports map[string]map[string]bool, base, name string) string {
+	if imports[base] == nil {
+		imports[base] = map[string]bool{}
 	}
-	r.features.crossCodec[base][name] = true
+	imports[base][name] = true
 	return name
 }
 
