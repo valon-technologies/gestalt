@@ -159,9 +159,6 @@ func runtimeLifecycleToProto(lifecycle RuntimeSessionLifecycle) *proto.RuntimeSe
 }
 
 func startRuntimeSessionRequestFromProto(req *proto.StartRuntimeSessionRequest) StartRuntimeSessionRequest {
-	if req == nil {
-		return StartRuntimeSessionRequest{}
-	}
 	var pullAuth *RuntimeImagePullAuth
 	if auth := req.GetImagePullAuth(); auth != nil {
 		pullAuth = &RuntimeImagePullAuth{DockerConfigJSON: auth.GetDockerConfigJson()}
@@ -176,9 +173,6 @@ func startRuntimeSessionRequestFromProto(req *proto.StartRuntimeSessionRequest) 
 }
 
 func startHostedAppRequestFromProto(req *proto.StartHostedAppRequest) StartHostedAppRequest {
-	if req == nil {
-		return StartHostedAppRequest{}
-	}
 	return StartHostedAppRequest{
 		SessionID:     req.GetSessionId(),
 		AppName:       req.GetAppName(),
@@ -220,9 +214,6 @@ func listRuntimeSessionsRequestFromProto(req *proto.ListRuntimeSessionsRequest) 
 }
 
 func prepareRuntimeWorkspaceRequestFromProto(req *proto.PrepareRuntimeWorkspaceRequest) PrepareRuntimeWorkspaceRequest {
-	if req == nil {
-		return PrepareRuntimeWorkspaceRequest{}
-	}
 	return PrepareRuntimeWorkspaceRequest{
 		SessionID:      req.GetSessionId(),
 		AgentSessionID: req.GetAgentSessionId(),
@@ -231,9 +222,6 @@ func prepareRuntimeWorkspaceRequestFromProto(req *proto.PrepareRuntimeWorkspaceR
 }
 
 func removeRuntimeWorkspaceRequestFromProto(req *proto.RemoveRuntimeWorkspaceRequest) RemoveRuntimeWorkspaceRequest {
-	if req == nil {
-		return RemoveRuntimeWorkspaceRequest{}
-	}
 	return RemoveRuntimeWorkspaceRequest{
 		SessionID:      req.GetSessionId(),
 		AgentSessionID: req.GetAgentSessionId(),
