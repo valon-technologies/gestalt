@@ -1687,7 +1687,7 @@ func (e *ProviderEntry) HasGitSource() bool {
 // SourceTreeURL is the GitHub website tree for this app's checkout identity.
 // Empty when the app has no GitHub git source.
 func (e *ProviderEntry) SourceTreeURL() string {
-	if e == nil || !e.HasGitSource() {
+	if !e.HasGitSource() {
 		return ""
 	}
 	git := e.Source.GitSource()
@@ -2736,7 +2736,7 @@ func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
 	providersNode := mappingValueNode(documentValueNode(&root), "providers")
 	appsNode := mappingValueNode(doc, "apps")
 	for name, entry := range cfg.Apps {
-		if entry == nil || !entry.HasRemoteSource() {
+		if !entry.HasRemoteSource() {
 			continue
 		}
 		if err := overlayRemoteEntryConfigNode(mappingValueNode(appsNode, name), entry, "app "+strconv.Quote(name)); err != nil {
@@ -2760,7 +2760,7 @@ func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
 	} {
 		kindNode := mappingValueNode(providersNode, string(collection.kind))
 		for name, entry := range collection.entries {
-			if entry == nil || !entry.HasRemoteSource() {
+			if !entry.HasRemoteSource() {
 				continue
 			}
 			subject := fmt.Sprintf("%s %q", collection.kind, name)
@@ -2771,7 +2771,7 @@ func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
 	}
 	s3Node := mappingValueNode(providersNode, "s3")
 	for name, entry := range cfg.Providers.S3 {
-		if entry == nil || !entry.HasRemoteSource() {
+		if !entry.HasRemoteSource() {
 			continue
 		}
 		if err := overlayRemoteEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
@@ -2794,7 +2794,7 @@ const (
 )
 
 func overlayRemoteEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject string) error {
-	if entry == nil || !entry.HasRemoteSource() || raw == nil {
+	if !entry.HasRemoteSource() || raw == nil {
 		return nil
 	}
 	configNode := mappingValueNode(raw, "config")

@@ -608,7 +608,7 @@ func (b *Broker) InvokeStream(ctx context.Context, p *principal.Principal, provi
 	// Verify the catalog declares this operation as streaming before
 	// dispatching; a unary operation on a provider that also implements
 	// StreamingExecutor should not be sent down the streaming path.
-	if opMeta.Response == nil || !opMeta.Response.IsStream() {
+	if !opMeta.Response.IsStream() {
 		return fail(fmt.Errorf("%w: %s.%s is not a streaming operation", ErrStreamingUnsupported, providerName, opMeta.ID))
 	}
 	streamExec, ok := prov.(core.StreamingExecutor)

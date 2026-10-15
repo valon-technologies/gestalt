@@ -129,7 +129,7 @@ func materializedCacheRequestsForLocalSourceProviders(paths lifecyclePaths, kind
 	var requests []materializedCacheRequest
 	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		entry := entries[name]
-		if entry == nil || !entry.HasLocalSource() {
+		if !entry.HasLocalSource() {
 			continue
 		}
 		dest := destDir(name)
