@@ -354,7 +354,7 @@ func agentProviderCapabilitiesToProto(value *AgentProviderCapabilities) *proto.A
 }
 
 func agentOutputFromProto(value *proto.AgentOutput) *AgentOutput {
-	if value == nil || value.GetKind() == nil {
+	if value.GetKind() == nil {
 		return nil
 	}
 	if value.GetText() != nil {
