@@ -128,25 +128,20 @@ func InspectPackageIn(packagePath string, names []string) (_ *providermanifestv1
 }
 
 func ReadManifestFile(p string) ([]byte, *providermanifestv1.Manifest, error) {
-	data, err := os.ReadFile(p)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read manifest %q: %w", p, err)
-	}
-	format := ManifestFormatFromPath(p)
-	manifest, err := DecodeManifestFormat(data, format)
-	if err != nil {
-		return nil, nil, err
-	}
-	return data, manifest, nil
+	return readManifestFile(p, false)
 }
 
 func ReadSourceManifestFile(p string) ([]byte, *providermanifestv1.Manifest, error) {
+	return readManifestFile(p, true)
+}
+
+func readManifestFile(p string, sourceMode bool) ([]byte, *providermanifestv1.Manifest, error) {
 	data, err := os.ReadFile(p)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read manifest %q: %w", p, err)
 	}
 	format := ManifestFormatFromPath(p)
-	manifest, err := DecodeSourceManifestFormat(data, format)
+	manifest, err := decodeManifest(data, format, sourceMode)
 	if err != nil {
 		return nil, nil, err
 	}
