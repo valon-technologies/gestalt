@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -59,14 +60,7 @@ func (r *runtimeRegistry) SnapshotRuntimes(ctx context.Context) ([]RuntimeProvid
 	r.mu.Unlock()
 
 	slices.SortFunc(items, func(a, b item) int {
-		switch {
-		case a.name < b.name:
-			return -1
-		case a.name > b.name:
-			return 1
-		default:
-			return 0
-		}
+		return cmp.Compare(a.name, b.name)
 	})
 
 	out := make([]RuntimeProviderSnapshot, 0, len(items))

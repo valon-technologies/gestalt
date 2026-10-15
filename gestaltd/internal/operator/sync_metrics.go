@@ -377,18 +377,12 @@ func (r *SyncMetricsRecorder) RecordArchiveFetch(event syncArchiveMetricsEvent) 
 	}
 	r.fetches = append(r.fetches, fetch)
 	slices.SortFunc(r.fetches, func(a, b SyncMetricsArchiveFetch) int {
-		switch {
-		case a.DurationSeconds > b.DurationSeconds:
-			return -1
-		case a.DurationSeconds < b.DurationSeconds:
-			return 1
-		default:
-			return cmp.Or(
-				cmp.Compare(a.Subject, b.Subject),
-				cmp.Compare(a.SourceKind, b.SourceKind),
-				cmp.Compare(a.SHA256, b.SHA256),
-			)
-		}
+		return cmp.Or(
+			compareDescendingSeconds(a.DurationSeconds, b.DurationSeconds),
+			cmp.Compare(a.Subject, b.Subject),
+			cmp.Compare(a.SourceKind, b.SourceKind),
+			cmp.Compare(a.SHA256, b.SHA256),
+		)
 	})
 }
 
@@ -643,18 +637,25 @@ func dedupePreparedArtifactRoots(roots []PreparedArtifactRoot) []PreparedArtifac
 
 func sortArtifactRecords(records []SyncMetricsArtifactRecord) {
 	slices.SortFunc(records, func(a, b SyncMetricsArtifactRecord) int {
-		switch {
-		case a.DurationSeconds > b.DurationSeconds:
-			return -1
-		case a.DurationSeconds < b.DurationSeconds:
-			return 1
-		}
 		return cmp.Or(
+			compareDescendingSeconds(a.DurationSeconds, b.DurationSeconds),
 			cmp.Compare(a.Kind, b.Kind),
 			cmp.Compare(a.Name, b.Name),
 			cmp.Compare(a.Subject, b.Subject),
 		)
 	})
+}
+
+// compareDescendingSeconds preserves unordered (NaN) durations as ties.
+func compareDescendingSeconds(a, b float64) int {
+	switch {
+	case a > b:
+		return -1
+	case a < b:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func sortOutputRoots(roots []SyncMetricsOutputRoot) {
