@@ -65,13 +65,9 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 }
 
 func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetSessionId, "session_id")
 	if err != nil {
 		return nil, err
-	}
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	if err := rejectWorkflowAgentRequest(reqCtx, "get agent sessions"); err != nil {
 		return nil, err
@@ -107,13 +103,9 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 }
 
 func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetSessionId, "session_id")
 	if err != nil {
 		return nil, err
-	}
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	if err := rejectWorkflowAgentRequest(reqCtx, "update agent sessions"); err != nil {
 		return nil, err
@@ -123,13 +115,9 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 }
 
 func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetSessionId, "session_id")
 	if err != nil {
 		return nil, err
-	}
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), req.GetModel()); err != nil {
 		return nil, err
@@ -139,13 +127,9 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 }
 
 func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetTurnId, "turn_id")
 	if err != nil {
 		return nil, err
-	}
-	turnID := strings.TrimSpace(req.GetTurnId())
-	if turnID == "" {
-		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), ""); err != nil {
 		return nil, err
@@ -155,13 +139,9 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 }
 
 func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetSessionId, "session_id")
 	if err != nil {
 		return nil, err
-	}
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if sessionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
@@ -185,13 +165,9 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 }
 
 func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetTurnId, "turn_id")
 	if err != nil {
 		return nil, err
-	}
-	turnID := strings.TrimSpace(req.GetTurnId())
-	if turnID == "" {
-		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), ""); err != nil {
 		return nil, err
@@ -201,13 +177,9 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 }
 
 func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetTurnId, "turn_id")
 	if err != nil {
 		return nil, err
-	}
-	turnID := strings.TrimSpace(req.GetTurnId())
-	if turnID == "" {
-		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	if err := rejectWorkflowAgentRequest(reqCtx, "list agent turn events"); err != nil {
 		return nil, err
@@ -224,13 +196,9 @@ func (s *ProviderServer) GetInteraction(ctx context.Context, req *proto.GetAgent
 }
 
 func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetTurnId, "turn_id")
 	if err != nil {
 		return nil, err
-	}
-	turnID := strings.TrimSpace(req.GetTurnId())
-	if turnID == "" {
-		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	if err := rejectWorkflowAgentRequest(reqCtx, "list agent interactions"); err != nil {
 		return nil, err
@@ -243,13 +211,9 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 }
 
 func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
-	reqCtx, err := agentRequestContext(ctx, s, req)
+	reqCtx, err := agentRequestContextWithID(ctx, s, req, req.GetTurnId, "turn_id")
 	if err != nil {
 		return nil, err
-	}
-	turnID := strings.TrimSpace(req.GetTurnId())
-	if turnID == "" {
-		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
 	interactionID := strings.TrimSpace(req.GetInteractionId())
 	if interactionID == "" {
@@ -284,6 +248,20 @@ func agentRequestContext[R interface {
 	default:
 		return out, status.Errorf(codes.FailedPrecondition, "%s caller context is not supported for agent provider invocation", out.CallerKind())
 	}
+}
+
+func agentRequestContextWithID[R interface {
+	comparable
+	GetContext() *proto.RequestContext
+}](ctx context.Context, s *ProviderServer, req R, getID func() string, field string) (appaccessservice.ProviderRequestContext, error) {
+	reqCtx, err := agentRequestContext(ctx, s, req)
+	if err != nil {
+		return reqCtx, err
+	}
+	if strings.TrimSpace(getID()) == "" {
+		return reqCtx, status.Error(codes.InvalidArgument, field+" is required")
+	}
+	return reqCtx, nil
 }
 
 func (s *ProviderServer) restoreRequestContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {
