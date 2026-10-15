@@ -61,11 +61,7 @@ func (s *GroupService) Get(ctx context.Context, groupID string) (*Group, error) 
 	if s == nil {
 		return nil, fmt.Errorf("get group: service is not configured")
 	}
-	groupID = strings.TrimSpace(groupID)
-	if groupID == "" {
-		return nil, fmt.Errorf("get group: id is required")
-	}
-	return getStoredValue(ctx, s.store, groupID, "get group", recordToGroup)
+	return getRequiredStoredValue(ctx, s.store, groupID, "get group", "id", recordToGroup)
 }
 
 func (s *GroupService) UpsertDisplayName(ctx context.Context, groupID, displayName string) (*Group, error) {

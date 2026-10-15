@@ -39,3 +39,11 @@ func getStoredValues[T any](ctx context.Context, keys []string, get func(context
 	}
 	return out, nil
 }
+
+func getRequiredStoredValue[T any](ctx context.Context, store idb.ObjectStore, key, operation, field string, decode func(idb.Record) *T) (*T, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, fmt.Errorf("%s: %s is required", operation, field)
+	}
+	return getStoredValue(ctx, store, key, operation, decode)
+}
