@@ -95,6 +95,21 @@ func authorizeWorkflowRequest[R interface {
 	return authCtx, p, providerName, nil
 }
 
+func authorizeWorkflowRequestWithID[R interface {
+	workflowProviderAuthRequest
+	comparable
+}](ctx context.Context, s *ProviderServer, req R, action, agentSystemOperation string, getID func() string, field string) (workflowManagerAuthContext, *principal.Principal, string, string, error) {
+	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, action, agentSystemOperation)
+	if err != nil {
+		return workflowManagerAuthContext{}, nil, "", "", err
+	}
+	id := strings.TrimSpace(getID())
+	if id == "" {
+		return workflowManagerAuthContext{}, nil, "", "", status.Errorf(codes.InvalidArgument, "%s is required", field)
+	}
+	return authCtx, p, providerName, id, nil
+}
+
 type workflowManagerAuthContext struct {
 	request appaccessservice.ProviderRequestContext
 	raw     *proto.RequestContext
@@ -182,13 +197,9 @@ func (s *ProviderServer) requireServiceAccountManagement(ctx context.Context, au
 }
 
 func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "GetDefinition", "definitions.get")
+	authCtx, p, providerName, definitionID, err := authorizeWorkflowRequestWithID(ctx, s, req, "GetDefinition", "definitions.get", req.GetDefinitionId, "definition_id")
 	if err != nil {
 		return nil, err
-	}
-	definitionID := strings.TrimSpace(req.GetDefinitionId())
-	if definitionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
 	managed, err := s.manager.GetDefinition(s.managerContext(ctx, authCtx), p, providerName, definitionID)
 	return workflowManagerResponse(managed, err, managedWorkflowDefinitionToProto, "workflow definition")
@@ -215,26 +226,18 @@ func (s *ProviderServer) ListDefinitions(ctx context.Context, req *proto.ListWor
 }
 
 func (s *ProviderServer) SetDefinitionPaused(ctx context.Context, req *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "SetDefinitionPaused", "definitions.setPaused")
+	authCtx, p, providerName, definitionID, err := authorizeWorkflowRequestWithID(ctx, s, req, "SetDefinitionPaused", "definitions.setPaused", req.GetDefinitionId, "definition_id")
 	if err != nil {
 		return nil, err
-	}
-	definitionID := strings.TrimSpace(req.GetDefinitionId())
-	if definitionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
 	managed, err := s.manager.SetDefinitionPaused(s.managerContext(ctx, authCtx), p, providerName, definitionID, req.GetPaused())
 	return workflowManagerResponse(managed, err, managedWorkflowDefinitionToProto, "workflow definition")
 }
 
 func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "SetActivationPaused", "definitions.setActivationPaused")
+	authCtx, p, providerName, definitionID, err := authorizeWorkflowRequestWithID(ctx, s, req, "SetActivationPaused", "definitions.setActivationPaused", req.GetDefinitionId, "definition_id")
 	if err != nil {
 		return nil, err
-	}
-	definitionID := strings.TrimSpace(req.GetDefinitionId())
-	if definitionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
 	activationID := strings.TrimSpace(req.GetActivationId())
 	if activationID == "" {
@@ -245,13 +248,9 @@ func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.Set
 }
 
 func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "DeleteDefinition", "definitions.delete")
+	authCtx, p, providerName, definitionID, err := authorizeWorkflowRequestWithID(ctx, s, req, "DeleteDefinition", "definitions.delete", req.GetDefinitionId, "definition_id")
 	if err != nil {
 		return nil, err
-	}
-	definitionID := strings.TrimSpace(req.GetDefinitionId())
-	if definitionID == "" {
-		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
 	if err := s.manager.DeleteDefinition(s.managerContext(ctx, authCtx), p, providerName, definitionID); err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -321,26 +320,18 @@ func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 }
 
 func (s *ProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "GetRun", "runs.get")
+	authCtx, p, providerName, runID, err := authorizeWorkflowRequestWithID(ctx, s, req, "GetRun", "runs.get", req.GetRunId, "run_id")
 	if err != nil {
 		return nil, err
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	managed, err := s.manager.GetRun(s.managerContext(ctx, authCtx), p, providerName, runID)
 	return workflowManagerResponse(managed, err, managedWorkflowRunToProto, "workflow run")
 }
 
 func (s *ProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflowProviderRunEventsRequest) (*proto.GetWorkflowProviderRunEventsResponse, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "GetRunEvents", "runs.getEvents")
+	authCtx, p, providerName, runID, err := authorizeWorkflowRequestWithID(ctx, s, req, "GetRunEvents", "runs.getEvents", req.GetRunId, "run_id")
 	if err != nil {
 		return nil, err
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	out, err := s.manager.GetRunEvents(s.managerContext(ctx, authCtx), p, providerName, runID)
 	if err != nil {
@@ -350,13 +341,9 @@ func (s *ProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflo
 }
 
 func (s *ProviderServer) GetRunOutput(ctx context.Context, req *proto.GetWorkflowProviderRunOutputRequest) (*proto.GetWorkflowProviderRunOutputResponse, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "GetRunOutput", "runs.getOutput")
+	authCtx, p, providerName, runID, err := authorizeWorkflowRequestWithID(ctx, s, req, "GetRunOutput", "runs.getOutput", req.GetRunId, "run_id")
 	if err != nil {
 		return nil, err
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	out, err := s.manager.GetRunOutput(s.managerContext(ctx, authCtx), p, providerName, runID)
 	if err != nil {
@@ -366,26 +353,18 @@ func (s *ProviderServer) GetRunOutput(ctx context.Context, req *proto.GetWorkflo
 }
 
 func (s *ProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "CancelRun", "runs.cancel")
+	authCtx, p, providerName, runID, err := authorizeWorkflowRequestWithID(ctx, s, req, "CancelRun", "runs.cancel", req.GetRunId, "run_id")
 	if err != nil {
 		return nil, err
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	managed, err := s.manager.CancelRun(s.managerContext(ctx, authCtx), p, providerName, runID, req.GetReason())
 	return workflowManagerResponse(managed, err, managedWorkflowRunToProto, "workflow run")
 }
 
 func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
-	authCtx, p, providerName, err := authorizeWorkflowRequest(ctx, s, req, "SignalRun", "runs.signal")
+	authCtx, p, providerName, runID, err := authorizeWorkflowRequestWithID(ctx, s, req, "SignalRun", "runs.signal", req.GetRunId, "run_id")
 	if err != nil {
 		return nil, err
-	}
-	runID := strings.TrimSpace(req.GetRunId())
-	if runID == "" {
-		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	managed, err := s.manager.SignalRun(s.managerContext(ctx, authCtx), p, workflowmanager.RunSignal{
 		ProviderName: providerName,
