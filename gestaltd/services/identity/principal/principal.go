@@ -334,9 +334,6 @@ func PermissionSetFromScopes(scopes []string) PermissionSet {
 		app, op, hasOp := strings.Cut(scope, ":")
 		if hasOp && op != "" {
 			ops := set[app]
-			if ops == nil && set[app] != nil {
-				continue
-			}
 			if ops == nil {
 				ops = map[string]struct{}{}
 				set[app] = ops

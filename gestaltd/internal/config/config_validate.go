@@ -2387,9 +2387,6 @@ func validateWorkflowsConfig(cfg *Config) error {
 }
 
 func validateWorkflowDefinitionTarget(cfg *Config, key string, definition *WorkflowDefinitionConfig) error {
-	if definition == nil {
-		return fmt.Errorf("config validation: workflows.definitions.%s is required", key)
-	}
 	stepsPath := "workflows.definitions." + key + ".steps"
 	if err := normalizeWorkflowSteps(cfg, stepsPath, definition.Steps); err != nil {
 		return err
@@ -2698,9 +2695,6 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 }
 
 func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error {
-	if value == nil {
-		return nil
-	}
 	set := 0
 	if value.LiteralSet {
 		set++

@@ -132,7 +132,7 @@ func NewRemote(ctx context.Context, client proto.AppProviderClient, spec StaticP
 		staticHeaders:       maps.Clone(spec.StaticHeaders),
 		workflowDefinitions: append([]*proto.WorkflowDefinitionSpec(nil), support.workflowDefinitions...),
 	}
-	if base.catalog == nil && support.staticCatalog != nil {
+	if base.catalog == nil {
 		base.catalog = support.staticCatalog
 	}
 	for _, opt := range opts {

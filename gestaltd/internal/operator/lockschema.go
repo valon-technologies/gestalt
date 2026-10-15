@@ -134,9 +134,6 @@ func canonicalLockfile(lock *Lockfile) *Lockfile {
 const legacyProviderUILockMigrationError = "lockfile contains legacy providers.ui entries; migrate to apps.<name>.static and run gestaltd lock"
 
 func validateProviderLockfile(lock *Lockfile) error {
-	if lock == nil {
-		return fmt.Errorf("unsupported lockfile schema; run `gestaltd lock` to upgrade")
-	}
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd lock` to upgrade", lock.Schema)
 	}
