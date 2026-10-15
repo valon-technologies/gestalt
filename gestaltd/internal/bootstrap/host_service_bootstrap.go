@@ -87,8 +87,8 @@ func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
 	if entry == nil {
 		return deps
 	}
-	deps.Caches = scopedCacheBindings(entry.Cache, deps.Caches)
-	deps.S3 = scopedS3Bindings(entry.S3, deps.S3)
+	deps.Caches = scopedHostServiceBindings(entry.Cache, deps.Caches)
+	deps.S3 = scopedHostServiceBindings(entry.S3, deps.S3)
 	return deps
 }
 
@@ -120,37 +120,18 @@ func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool)
 	}, true
 }
 
-func scopedCacheBindings(names []string, bindings map[string]corecache.Cache) map[string]corecache.Cache {
+func scopedHostServiceBindings[T comparable](names []string, bindings map[string]T) map[string]T {
 	if len(names) == 0 || len(bindings) == 0 {
 		return nil
 	}
-	scoped := map[string]corecache.Cache{}
+	var zero T
+	scoped := map[string]T{}
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		if binding := bindings[name]; binding != nil {
-			scoped[name] = binding
-		}
-	}
-	if len(scoped) == 0 {
-		return nil
-	}
-	return scoped
-}
-
-func scopedS3Bindings(names []string, bindings map[string]s3sdk.S3) map[string]s3sdk.S3 {
-	if len(names) == 0 || len(bindings) == 0 {
-		return nil
-	}
-	scoped := map[string]s3sdk.S3{}
-	for _, name := range names {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		if binding := bindings[name]; binding != nil {
+		if binding := bindings[name]; binding != zero {
 			scoped[name] = binding
 		}
 	}
