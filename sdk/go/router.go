@@ -69,7 +69,7 @@ type RequestInput struct {
 func NewRequest(input RequestInput) (Request, error) {
 	req := Request{
 		Token:            input.Token,
-		ConnectionParams: cloneStringMap(input.ConnectionParams),
+		ConnectionParams: cloneMap(input.ConnectionParams),
 		Subject:          input.Subject,
 		AgentSubject:     input.AgentSubject,
 		Credential:       input.Credential,
@@ -129,14 +129,14 @@ func RequestFromContext(ctx context.Context) Request {
 		workflow = reqCtx.GetWorkflow().AsMap()
 	}
 	return Request{
-		ConnectionParams: cloneStringMap(ConnectionParams(ctx)),
+		ConnectionParams: cloneMap(ConnectionParams(ctx)),
 		Subject:          SubjectFromContext(ctx),
 		AgentSubject:     AgentSubjectFromContext(ctx),
 		Credential:       CredentialFromContext(ctx),
 		Access:           AccessFromContext(ctx),
 		Host:             HostContextFromContext(ctx),
 		Caller:           caller,
-		WorkflowContext:  cloneWorkflowContextMap(workflow),
+		WorkflowContext:  cloneMap(workflow),
 		IdempotencyKey:   IdempotencyKeyFromContext(ctx),
 		ToolRefs:         ToolRefsFromContext(ctx),
 		ToolRefsSet:      ToolRefsSetFromContext(ctx),
@@ -259,17 +259,6 @@ func emptyCredential(credential Credential) bool {
 
 func emptyAccess(access Access) bool {
 	return access.Policy == "" && access.Role == ""
-}
-
-func cloneWorkflowContextMap(values map[string]any) map[string]any {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
 }
 
 func emptyRequestContext(reqCtx *proto.RequestContext) bool {

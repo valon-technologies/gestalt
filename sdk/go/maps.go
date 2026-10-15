@@ -2,7 +2,7 @@ package gestalt
 
 import "maps"
 
-func cloneStringMap(values map[string]string) map[string]string {
+func cloneMap[K comparable, V any](values map[K]V) map[K]V {
 	if len(values) == 0 {
 		return nil
 	}
