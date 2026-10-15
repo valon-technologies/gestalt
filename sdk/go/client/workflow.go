@@ -642,11 +642,9 @@ func (c *Workflow) ApplyDefinition(ctx context.Context, provider string, idempot
 
 // ApplyDefinitionRaw is the faithful form of [Workflow.ApplyDefinition].
 func (c *Workflow) ApplyDefinitionRaw(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ApplyWorkflowProviderDefinitionRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.ApplyDefinition(ctx, ToWireApplyWorkflowProviderDefinitionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
@@ -660,11 +658,9 @@ func (c *Workflow) GetDefinition(ctx context.Context, provider string, definitio
 
 // GetDefinitionRaw is the faithful form of [Workflow.GetDefinition].
 func (c *Workflow) GetDefinitionRaw(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetWorkflowProviderDefinitionRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.GetDefinition(ctx, ToWireGetWorkflowProviderDefinitionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
@@ -682,11 +678,9 @@ func (c *Workflow) ListDefinitions(ctx context.Context, provider string) ([]*Wor
 
 // ListDefinitionsRaw is the faithful form of [Workflow.ListDefinitions].
 func (c *Workflow) ListDefinitionsRaw(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*ListWorkflowProviderDefinitionsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ListWorkflowProviderDefinitionsRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.ListDefinitions(ctx, ToWireListWorkflowProviderDefinitionsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireListWorkflowProviderDefinitionsResponse)
 }
@@ -700,11 +694,9 @@ func (c *Workflow) SetDefinitionPaused(ctx context.Context, provider string, def
 
 // SetDefinitionPausedRaw is the faithful form of [Workflow.SetDefinitionPaused].
 func (c *Workflow) SetDefinitionPausedRaw(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*WorkflowDefinition, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *SetWorkflowProviderDefinitionPausedRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.SetDefinitionPaused(ctx, ToWireSetWorkflowProviderDefinitionPausedRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
@@ -718,11 +710,9 @@ func (c *Workflow) SetActivationPaused(ctx context.Context, provider string, def
 
 // SetActivationPausedRaw is the faithful form of [Workflow.SetActivationPaused].
 func (c *Workflow) SetActivationPausedRaw(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*WorkflowDefinition, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *SetWorkflowProviderActivationPausedRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.SetActivationPaused(ctx, ToWireSetWorkflowProviderActivationPausedRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
@@ -735,11 +725,9 @@ func (c *Workflow) DeleteDefinition(ctx context.Context, provider string, defini
 
 // DeleteDefinitionRaw is the faithful form of [Workflow.DeleteDefinition].
 func (c *Workflow) DeleteDefinitionRaw(ctx context.Context, request *DeleteWorkflowProviderDefinitionRequest) error {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *DeleteWorkflowProviderDefinitionRequest, context *RequestContext) {
+		request.Context = context
+	})
 	return discardUnaryResponse(c.client.DeleteDefinition(ctx, ToWireDeleteWorkflowProviderDefinitionRequest(request)))
 }
 
@@ -752,11 +740,7 @@ func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflow
 
 // StartRunRaw is the faithful form of [Workflow.StartRun].
 func (c *Workflow) StartRunRaw(ctx context.Context, request *StartWorkflowProviderRunRequest) (*WorkflowRun, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *StartWorkflowProviderRunRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.StartRun(ctx, ToWireStartWorkflowProviderRunRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
@@ -770,11 +754,7 @@ func (c *Workflow) ListRuns(ctx context.Context, provider string, pageSize int32
 
 // ListRunsRaw is the faithful form of [Workflow.ListRuns].
 func (c *Workflow) ListRunsRaw(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ListWorkflowProviderRunsRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.ListRuns(ctx, ToWireListWorkflowProviderRunsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireListWorkflowProviderRunsResponse)
 }
@@ -788,11 +768,7 @@ func (c *Workflow) GetRun(ctx context.Context, provider string, runId string) (*
 
 // GetRunRaw is the faithful form of [Workflow.GetRun].
 func (c *Workflow) GetRunRaw(ctx context.Context, request *GetWorkflowProviderRunRequest) (*WorkflowRun, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetWorkflowProviderRunRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetRun(ctx, ToWireGetWorkflowProviderRunRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
@@ -810,11 +786,7 @@ func (c *Workflow) GetRunEvents(ctx context.Context, provider string, runId stri
 
 // GetRunEventsRaw is the faithful form of [Workflow.GetRunEvents].
 func (c *Workflow) GetRunEventsRaw(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*GetWorkflowProviderRunEventsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetWorkflowProviderRunEventsRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetRunEvents(ctx, ToWireGetWorkflowProviderRunEventsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireGetWorkflowProviderRunEventsResponse)
 }
@@ -832,11 +804,7 @@ func (c *Workflow) GetRunOutput(ctx context.Context, provider string, runId stri
 
 // GetRunOutputRaw is the faithful form of [Workflow.GetRunOutput].
 func (c *Workflow) GetRunOutputRaw(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*GetWorkflowProviderRunOutputResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetWorkflowProviderRunOutputRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetRunOutput(ctx, ToWireGetWorkflowProviderRunOutputRequest(request))
 	return decodeUnaryResponse(response, err, FromWireGetWorkflowProviderRunOutputResponse)
 }
@@ -850,11 +818,7 @@ func (c *Workflow) CancelRun(ctx context.Context, provider string, runId string,
 
 // CancelRunRaw is the faithful form of [Workflow.CancelRun].
 func (c *Workflow) CancelRunRaw(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*WorkflowRun, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *CancelWorkflowProviderRunRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.CancelRun(ctx, ToWireCancelWorkflowProviderRunRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
@@ -868,11 +832,7 @@ func (c *Workflow) SignalRun(ctx context.Context, provider string, runId string,
 
 // SignalRunRaw is the faithful form of [Workflow.SignalRun].
 func (c *Workflow) SignalRunRaw(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *SignalWorkflowProviderRunRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.SignalRun(ctx, ToWireSignalWorkflowProviderRunRequest(request))
 	return decodeUnaryResponse(response, err, FromWireSignalWorkflowRunResponse)
 }
@@ -886,11 +846,9 @@ func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, ide
 
 // SignalOrStartRunRaw is the faithful form of [Workflow.SignalOrStartRun].
 func (c *Workflow) SignalOrStartRunRaw(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *SignalOrStartWorkflowProviderRunRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.SignalOrStartRun(ctx, ToWireSignalOrStartWorkflowProviderRunRequest(request))
 	return decodeUnaryResponse(response, err, FromWireSignalWorkflowRunResponse)
 }
@@ -904,11 +862,7 @@ func (c *Workflow) DeliverEvent(ctx context.Context, provider string, event *Wor
 
 // DeliverEventRaw is the faithful form of [Workflow.DeliverEvent].
 func (c *Workflow) DeliverEventRaw(ctx context.Context, request *DeliverWorkflowProviderEventRequest) (*WorkflowEvent, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *DeliverWorkflowProviderEventRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.DeliverEvent(ctx, ToWireDeliverWorkflowProviderEventRequest(request))
 	return decodeUnaryResponse(response, err, FromWireWorkflowEvent)
 }
