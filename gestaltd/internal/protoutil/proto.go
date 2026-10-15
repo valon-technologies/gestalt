@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -31,27 +32,17 @@ func MapFromStruct(s *structpb.Struct) map[string]any {
 }
 
 func StringSlicesToProto[V ~map[string][]string](values V) map[string]*proto.StringList {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]*proto.StringList, len(values))
-	for key, item := range values {
+	return maputil.ConvertNonEmpty(values, func(item []string) *proto.StringList {
 		copied := make([]string, len(item))
 		copy(copied, item)
-		out[key] = &proto.StringList{Values: copied}
-	}
-	return out
+		return &proto.StringList{Values: copied}
+	})
 }
 
 func StringListsFromProto[V ~map[string]*proto.StringList](values V) map[string][]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string][]string, len(values))
-	for key, value := range values {
-		out[key] = append([]string(nil), value.GetValues()...)
-	}
-	return out
+	return maputil.ConvertNonEmpty(values, func(value *proto.StringList) []string {
+		return append([]string(nil), value.GetValues()...)
+	})
 }
 
 func ValueToAny(v *structpb.Value) any {
