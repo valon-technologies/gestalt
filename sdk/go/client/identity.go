@@ -189,15 +189,7 @@ var connectIdentityConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectIdentity(ctx context.Context, name string) (*Identity, error) {
-	target, token, err := host.Target("identity")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectIdentityConns.Conn(ctx, "identity", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewIdentity(conn), nil
+	return connectService(ctx, "identity", name, &connectIdentityConns, NewIdentity)
 }
 
 // Authorize is the ergonomic form of [Identity.AuthorizeRaw].

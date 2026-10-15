@@ -576,15 +576,7 @@ var connectAgentConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectAgent(ctx context.Context, name string, opts ...ClientOption) (*Agent, error) {
-	target, token, err := host.Target("agent")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectAgentConns.Conn(ctx, "agent", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewAgent(conn, opts...), nil
+	return connectService(ctx, "agent", name, &connectAgentConns, func(conn grpc.ClientConnInterface) *Agent { return NewAgent(conn, opts...) })
 }
 
 // AgentCreateSessionOptions carries the optional parameters of [Agent.CreateSession].

@@ -381,15 +381,7 @@ var connectAuthorizationConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectAuthorization(ctx context.Context, name string) (*Authorization, error) {
-	target, token, err := host.Target("authorization")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectAuthorizationConns.Conn(ctx, "authorization", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewAuthorization(conn), nil
+	return connectService(ctx, "authorization", name, &connectAuthorizationConns, NewAuthorization)
 }
 
 // CheckAccess is the ergonomic form of [Authorization.CheckAccessRaw].

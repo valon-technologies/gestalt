@@ -824,15 +824,7 @@ var connectIndexedDBConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectIndexedDB(ctx context.Context, name string) (*IndexedDB, error) {
-	target, token, err := host.Target("indexeddb")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectIndexedDBConns.Conn(ctx, "indexeddb", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewIndexedDB(conn), nil
+	return connectService(ctx, "indexeddb", name, &connectIndexedDBConns, NewIndexedDB)
 }
 
 // CreateObjectStore is the ergonomic form of [IndexedDB.CreateObjectStoreRaw].

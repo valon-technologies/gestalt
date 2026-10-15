@@ -234,15 +234,7 @@ var connectExternalCredentialsConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectExternalCredentials(ctx context.Context, name string) (*ExternalCredentials, error) {
-	target, token, err := host.Target("external_credentials")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectExternalCredentialsConns.Conn(ctx, "external_credentials", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewExternalCredentials(conn), nil
+	return connectService(ctx, "external_credentials", name, &connectExternalCredentialsConns, NewExternalCredentials)
 }
 
 // GetCapabilities calls the GetCapabilities RPC of ExternalCredentials.

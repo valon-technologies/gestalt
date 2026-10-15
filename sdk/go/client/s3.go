@@ -278,15 +278,7 @@ var connectS3Conns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectS3(ctx context.Context, name string) (*S3, error) {
-	target, token, err := host.Target("s3")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectS3Conns.Conn(ctx, "s3", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewS3(conn), nil
+	return connectService(ctx, "s3", name, &connectS3Conns, NewS3)
 }
 
 // HeadObject is the ergonomic form of [S3.HeadObjectRaw].

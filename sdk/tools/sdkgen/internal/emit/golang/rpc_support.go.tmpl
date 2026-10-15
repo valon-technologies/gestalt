@@ -4,8 +4,11 @@ package client
 import (
 	"errors"
 // PROVIDER_IMPORT_BEGIN
+	"context"
 	"io"
 
+	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 // PROVIDER_IMPORT_END
 )
@@ -164,3 +167,15 @@ func streamError(err error) error {
 }
 
 // PROVIDER_STREAM_END
+// connectService creates a client only after resolving and dialing its binding.
+func connectService[T any](ctx context.Context, service, name string, pool *host.ConnPool, construct func(grpc.ClientConnInterface) *T) (*T, error) {
+	target, token, err := host.Target(service)
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	conn, err := pool.Conn(ctx, service, target, token, name)
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return construct(conn), nil
+}

@@ -677,20 +677,17 @@ func (r *renderer) renderClient(svc *model.Service) {
 // clients, via the module-internal host package.
 func (r *renderer) renderConnect(svcName, binding string, withOptions bool) {
 	r.features.host = true
-	params, forward := "", ""
+	params, constructor := "", "New"+svcName
 	if withOptions {
-		params, forward = ", opts ...ClientOption", ", opts..."
+		params = ", opts ...ClientOption"
+		constructor = fmt.Sprintf("func(conn grpc.ClientConnInterface) *%s { return New%s(conn, opts...) }", svcName, svcName)
 	}
 	fmt.Fprintf(&r.body, "var connect%sConns host.ConnPool\n\n", svcName)
 	fmt.Fprintf(&r.body, "// Connect%s dials the %q host service advertised through the\n", svcName, binding)
 	r.body.WriteString("// GESTALT_HOST_SERVICE_SOCKET environment and returns a connected client.\n")
 	r.body.WriteString("// name selects a named binding; the empty string selects the default\n// binding. Connections are pooled per binding and shared across clients for\n// the life of the process. The first dial blocks until the connection is\n// ready or ctx is done.\n")
 	fmt.Fprintf(&r.body, "func Connect%s(ctx context.Context, name string%s) (*%s, error) {\n", svcName, params, svcName)
-	fmt.Fprintf(&r.body, "\ttarget, token, err := host.Target(%q)\n", binding)
-	r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-	fmt.Fprintf(&r.body, "\tconn, err := connect%sConns.Conn(ctx, %q, target, token, name)\n", svcName, binding)
-	r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-	fmt.Fprintf(&r.body, "\treturn New%s(conn%s), nil\n}\n\n", svcName, forward)
+	fmt.Fprintf(&r.body, "\treturn connectService(ctx, %q, name, &connect%sConns, %s)\n}\n\n", binding, svcName, constructor)
 }
 
 // methodRequest renders the request parameter, the wire argument, and the
