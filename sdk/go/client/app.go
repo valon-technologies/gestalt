@@ -575,10 +575,7 @@ func (c *App) InvokeStream(ctx context.Context, app string, operation string, pa
 
 	request = withDefaultRequestContext(request, request.Context, c.context, func(request *AppInvokeRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.InvokeStream(ctx, ToWireAppInvokeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &AppInvokeStreamStream{stream: stream}, nil
+	return streamOrError(&AppInvokeStreamStream{stream: stream}, err)
 }
 
 // InvokeStreamRaw is the faithful form of [App.InvokeStream].
@@ -592,10 +589,7 @@ func (c *App) InvokeStream(ctx context.Context, app string, operation string, pa
 func (c *App) InvokeStreamRaw(ctx context.Context, request *AppInvokeRequest) (*AppInvokeStreamStream, error) {
 	request = withDefaultRequestContext(request, request.Context, c.context, func(request *AppInvokeRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.InvokeStream(ctx, ToWireAppInvokeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &AppInvokeStreamStream{stream: stream}, nil
+	return streamOrError(&AppInvokeStreamStream{stream: stream}, err)
 }
 
 // AppInvokeGraphQLOptions carries the optional parameters of [App.InvokeGraphQL].
@@ -641,10 +635,7 @@ type AppInvokeStreamStream struct {
 // stream; every other error is a *GestaltError.
 func (s *AppInvokeStreamStream) Recv() (*InvokeFrame, error) {
 	frame, err := s.stream.Recv()
-	if err != nil {
-		return nil, streamError(err)
-	}
-	return FromWireInvokeFrame(frame), nil
+	return decodeStreamFrame(frame, err, FromWireInvokeFrame)
 }
 
 // AppProvider is the generated client for gestalt.provider.v1.AppProvider.
@@ -708,10 +699,7 @@ func (c *AppProvider) ExecuteStream(ctx context.Context, operation string, token
 
 	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ExecuteRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.ExecuteStream(ctx, ToWireExecuteRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &AppProviderExecuteStreamStream{stream: stream}, nil
+	return streamOrError(&AppProviderExecuteStreamStream{stream: stream}, err)
 }
 
 // ExecuteStreamRaw is the faithful form of [AppProvider.ExecuteStream].
@@ -723,10 +711,7 @@ func (c *AppProvider) ExecuteStream(ctx context.Context, operation string, token
 func (c *AppProvider) ExecuteStreamRaw(ctx context.Context, request *ExecuteRequest) (*AppProviderExecuteStreamStream, error) {
 	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ExecuteRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.ExecuteStream(ctx, ToWireExecuteRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return &AppProviderExecuteStreamStream{stream: stream}, nil
+	return streamOrError(&AppProviderExecuteStreamStream{stream: stream}, err)
 }
 
 // ResolveHTTPSubject calls the ResolveHTTPSubject RPC of AppProvider.
@@ -765,8 +750,5 @@ type AppProviderExecuteStreamStream struct {
 // stream; every other error is a *GestaltError.
 func (s *AppProviderExecuteStreamStream) Recv() (*InvokeFrame, error) {
 	frame, err := s.stream.Recv()
-	if err != nil {
-		return nil, streamError(err)
-	}
-	return FromWireInvokeFrame(frame), nil
+	return decodeStreamFrame(frame, err, FromWireInvokeFrame)
 }

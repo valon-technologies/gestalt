@@ -907,8 +907,7 @@ func (r *renderer) renderErgonomicServerStream(svcName string, m *model.Method) 
 		r.body.WriteString(line + "\n")
 	}
 	fmt.Fprintf(&r.body, "\tstream, err := c.client.%s(ctx, %s)\n", m.Name, arg)
-	r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-	fmt.Fprintf(&r.body, "\treturn &%s{stream: stream}, nil\n}\n\n", streamType)
+	fmt.Fprintf(&r.body, "\treturn streamOrError(&%s{stream: stream}, err)\n}\n\n", streamType)
 }
 
 // renderOptionsStruct renders the per-method options struct carrying a
@@ -1159,13 +1158,11 @@ func (r *renderer) renderFaithfulMethod(svcName string, m *model.Method, rawSuff
 			r.body.WriteString(line + "\n")
 		}
 		fmt.Fprintf(&r.body, "\tstream, err := c.client.%s(ctx, %s)\n", m.Name, arg)
-		r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-		fmt.Fprintf(&r.body, "\treturn &%s{stream: stream}, nil\n}\n\n", streamType)
+		fmt.Fprintf(&r.body, "\treturn streamOrError(&%s{stream: stream}, err)\n}\n\n", streamType)
 	case model.ClientStream, model.Bidi:
 		fmt.Fprintf(&r.body, "%s(ctx context.Context) (*%s, error) {\n", recv, streamType)
 		fmt.Fprintf(&r.body, "\tstream, err := c.client.%s(ctx)\n", m.Name)
-		r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-		fmt.Fprintf(&r.body, "\treturn &%s{stream: stream}, nil\n}\n\n", streamType)
+		fmt.Fprintf(&r.body, "\treturn streamOrError(&%s{stream: stream}, err)\n}\n\n", streamType)
 	default:
 		param, arg, prep := r.methodRequest(m)
 		if m.OutputIsEmpty {
@@ -1229,15 +1226,13 @@ func (r *renderer) renderStreamWrapper(svcName string, m *model.Method) {
 		fmt.Fprintf(&r.body, "// Recv receives the next frame. io.EOF reports the normal end of the\n// stream; every other error is a *GestaltError.\n")
 		fmt.Fprintf(&r.body, "func (s *%s) Recv() (*%s, error) {\n", streamType, responseType)
 		fmt.Fprintf(&r.body, "\tframe, err := s.stream.Recv()\n")
-		r.body.WriteString("\tif err != nil {\n\t\treturn nil, streamError(err)\n\t}\n")
-		fmt.Fprintf(&r.body, "\treturn %s(frame), nil\n}\n\n", fromWireFunc(responseType))
+		fmt.Fprintf(&r.body, "\treturn decodeStreamFrame(frame, err, %s)\n}\n\n", fromWireFunc(responseType))
 	}
 	if m.Stream == model.ClientStream {
 		fmt.Fprintf(&r.body, "// CloseAndRecv closes the send side and receives the response.\n")
 		fmt.Fprintf(&r.body, "func (s *%s) CloseAndRecv() (*%s, error) {\n", streamType, responseType)
 		fmt.Fprintf(&r.body, "\tresponse, err := s.stream.CloseAndRecv()\n")
-		r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-		fmt.Fprintf(&r.body, "\treturn %s(response), nil\n}\n\n", fromWireFunc(responseType))
+		fmt.Fprintf(&r.body, "\treturn decodeUnaryResponse(response, err, %s)\n}\n\n", fromWireFunc(responseType))
 	}
 	if m.Stream == model.Bidi {
 		fmt.Fprintf(&r.body, "// CloseSend closes the send side of the stream.\n")

@@ -134,6 +134,22 @@ func HTTPStatusToGestaltCode(status int32) GestaltErrorCode {
 }
 
 // PROVIDER_STREAM_BEGIN
+// streamOrError returns the stream wrapper only after a successful RPC.
+func streamOrError[T any](stream *T, err error) (*T, error) {
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return stream, nil
+}
+
+// decodeStreamFrame preserves stream termination before converting a frame.
+func decodeStreamFrame[Wire, Native any](frame *Wire, err error, convert func(*Wire) *Native) (*Native, error) {
+	if err != nil {
+		return nil, streamError(err)
+	}
+	return convert(frame), nil
+}
+
 // streamError normalizes stream transport errors: io.EOF marks the normal
 // end of a stream and passes through unchanged; every other error becomes a
 // *GestaltError.
