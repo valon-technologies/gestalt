@@ -3808,9 +3808,6 @@ func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMo
 }
 
 func agentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
-	if output == nil {
-		return coreagent.Output{}
-	}
 	if structured := output.GetStructured(); structured != nil {
 		return coreagent.Output{
 			Structured: &coreagent.StructuredOutput{
