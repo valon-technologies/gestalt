@@ -152,15 +152,7 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		Caller:         workflowManagerCaller(authCtx),
 	})
-	if err != nil {
-		err = workflowManagerStatusError(err)
-		return nil, err
-	}
-	resp, err := managedWorkflowDefinitionToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow definition: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowDefinitionToProto, "workflow definition")
 }
 
 func (s *ProviderServer) requireServiceAccountManagement(ctx context.Context, authCtx workflowManagerAuthContext, p *principal.Principal, runAs string) error {
@@ -198,14 +190,7 @@ func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkfl
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
 	managed, err := s.manager.GetDefinition(s.managerContext(ctx, authCtx), p, providerName, definitionID)
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowDefinitionToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow definition: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowDefinitionToProto, "workflow definition")
 }
 
 func (s *ProviderServer) ListDefinitions(ctx context.Context, req *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error) {
@@ -244,14 +229,7 @@ func (s *ProviderServer) SetDefinitionPaused(ctx context.Context, req *proto.Set
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
 	managed, err := s.manager.SetDefinitionPaused(s.managerContext(ctx, authCtx), p, providerName, definitionID, req.GetPaused())
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowDefinitionToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow definition: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowDefinitionToProto, "workflow definition")
 }
 
 func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
@@ -271,14 +249,7 @@ func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.Set
 		return nil, status.Error(codes.InvalidArgument, "activation_id is required")
 	}
 	managed, err := s.manager.SetActivationPaused(s.managerContext(ctx, authCtx), p, providerName, definitionID, activationID, req.GetPaused())
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowDefinitionToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow definition: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowDefinitionToProto, "workflow definition")
 }
 
 func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
@@ -323,15 +294,7 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		WorkflowKey:                  strings.TrimSpace(req.GetWorkflowKey()),
 		Caller:                       workflowManagerCaller(authCtx),
 	})
-	if err != nil {
-		err = workflowManagerStatusError(err)
-		return nil, err
-	}
-	resp, err := managedWorkflowRunToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow run: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowRunToProto, "workflow run")
 }
 
 func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
@@ -384,14 +347,7 @@ func (s *ProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProvi
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	managed, err := s.manager.GetRun(s.managerContext(ctx, authCtx), p, providerName, runID)
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowRunToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow run: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowRunToProto, "workflow run")
 }
 
 func (s *ProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflowProviderRunEventsRequest) (*proto.GetWorkflowProviderRunEventsResponse, error) {
@@ -445,14 +401,7 @@ func (s *ProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
 	managed, err := s.manager.CancelRun(s.managerContext(ctx, authCtx), p, providerName, runID, req.GetReason())
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowRunToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow run: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowRunToProto, "workflow run")
 }
 
 func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
@@ -472,15 +421,7 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 		RunID:        runID,
 		Signal:       workflowwire.SignalFromProto(req.GetSignal()),
 	})
-	if err != nil {
-		err = workflowManagerStatusError(err)
-		return nil, err
-	}
-	resp, err := managedWorkflowRunSignalToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow run signal: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowRunSignalToProto, "workflow run signal")
 }
 
 func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (out *proto.SignalWorkflowRunResponse, err error) {
@@ -511,15 +452,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		Signal:                       workflowwire.SignalFromProto(req.GetSignal()),
 		Caller:                       workflowManagerCaller(authCtx),
 	})
-	if err != nil {
-		err = workflowManagerStatusError(err)
-		return nil, err
-	}
-	resp, err := managedWorkflowRunSignalToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow run signal: %v", err)
-	}
-	return resp, nil
+	return workflowManagerResponse(managed, err, managedWorkflowRunSignalToProto, "workflow run signal")
 }
 
 func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
@@ -540,14 +473,7 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 		ProviderName: providerName,
 		Event:        event,
 	})
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	out, err := workflowwire.EventToProto(delivered)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow event: %v", err)
-	}
-	return out, nil
+	return workflowManagerResponse(delivered, err, workflowwire.EventToProto, "workflow event")
 }
 
 func (s *ProviderServer) requestContext(ctx context.Context, req workflowProviderAuthRequest) (workflowManagerAuthContext, error) {
@@ -742,3 +668,14 @@ func workflowManagerStatusError(err error) error {
 }
 
 var _ proto.WorkflowServer = (*ProviderServer)(nil)
+
+func workflowManagerResponse[T, R any](value T, err error, encode func(T) (*R, error), name string) (*R, error) {
+	if err != nil {
+		return nil, workflowManagerStatusError(err)
+	}
+	response, err := encode(value)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "encode %s: %v", name, err)
+	}
+	return response, nil
+}
