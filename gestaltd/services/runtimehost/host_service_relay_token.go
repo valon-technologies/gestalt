@@ -157,17 +157,14 @@ func (m *HostServiceRelayTokenManager) parseClaims(token string) (*hostServiceRe
 	if token == "" {
 		return nil, fmt.Errorf("host service relay token is required")
 	}
-	parsed, err := jwt.ParseWithClaims(token, &hostServiceRelayTokenClaims{}, func(t *jwt.Token) (any, error) {
+	claims := &hostServiceRelayTokenClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return m.secret, nil
 	}, jwt.WithAudience(hostServiceRelayTokenAudience), jwt.WithIssuer(hostServiceRelayTokenIssuer), jwt.WithTimeFunc(m.now))
 	if err != nil {
-		return nil, fmt.Errorf("host service relay token is invalid or expired")
-	}
-	claims, ok := parsed.Claims.(*hostServiceRelayTokenClaims)
-	if !ok || !parsed.Valid {
 		return nil, fmt.Errorf("host service relay token is invalid or expired")
 	}
 	return claims, nil

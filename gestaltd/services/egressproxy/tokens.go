@@ -114,17 +114,14 @@ func (m *TokenManager) parseClaims(token string) (*tokenClaims, error) {
 	if token == "" {
 		return nil, fmt.Errorf("egress proxy token is required")
 	}
-	parsed, err := jwt.ParseWithClaims(token, &tokenClaims{}, func(t *jwt.Token) (any, error) {
+	claims := &tokenClaims{}
+	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 		return m.secret, nil
 	}, jwt.WithAudience(tokenAudience), jwt.WithIssuer(tokenIssuer), jwt.WithTimeFunc(m.now))
 	if err != nil {
-		return nil, fmt.Errorf("egress proxy token is invalid or expired")
-	}
-	claims, ok := parsed.Claims.(*tokenClaims)
-	if !ok || !parsed.Valid {
 		return nil, fmt.Errorf("egress proxy token is invalid or expired")
 	}
 	return claims, nil
