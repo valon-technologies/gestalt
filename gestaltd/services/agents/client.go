@@ -106,31 +106,13 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreagent.Provider, error
 }
 
 func (r *remoteAgent) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
-	ctx, cancel := runtimehost.ProviderSessionCreateContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.CreateAgentProviderSessionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.CreateSession(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentSessionFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.CreateAgentProviderSessionRequest{},
+		runtimehost.ProviderSessionCreateContext, proto.AgentClient.CreateSession, agentSessionFromProto)
 }
 
 func (r *remoteAgent) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.GetAgentProviderSessionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.GetSession(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentSessionFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.GetAgentProviderSessionRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.GetSession, agentSessionFromProto)
 }
 
 func (r *remoteAgent) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
@@ -156,45 +138,18 @@ func (r *remoteAgent) ListSessions(ctx context.Context, req *proto.ListAgentProv
 }
 
 func (r *remoteAgent) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*coreagent.Session, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.UpdateAgentProviderSessionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.UpdateSession(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentSessionFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.UpdateAgentProviderSessionRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.UpdateSession, agentSessionFromProto)
 }
 
 func (r *remoteAgent) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.CreateAgentProviderTurnRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.CreateTurn(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentTurnFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.CreateAgentProviderTurnRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.CreateTurn, agentTurnFromProto)
 }
 
 func (r *remoteAgent) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.GetAgentProviderTurnRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.GetTurn(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentTurnFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.GetAgentProviderTurnRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.GetTurn, agentTurnFromProto)
 }
 
 func (r *remoteAgent) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
@@ -220,17 +175,8 @@ func (r *remoteAgent) ListTurns(ctx context.Context, req *proto.ListAgentProvide
 }
 
 func (r *remoteAgent) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.CancelAgentProviderTurnRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.CancelTurn(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentTurnFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.CancelAgentProviderTurnRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.CancelTurn, agentTurnFromProto)
 }
 
 func (r *remoteAgent) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error) {
@@ -248,17 +194,8 @@ func (r *remoteAgent) ListTurnEvents(ctx context.Context, req *proto.ListAgentPr
 }
 
 func (r *remoteAgent) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.GetAgentProviderInteractionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.GetInteraction(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentInteractionFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.GetAgentProviderInteractionRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.GetInteraction, agentInteractionFromProto)
 }
 
 func (r *remoteAgent) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error) {
@@ -276,17 +213,8 @@ func (r *remoteAgent) ListInteractions(ctx context.Context, req *proto.ListAgent
 }
 
 func (r *remoteAgent) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	providerReq := protoutil.CloneOrDefault(req, &proto.ResolveAgentProviderInteractionRequest{})
-	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
-		return nil, err
-	}
-	resp, err := r.client.ResolveInteraction(ctx, providerReq)
-	if err != nil {
-		return nil, err
-	}
-	return agentInteractionFromProto(resp)
+	return callAgentProvider(ctx, r, req, &proto.ResolveAgentProviderInteractionRequest{},
+		runtimehost.ProviderCallContext, proto.AgentClient.ResolveInteraction, agentInteractionFromProto)
 }
 
 func (r *remoteAgent) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest) (*coreagent.ProviderCapabilities, error) {
@@ -300,6 +228,31 @@ func (r *remoteAgent) GetCapabilities(ctx context.Context, req *proto.GetAgentPr
 		return nil, err
 	}
 	return agentProviderCapabilitiesFromProto(resp), nil
+}
+
+func callAgentProvider[Q interface {
+	gproto.Message
+	comparable
+}, Raw, Value any](
+	ctx context.Context,
+	r *remoteAgent,
+	req, fallback Q,
+	makeContext func(context.Context) (context.Context, context.CancelFunc),
+	call func(proto.AgentClient, context.Context, Q, ...grpc.CallOption) (Raw, error),
+	decode func(Raw) (Value, error),
+) (Value, error) {
+	ctx, cancel := makeContext(ctx)
+	defer cancel()
+	providerReq := protoutil.CloneOrDefault(req, fallback)
+	var zero Value
+	if err := attachAgentProviderRequestContext(ctx, providerReq, r.name); err != nil {
+		return zero, err
+	}
+	resp, err := call(r.client, ctx, providerReq)
+	if err != nil {
+		return zero, err
+	}
+	return decode(resp)
 }
 
 func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) error {
