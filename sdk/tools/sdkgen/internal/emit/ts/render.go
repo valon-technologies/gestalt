@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -98,9 +99,7 @@ func (r *renderer) typeRef(protoFile, name string, isType bool) string {
 	if r.kind == moduleCodec {
 		isType = true
 	}
-	if r.features.crossPublic[base] == nil {
-		r.features.crossPublic[base] = map[string]bool{}
-	}
+	emit.EnsureImportGroup(r.features.crossPublic, base)
 	// A name imported as both type and value stays a value import.
 	if isType {
 		if _, ok := r.features.crossPublic[base][name]; !ok {
@@ -120,9 +119,7 @@ func (r *renderer) convRef(protoFile, name string) string {
 	if r.kind == moduleCodec && base == r.base {
 		return name
 	}
-	if r.features.crossCodec[base] == nil {
-		r.features.crossCodec[base] = map[string]bool{}
-	}
+	emit.EnsureImportGroup(r.features.crossCodec, base)
 	r.features.crossCodec[base][name] = true
 	return name
 }
