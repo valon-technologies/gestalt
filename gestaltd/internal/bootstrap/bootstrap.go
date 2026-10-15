@@ -1105,10 +1105,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: scim credentials: %w", err)
 	}
-	agentToolIDs, err := agenttoolid.NewCodec(encKey)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: agent tool ids: %w", err)
-	}
+	agentToolIDs, _ := agenttoolid.NewCodec(encKey)
 	agentTurnScopes := agentturnscope.NewStore()
 	hostServiceTLSCAFile, hostServiceTLSCAPEM, err := hostServiceTLSCAFromEnv()
 	if err != nil {

@@ -473,15 +473,9 @@ func New(cfg Config) (*Server, error) {
 	var egressProxyTokens *egressproxy.TokenManager
 	var s3ObjectAccessURLs *s3.ObjectAccessURLManager
 	if len(cfg.StateSecret) > 0 {
-		hostServiceRelayTokens, err = runtimehost.NewHostServiceRelayTokenManager(cfg.StateSecret)
-		if err != nil {
-			return nil, fmt.Errorf("init host service relay tokens: %w", err)
-		}
+		hostServiceRelayTokens, _ = runtimehost.NewHostServiceRelayTokenManager(cfg.StateSecret)
 		hostServiceRelayTokens.SetCapabilityIngressDecorator(hostserviceingress.ApplyCapability)
-		egressProxyTokens, err = egressproxy.NewTokenManager(cfg.StateSecret)
-		if err != nil {
-			return nil, fmt.Errorf("init egress proxy tokens: %w", err)
-		}
+		egressProxyTokens, _ = egressproxy.NewTokenManager(cfg.StateSecret)
 		s3ObjectAccessURLs, err = s3.NewObjectAccessURLManager(cfg.StateSecret, cfg.PublicBaseURL)
 		if err != nil {
 			return nil, fmt.Errorf("init s3 object access URLs: %w", err)
