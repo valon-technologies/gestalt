@@ -34,14 +34,7 @@ func (s *GestaltdInstanceHeartbeatService) Get(ctx context.Context, instanceID s
 	if instanceID == "" {
 		return nil, fmt.Errorf("get gestaltd instance heartbeat: instance id is required")
 	}
-	rec, err := s.store.Get(ctx, instanceID)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get gestaltd instance heartbeat: %w", err)
-	}
-	return recordToGestaltdInstanceHeartbeat(rec), nil
+	return getStoredValue(ctx, s.store, instanceID, "get gestaltd instance heartbeat", recordToGestaltdInstanceHeartbeat)
 }
 
 func (s *GestaltdInstanceHeartbeatService) List(ctx context.Context) ([]*core.GestaltdInstanceHeartbeat, error) {

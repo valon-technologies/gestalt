@@ -33,14 +33,7 @@ func (s *AppVersionRecoveryObservationService) Get(ctx context.Context, changeRe
 	if changeRequestID == "" {
 		return nil, fmt.Errorf("get app version recovery observation: change request id is required")
 	}
-	rec, err := s.store.Get(ctx, changeRequestID)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get app version recovery observation: %w", err)
-	}
-	return recordToAppVersionRecoveryObservation(rec), nil
+	return getStoredValue(ctx, s.store, changeRequestID, "get app version recovery observation", recordToAppVersionRecoveryObservation)
 }
 
 func (s *AppVersionRecoveryObservationService) GetMany(ctx context.Context, changeRequestIDs []string) (map[string]*core.AppVersionRecoveryObservation, error) {

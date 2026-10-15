@@ -44,14 +44,7 @@ func (s *AppRolloutService) Get(ctx context.Context, app string) (*core.AppRollo
 	if app == "" {
 		return nil, fmt.Errorf("get app rollout: app is required")
 	}
-	rec, err := s.store.Get(ctx, app)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get app rollout: %w", err)
-	}
-	return recordToAppRollout(rec), nil
+	return getStoredValue(ctx, s.store, app, "get app rollout", recordToAppRollout)
 }
 
 func (s *AppRolloutService) Create(ctx context.Context, rollout *core.AppRollout) (*core.AppRollout, error) {
