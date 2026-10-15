@@ -53,10 +53,7 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 		ctx = context.Background()
 	}
 	if !opts.SkipSchemaBootstrap {
-		for _, store := range []struct {
-			name   string
-			schema *idb.ObjectStoreOptions
-		}{
+		if err := createObjectStores(ctx, ds, "create", []objectStoreSpec{
 			{StoreUsers, &UsersSchema},
 			{StoreManagedSubjects, &ManagedSubjectsSchema},
 			{StoreAppSHAs, &AppSHAsSchema},
@@ -80,10 +77,8 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 			{StoreManagedSecrets, &ManagedSecretsSchema},
 			{StoreManagedSecretVersions, &ManagedSecretVersionsSchema},
 			{StoreManagedSecretAuditLogs, &ManagedSecretAuditLogsSchema},
-		} {
-			if _, err := ds.CreateObjectStore(ctx, store.name, *store.schema); err != nil {
-				return nil, fmt.Errorf("create %s store: %w", store.name, err)
-			}
+		}...); err != nil {
+			return nil, err
 		}
 	} else if err := ensureDeferredAppRegistryStores(ctx, ds); err != nil {
 		return nil, err
@@ -137,37 +132,38 @@ func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions
 	}, nil
 }
 
-func ensureManagedSecretStores(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreManagedSecrets, ManagedSecretsSchema); err != nil {
-		return fmt.Errorf("ensure managed_secrets store: %w", err)
-	}
-	if _, err := ds.CreateObjectStore(ctx, StoreManagedSecretVersions, ManagedSecretVersionsSchema); err != nil {
-		return fmt.Errorf("ensure managed_secret_versions store: %w", err)
-	}
-	if _, err := ds.CreateObjectStore(ctx, StoreManagedSecretAuditLogs, ManagedSecretAuditLogsSchema); err != nil {
-		return fmt.Errorf("ensure managed_secret_audit_logs store: %w", err)
+type objectStoreSpec struct {
+	name   string
+	schema *idb.ObjectStoreOptions
+}
+
+func createObjectStores(ctx context.Context, ds indexeddb.IndexedDB, action string, stores ...objectStoreSpec) error {
+	for _, store := range stores {
+		if _, err := ds.CreateObjectStore(ctx, store.name, *store.schema); err != nil {
+			return fmt.Errorf("%s %s store: %w", action, store.name, err)
+		}
 	}
 	return nil
+}
+
+func ensureManagedSecretStores(ctx context.Context, ds indexeddb.IndexedDB) error {
+	return createObjectStores(ctx, ds, "ensure",
+		objectStoreSpec{StoreManagedSecrets, &ManagedSecretsSchema},
+		objectStoreSpec{StoreManagedSecretVersions, &ManagedSecretVersionsSchema},
+		objectStoreSpec{StoreManagedSecretAuditLogs, &ManagedSecretAuditLogsSchema},
+	)
 }
 
 func ensureSCIMStores(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreSCIMResources, SCIMResourcesSchema); err != nil {
-		return fmt.Errorf("ensure scim_resources store: %w", err)
-	}
-	if _, err := ds.CreateObjectStore(ctx, StoreSCIMConfig, SCIMConfigSchema); err != nil {
-		return fmt.Errorf("ensure scim_config store: %w", err)
-	}
-	if _, err := ds.CreateObjectStore(ctx, StoreSCIMSecrets, SCIMSecretsSchema); err != nil {
-		return fmt.Errorf("ensure scim_secrets store: %w", err)
-	}
-	return nil
+	return createObjectStores(ctx, ds, "ensure",
+		objectStoreSpec{StoreSCIMResources, &SCIMResourcesSchema},
+		objectStoreSpec{StoreSCIMConfig, &SCIMConfigSchema},
+		objectStoreSpec{StoreSCIMSecrets, &SCIMSecretsSchema},
+	)
 }
 
 func ensureGroupsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreGroups, GroupsSchema); err != nil {
-		return fmt.Errorf("ensure groups store: %w", err)
-	}
-	return nil
+	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreGroups, &GroupsSchema})
 }
 
 func (s *Services) Ping(ctx context.Context) error {
@@ -179,58 +175,20 @@ func (s *Services) Close() error {
 }
 
 func ensureDeferredAppRegistryStores(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if err := ensureAppAutoDeploySettingsStore(ctx, ds); err != nil {
-		return err
-	}
-	if err := ensureAppVersionRolloutOutcomesStore(ctx, ds); err != nil {
-		return err
-	}
-	if err := ensureGestaltdInstanceHeartbeatsStore(ctx, ds); err != nil {
-		return err
-	}
-	if err := ensureAppVersionRecoveryObservationsStore(ctx, ds); err != nil {
-		return err
-	}
-	if err := ensureAppAccessProfilesStore(ctx, ds); err != nil {
-		return err
-	}
-	if err := ensureAppAllowedOperationsStore(ctx, ds); err != nil {
-		return err
-	}
-	return nil
-}
-
-func ensureAppAllowedOperationsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreAppAllowedOperations, AppAllowedOperationsSchema); err != nil {
-		return fmt.Errorf("ensure app_allowed_operations store: %w", err)
-	}
-	return nil
+	return createObjectStores(ctx, ds, "ensure",
+		objectStoreSpec{StoreAppAutoDeploySettings, &AppAutoDeploySettingsSchema},
+		objectStoreSpec{StoreAppVersionRolloutOutcomes, &AppVersionRolloutOutcomesSchema},
+		objectStoreSpec{StoreGestaltdInstanceHeartbeats, &GestaltdInstanceHeartbeatsSchema},
+		objectStoreSpec{StoreAppVersionRecoveryObservations, &AppVersionRecoveryObservationsSchema},
+		objectStoreSpec{StoreAppAccessProfiles, &AppAccessProfilesSchema},
+		objectStoreSpec{StoreAppAllowedOperations, &AppAllowedOperationsSchema},
+	)
 }
 
 func ensureAppAccessProfilesStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreAppAccessProfiles, AppAccessProfilesSchema); err != nil {
-		return fmt.Errorf("ensure app_access_profiles store: %w", err)
-	}
-	return nil
+	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppAccessProfiles, &AppAccessProfilesSchema})
 }
 
 func ensureAppAutoDeploySettingsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreAppAutoDeploySettings, AppAutoDeploySettingsSchema); err != nil {
-		return fmt.Errorf("ensure app_auto_deploy_settings store: %w", err)
-	}
-	return nil
-}
-
-func ensureGestaltdInstanceHeartbeatsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreGestaltdInstanceHeartbeats, GestaltdInstanceHeartbeatsSchema); err != nil {
-		return fmt.Errorf("ensure gestaltd_instance_heartbeats store: %w", err)
-	}
-	return nil
-}
-
-func ensureAppVersionRecoveryObservationsStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreAppVersionRecoveryObservations, AppVersionRecoveryObservationsSchema); err != nil {
-		return fmt.Errorf("ensure app_version_recovery_observations store: %w", err)
-	}
-	return nil
+	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppAutoDeploySettings, &AppAutoDeploySettingsSchema})
 }

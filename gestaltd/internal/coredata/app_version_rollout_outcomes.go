@@ -144,8 +144,5 @@ func recordToAppVersionRolloutOutcome(rec idb.Record) *core.AppVersionRolloutOut
 }
 
 func ensureAppVersionRolloutOutcomesStore(ctx context.Context, ds indexeddb.IndexedDB) error {
-	if _, err := ds.CreateObjectStore(ctx, StoreAppVersionRolloutOutcomes, AppVersionRolloutOutcomesSchema); err != nil {
-		return fmt.Errorf("ensure app_version_rollout_outcomes store: %w", err)
-	}
-	return nil
+	return createObjectStores(ctx, ds, "ensure", objectStoreSpec{StoreAppVersionRolloutOutcomes, &AppVersionRolloutOutcomesSchema})
 }
