@@ -36,33 +36,32 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 }
 
 func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*ProviderEntry {
-	if c == nil {
-		return nil
-	}
-	switch kind {
-	case HostProviderKindIdentity:
-		return c.Providers.Identity
-	case HostProviderKindAuthorization:
-		return c.Providers.Authorization
-	case HostProviderKindExternalCredentials:
-		return c.Providers.ExternalCredentials
-	case HostProviderKindSecrets:
-		return c.Providers.Secrets
-	case HostProviderKindTelemetry:
-		return c.Providers.Telemetry
-	case HostProviderKindAudit:
-		return c.Providers.Audit
-	case HostProviderKindIndexedDB:
-		return c.Providers.IndexedDB
-	case HostProviderKindCache:
-		return c.Providers.Cache
-	case HostProviderKindWorkflow:
-		return c.Providers.Workflow
-	case HostProviderKindAgent:
-		return c.Providers.Agent
-	default:
-		return nil
-	}
+	return withOptionalConfig(c, func(c *Config) map[string]*ProviderEntry {
+		switch kind {
+		case HostProviderKindIdentity:
+			return c.Providers.Identity
+		case HostProviderKindAuthorization:
+			return c.Providers.Authorization
+		case HostProviderKindExternalCredentials:
+			return c.Providers.ExternalCredentials
+		case HostProviderKindSecrets:
+			return c.Providers.Secrets
+		case HostProviderKindTelemetry:
+			return c.Providers.Telemetry
+		case HostProviderKindAudit:
+			return c.Providers.Audit
+		case HostProviderKindIndexedDB:
+			return c.Providers.IndexedDB
+		case HostProviderKindCache:
+			return c.Providers.Cache
+		case HostProviderKindWorkflow:
+			return c.Providers.Workflow
+		case HostProviderKindAgent:
+			return c.Providers.Agent
+		default:
+			return nil
+		}
+	})
 }
 
 func (c *Config) SelectedHostProvider(kind HostProviderKind) (string, *ProviderEntry, error) {
