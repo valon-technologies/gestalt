@@ -984,8 +984,7 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 		for _, line := range requestLines {
 			r.body.WriteString(line)
 		}
-		fmt.Fprintf(&r.body, "\tif _, err := c.client.%s(ctx, %s); err != nil {\n", m.Name, arg)
-		r.body.WriteString("\t\treturn toGestaltError(err)\n\t}\n\treturn nil\n}\n\n")
+		fmt.Fprintf(&r.body, "\treturn discardUnaryResponse(c.client.%s(ctx, %s))\n}\n\n", m.Name, arg)
 	case collapse != nil:
 		fmt.Fprintf(&r.body, "%s(ctx context.Context%s) (%s, error) {\n", recv, params, strings.Join(collapse.types, ", "))
 		for _, line := range requestLines {
@@ -1158,8 +1157,7 @@ func (r *renderer) renderFaithfulMethod(svcName string, m *model.Method, rawSuff
 			for _, line := range prep {
 				r.body.WriteString(line + "\n")
 			}
-			fmt.Fprintf(&r.body, "\tif _, err := c.client.%s(ctx, %s); err != nil {\n", m.Name, arg)
-			r.body.WriteString("\t\treturn toGestaltError(err)\n\t}\n\treturn nil\n}\n\n")
+			fmt.Fprintf(&r.body, "\treturn discardUnaryResponse(c.client.%s(ctx, %s))\n}\n\n", m.Name, arg)
 		} else {
 			responseType := r.messageType(m.Output.FullName)
 			fmt.Fprintf(&r.body, "%s(ctx context.Context%s) (*%s, error) {\n", recv, param, responseType)

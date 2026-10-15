@@ -319,35 +319,23 @@ func (c *ExternalCredentials) ListCredentialsRaw(ctx context.Context, request *L
 // DeleteCredential is the ergonomic form of [ExternalCredentials.DeleteCredentialRaw].
 func (c *ExternalCredentials) DeleteCredential(ctx context.Context, id string) error {
 	request := &DeleteExternalCredentialRequest{Id: id}
-	if _, err := c.client.DeleteCredential(ctx, ToWireDeleteExternalCredentialRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteCredential(ctx, ToWireDeleteExternalCredentialRequest(request)))
 }
 
 // DeleteCredentialRaw is the faithful form of [ExternalCredentials.DeleteCredential].
 func (c *ExternalCredentials) DeleteCredentialRaw(ctx context.Context, request *DeleteExternalCredentialRequest) error {
-	if _, err := c.client.DeleteCredential(ctx, ToWireDeleteExternalCredentialRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteCredential(ctx, ToWireDeleteExternalCredentialRequest(request)))
 }
 
 // ValidateCredentialConfig is the ergonomic form of [ExternalCredentials.ValidateCredentialConfigRaw].
 func (c *ExternalCredentials) ValidateCredentialConfig(ctx context.Context, provider string, connection string, connectionId string, mode string, auth *ExternalCredentialAuthConfig) error {
 	request := &ValidateExternalCredentialConfigRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, Mode: mode, Auth: auth}
-	if _, err := c.client.ValidateCredentialConfig(ctx, ToWireValidateExternalCredentialConfigRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.ValidateCredentialConfig(ctx, ToWireValidateExternalCredentialConfigRequest(request)))
 }
 
 // ValidateCredentialConfigRaw is the faithful form of [ExternalCredentials.ValidateCredentialConfig].
 func (c *ExternalCredentials) ValidateCredentialConfigRaw(ctx context.Context, request *ValidateExternalCredentialConfigRequest) error {
-	if _, err := c.client.ValidateCredentialConfig(ctx, ToWireValidateExternalCredentialConfigRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.ValidateCredentialConfig(ctx, ToWireValidateExternalCredentialConfigRequest(request)))
 }
 
 // ResolveCredential is the ergonomic form of [ExternalCredentials.ResolveCredentialRaw].

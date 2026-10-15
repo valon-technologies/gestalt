@@ -840,71 +840,47 @@ func ConnectIndexedDB(ctx context.Context, name string) (*IndexedDB, error) {
 // Lifecycle
 func (c *IndexedDB) CreateObjectStore(ctx context.Context, name string, schema *ObjectStoreSchema) error {
 	request := &CreateObjectStoreRequest{Name: name, Schema: schema}
-	if _, err := c.client.CreateObjectStore(ctx, ToWireCreateObjectStoreRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.CreateObjectStore(ctx, ToWireCreateObjectStoreRequest(request)))
 }
 
 // CreateObjectStoreRaw is the faithful form of [IndexedDB.CreateObjectStore].
 //
 // Lifecycle
 func (c *IndexedDB) CreateObjectStoreRaw(ctx context.Context, request *CreateObjectStoreRequest) error {
-	if _, err := c.client.CreateObjectStore(ctx, ToWireCreateObjectStoreRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.CreateObjectStore(ctx, ToWireCreateObjectStoreRequest(request)))
 }
 
 // DeleteObjectStore is the ergonomic form of [IndexedDB.DeleteObjectStoreRaw].
 func (c *IndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
 	request := &DeleteObjectStoreRequest{Name: name}
-	if _, err := c.client.DeleteObjectStore(ctx, ToWireDeleteObjectStoreRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteObjectStore(ctx, ToWireDeleteObjectStoreRequest(request)))
 }
 
 // DeleteObjectStoreRaw is the faithful form of [IndexedDB.DeleteObjectStore].
 func (c *IndexedDB) DeleteObjectStoreRaw(ctx context.Context, request *DeleteObjectStoreRequest) error {
-	if _, err := c.client.DeleteObjectStore(ctx, ToWireDeleteObjectStoreRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteObjectStore(ctx, ToWireDeleteObjectStoreRequest(request)))
 }
 
 // CreateIndex is the ergonomic form of [IndexedDB.CreateIndexRaw].
 func (c *IndexedDB) CreateIndex(ctx context.Context, store string, name string, keyPath []string, unique bool) error {
 	request := &CreateIndexRequest{Store: store, Name: name, KeyPath: keyPath, Unique: unique}
-	if _, err := c.client.CreateIndex(ctx, ToWireCreateIndexRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.CreateIndex(ctx, ToWireCreateIndexRequest(request)))
 }
 
 // CreateIndexRaw is the faithful form of [IndexedDB.CreateIndex].
 func (c *IndexedDB) CreateIndexRaw(ctx context.Context, request *CreateIndexRequest) error {
-	if _, err := c.client.CreateIndex(ctx, ToWireCreateIndexRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.CreateIndex(ctx, ToWireCreateIndexRequest(request)))
 }
 
 // DeleteIndex is the ergonomic form of [IndexedDB.DeleteIndexRaw].
 func (c *IndexedDB) DeleteIndex(ctx context.Context, store string, name string) error {
 	request := &DeleteIndexRequest{Store: store, Name: name}
-	if _, err := c.client.DeleteIndex(ctx, ToWireDeleteIndexRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteIndex(ctx, ToWireDeleteIndexRequest(request)))
 }
 
 // DeleteIndexRaw is the faithful form of [IndexedDB.DeleteIndex].
 func (c *IndexedDB) DeleteIndexRaw(ctx context.Context, request *DeleteIndexRequest) error {
-	if _, err := c.client.DeleteIndex(ctx, ToWireDeleteIndexRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteIndex(ctx, ToWireDeleteIndexRequest(request)))
 }
 
 // Get is the ergonomic form of [IndexedDB.GetRaw].
@@ -940,52 +916,34 @@ func (c *IndexedDB) GetKeyRaw(ctx context.Context, request *ObjectStoreRequest) 
 // Add is the ergonomic form of [IndexedDB.AddRaw].
 func (c *IndexedDB) Add(ctx context.Context, store string, record *Record) error {
 	request := &RecordRequest{Store: store, Record: record}
-	if _, err := c.client.Add(ctx, ToWireRecordRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Add(ctx, ToWireRecordRequest(request)))
 }
 
 // AddRaw is the faithful form of [IndexedDB.Add].
 func (c *IndexedDB) AddRaw(ctx context.Context, request *RecordRequest) error {
-	if _, err := c.client.Add(ctx, ToWireRecordRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Add(ctx, ToWireRecordRequest(request)))
 }
 
 // Put is the ergonomic form of [IndexedDB.PutRaw].
 func (c *IndexedDB) Put(ctx context.Context, store string, record *Record) error {
 	request := &RecordRequest{Store: store, Record: record}
-	if _, err := c.client.Put(ctx, ToWireRecordRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Put(ctx, ToWireRecordRequest(request)))
 }
 
 // PutRaw is the faithful form of [IndexedDB.Put].
 func (c *IndexedDB) PutRaw(ctx context.Context, request *RecordRequest) error {
-	if _, err := c.client.Put(ctx, ToWireRecordRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Put(ctx, ToWireRecordRequest(request)))
 }
 
 // Delete is the ergonomic form of [IndexedDB.DeleteRaw].
 func (c *IndexedDB) Delete(ctx context.Context, store string, id string) error {
 	request := &ObjectStoreRequest{Store: store, Id: id}
-	if _, err := c.client.Delete(ctx, ToWireObjectStoreRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Delete(ctx, ToWireObjectStoreRequest(request)))
 }
 
 // DeleteRaw is the faithful form of [IndexedDB.Delete].
 func (c *IndexedDB) DeleteRaw(ctx context.Context, request *ObjectStoreRequest) error {
-	if _, err := c.client.Delete(ctx, ToWireObjectStoreRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Delete(ctx, ToWireObjectStoreRequest(request)))
 }
 
 // Clear is the ergonomic form of [IndexedDB.ClearRaw].
@@ -993,20 +951,14 @@ func (c *IndexedDB) DeleteRaw(ctx context.Context, request *ObjectStoreRequest) 
 // Bulk operations (with optional query)
 func (c *IndexedDB) Clear(ctx context.Context, store string) error {
 	request := &ObjectStoreNameRequest{Store: store}
-	if _, err := c.client.Clear(ctx, ToWireObjectStoreNameRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Clear(ctx, ToWireObjectStoreNameRequest(request)))
 }
 
 // ClearRaw is the faithful form of [IndexedDB.Clear].
 //
 // Bulk operations (with optional query)
 func (c *IndexedDB) ClearRaw(ctx context.Context, request *ObjectStoreNameRequest) error {
-	if _, err := c.client.Clear(ctx, ToWireObjectStoreNameRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Clear(ctx, ToWireObjectStoreNameRequest(request)))
 }
 
 // IndexedDBGetAllOptions carries the optional parameters of [IndexedDB.GetAll].

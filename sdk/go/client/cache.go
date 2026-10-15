@@ -198,35 +198,23 @@ func (c *Cache) GetManyRaw(ctx context.Context, request *CacheGetManyRequest) (*
 // Set is the ergonomic form of [Cache.SetRaw].
 func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl *time.Duration) error {
 	request := &CacheSetRequest{Key: key, Value: value, Ttl: ttl}
-	if _, err := c.client.Set(ctx, ToWireCacheSetRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Set(ctx, ToWireCacheSetRequest(request)))
 }
 
 // SetRaw is the faithful form of [Cache.Set].
 func (c *Cache) SetRaw(ctx context.Context, request *CacheSetRequest) error {
-	if _, err := c.client.Set(ctx, ToWireCacheSetRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.Set(ctx, ToWireCacheSetRequest(request)))
 }
 
 // SetMany is the ergonomic form of [Cache.SetManyRaw].
 func (c *Cache) SetMany(ctx context.Context, entries []*CacheSetEntry, ttl *time.Duration) error {
 	request := &CacheSetManyRequest{Entries: entries, Ttl: ttl}
-	if _, err := c.client.SetMany(ctx, ToWireCacheSetManyRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.SetMany(ctx, ToWireCacheSetManyRequest(request)))
 }
 
 // SetManyRaw is the faithful form of [Cache.SetMany].
 func (c *Cache) SetManyRaw(ctx context.Context, request *CacheSetManyRequest) error {
-	if _, err := c.client.SetMany(ctx, ToWireCacheSetManyRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.SetMany(ctx, ToWireCacheSetManyRequest(request)))
 }
 
 // Delete is the ergonomic form of [Cache.DeleteRaw].

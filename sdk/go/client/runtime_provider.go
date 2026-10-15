@@ -187,18 +187,12 @@ func (c *Runtime) ListSessions(ctx context.Context, request *ListRuntimeSessions
 // StopSession is the ergonomic form of [Runtime.StopSessionRaw].
 func (c *Runtime) StopSession(ctx context.Context, sessionId string) error {
 	request := &StopRuntimeSessionRequest{SessionId: sessionId}
-	if _, err := c.client.StopSession(ctx, ToWireStopRuntimeSessionRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.StopSession(ctx, ToWireStopRuntimeSessionRequest(request)))
 }
 
 // StopSessionRaw is the faithful form of [Runtime.StopSession].
 func (c *Runtime) StopSessionRaw(ctx context.Context, request *StopRuntimeSessionRequest) error {
-	if _, err := c.client.StopSession(ctx, ToWireStopRuntimeSessionRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.StopSession(ctx, ToWireStopRuntimeSessionRequest(request)))
 }
 
 // PrepareWorkspace is the ergonomic form of [Runtime.PrepareWorkspaceRaw].
@@ -221,18 +215,12 @@ func (c *Runtime) PrepareWorkspaceRaw(ctx context.Context, request *PrepareRunti
 // RemoveWorkspace is the ergonomic form of [Runtime.RemoveWorkspaceRaw].
 func (c *Runtime) RemoveWorkspace(ctx context.Context, sessionId string, agentSessionId string) error {
 	request := &RemoveRuntimeWorkspaceRequest{SessionId: sessionId, AgentSessionId: agentSessionId}
-	if _, err := c.client.RemoveWorkspace(ctx, ToWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.RemoveWorkspace(ctx, ToWireRemoveRuntimeWorkspaceRequest(request)))
 }
 
 // RemoveWorkspaceRaw is the faithful form of [Runtime.RemoveWorkspace].
 func (c *Runtime) RemoveWorkspaceRaw(ctx context.Context, request *RemoveRuntimeWorkspaceRequest) error {
-	if _, err := c.client.RemoveWorkspace(ctx, ToWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.RemoveWorkspace(ctx, ToWireRemoveRuntimeWorkspaceRequest(request)))
 }
 
 // StartApp is the ergonomic form of [Runtime.StartAppRaw].

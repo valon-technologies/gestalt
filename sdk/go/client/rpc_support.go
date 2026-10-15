@@ -81,6 +81,14 @@ func decodeUnaryResponse[Wire, Native any](response *Wire, err error, convert fu
 	return convert(response), nil
 }
 
+// discardUnaryResponse preserves errors from RPCs with no native response.
+func discardUnaryResponse[Wire any](_ *Wire, err error) error {
+	if err != nil {
+		return toGestaltError(err)
+	}
+	return nil
+}
+
 // ToGestaltError converts any transport error to a *GestaltError.
 func ToGestaltError(err error) *GestaltError {
 	return toGestaltError(err)

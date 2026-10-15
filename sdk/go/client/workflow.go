@@ -730,10 +730,7 @@ func (c *Workflow) SetActivationPausedRaw(ctx context.Context, request *SetWorkf
 // DeleteDefinition is the ergonomic form of [Workflow.DeleteDefinitionRaw].
 func (c *Workflow) DeleteDefinition(ctx context.Context, provider string, definitionId string) error {
 	request := &DeleteWorkflowProviderDefinitionRequest{Provider: provider, DefinitionId: definitionId, Context: c.context}
-	if _, err := c.client.DeleteDefinition(ctx, ToWireDeleteWorkflowProviderDefinitionRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteDefinition(ctx, ToWireDeleteWorkflowProviderDefinitionRequest(request)))
 }
 
 // DeleteDefinitionRaw is the faithful form of [Workflow.DeleteDefinition].
@@ -743,10 +740,7 @@ func (c *Workflow) DeleteDefinitionRaw(ctx context.Context, request *DeleteWorkf
 		shallow.Context = c.context
 		request = &shallow
 	}
-	if _, err := c.client.DeleteDefinition(ctx, ToWireDeleteWorkflowProviderDefinitionRequest(request)); err != nil {
-		return toGestaltError(err)
-	}
-	return nil
+	return discardUnaryResponse(c.client.DeleteDefinition(ctx, ToWireDeleteWorkflowProviderDefinitionRequest(request)))
 }
 
 // StartRun is the ergonomic form of [Workflow.StartRunRaw].
