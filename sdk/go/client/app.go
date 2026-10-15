@@ -545,11 +545,7 @@ func (c *App) Invoke(ctx context.Context, app string, operation string, params m
 
 // InvokeRaw is the faithful form of [App.Invoke].
 func (c *App) InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *AppInvokeRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.Invoke(ctx, ToWireAppInvokeRequest(request))
 	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
@@ -581,11 +577,7 @@ func (c *App) InvokeStream(ctx context.Context, app string, operation string, pa
 
 	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Headers: opts.Headers}
 
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *AppInvokeRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.InvokeStream(ctx, ToWireAppInvokeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -602,11 +594,7 @@ func (c *App) InvokeStream(ctx context.Context, app string, operation string, pa
 // A mid-stream error may emit a trailing metadata frame with an error status
 // followed by a JSON error body, after which the stream ends.
 func (c *App) InvokeStreamRaw(ctx context.Context, request *AppInvokeRequest) (*AppInvokeStreamStream, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *AppInvokeRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.InvokeStream(ctx, ToWireAppInvokeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -637,11 +625,7 @@ func (c *App) InvokeGraphQL(ctx context.Context, app string, document string, op
 
 // InvokeGraphQLRaw is the faithful form of [App.InvokeGraphQL].
 func (c *App) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *AppInvokeGraphQLRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.InvokeGraphQL(ctx, ToWireAppInvokeGraphQLRequest(request))
 	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
@@ -714,11 +698,7 @@ func (c *AppProvider) Execute(ctx context.Context, operation string, token strin
 
 // ExecuteRaw is the faithful form of [AppProvider.Execute].
 func (c *AppProvider) ExecuteRaw(ctx context.Context, request *ExecuteRequest) (*OperationResult, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ExecuteRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.Execute(ctx, ToWireExecuteRequest(request))
 	return decodeUnaryResponse(response, err, FromWireOperationResult)
 }
@@ -732,11 +712,7 @@ func (c *AppProvider) ExecuteRaw(ctx context.Context, request *ExecuteRequest) (
 func (c *AppProvider) ExecuteStream(ctx context.Context, operation string, token string, invocationId string, idempotencyKey string, params map[string]any) (*AppProviderExecuteStreamStream, error) {
 	request := &ExecuteRequest{Operation: operation, Token: token, InvocationId: invocationId, IdempotencyKey: idempotencyKey, Params: params}
 
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ExecuteRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.ExecuteStream(ctx, ToWireExecuteRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -751,11 +727,7 @@ func (c *AppProvider) ExecuteStream(ctx context.Context, operation string, token
 // A mid-stream error may emit a trailing metadata frame with an error status
 // followed by a JSON error body, after which the stream ends.
 func (c *AppProvider) ExecuteStreamRaw(ctx context.Context, request *ExecuteRequest) (*AppProviderExecuteStreamStream, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ExecuteRequest, context *RequestContext) { request.Context = context })
 	stream, err := c.client.ExecuteStream(ctx, ToWireExecuteRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -765,11 +737,7 @@ func (c *AppProvider) ExecuteStreamRaw(ctx context.Context, request *ExecuteRequ
 
 // ResolveHTTPSubject calls the ResolveHTTPSubject RPC of AppProvider.
 func (c *AppProvider) ResolveHTTPSubject(ctx context.Context, request *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ResolveHTTPSubjectRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.ResolveHTTPSubject(ctx, ToWireResolveHTTPSubjectRequest(request))
 	return decodeUnaryResponse(response, err, FromWireResolveHTTPSubjectResponse)
 }
@@ -783,11 +751,7 @@ func (c *AppProvider) GetSessionCatalog(ctx context.Context, token string, invoc
 
 // GetSessionCatalogRaw is the faithful form of [AppProvider.GetSessionCatalog].
 func (c *AppProvider) GetSessionCatalogRaw(ctx context.Context, request *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetSessionCatalogRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetSessionCatalog(ctx, ToWireGetSessionCatalogRequest(request))
 	return decodeUnaryResponse(response, err, FromWireGetSessionCatalogResponse)
 }

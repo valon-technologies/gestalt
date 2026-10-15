@@ -15,6 +15,16 @@ func WithRequestContext(context *RequestContext) ClientOption {
 	return func(o *clientOptions) { o.requestContext = context }
 }
 
+// withDefaultRequestContext copies the request only when injecting a default.
+func withDefaultRequestContext[T any](request *T, current, fallback *RequestContext, set func(*T, *RequestContext)) *T {
+	if current != nil || fallback == nil {
+		return request
+	}
+	shallow := *request
+	set(&shallow, fallback)
+	return &shallow
+}
+
 func applyClientOptions(opts []ClientOption) clientOptions {
 	var options clientOptions
 	for _, opt := range opts {

@@ -609,11 +609,7 @@ func (c *Agent) CreateSession(ctx context.Context, idempotencyKey string, model 
 
 // CreateSessionRaw is the faithful form of [Agent.CreateSession].
 func (c *Agent) CreateSessionRaw(ctx context.Context, request *CreateAgentProviderSessionRequest) (*AgentSession, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *CreateAgentProviderSessionRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.CreateSession(ctx, ToWireCreateAgentProviderSessionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentSession)
 }
@@ -636,11 +632,7 @@ func (c *Agent) GetSession(ctx context.Context, sessionId string, opts *AgentGet
 
 // GetSessionRaw is the faithful form of [Agent.GetSession].
 func (c *Agent) GetSessionRaw(ctx context.Context, request *GetAgentProviderSessionRequest) (*AgentSession, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetAgentProviderSessionRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetSession(ctx, ToWireGetAgentProviderSessionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentSession)
 }
@@ -675,11 +667,7 @@ func (c *Agent) ListSessions(ctx context.Context, opts *AgentListSessionsOptions
 
 // ListSessionsRaw is the faithful form of [Agent.ListSessions].
 func (c *Agent) ListSessionsRaw(ctx context.Context, request *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ListAgentProviderSessionsRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.ListSessions(ctx, ToWireListAgentProviderSessionsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireListAgentProviderSessionsResponse)
 }
@@ -705,11 +693,7 @@ func (c *Agent) UpdateSession(ctx context.Context, sessionId string, opts *Agent
 
 // UpdateSessionRaw is the faithful form of [Agent.UpdateSession].
 func (c *Agent) UpdateSessionRaw(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*AgentSession, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *UpdateAgentProviderSessionRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.UpdateSession(ctx, ToWireUpdateAgentProviderSessionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentSession)
 }
@@ -740,11 +724,7 @@ func (c *Agent) CreateTurn(ctx context.Context, sessionId string, idempotencyKey
 
 // CreateTurnRaw is the faithful form of [Agent.CreateTurn].
 func (c *Agent) CreateTurnRaw(ctx context.Context, request *CreateAgentProviderTurnRequest) (*AgentTurn, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *CreateAgentProviderTurnRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.CreateTurn(ctx, ToWireCreateAgentProviderTurnRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentTurn)
 }
@@ -767,11 +747,7 @@ func (c *Agent) GetTurn(ctx context.Context, turnId string, opts *AgentGetTurnOp
 
 // GetTurnRaw is the faithful form of [Agent.GetTurn].
 func (c *Agent) GetTurnRaw(ctx context.Context, request *GetAgentProviderTurnRequest) (*AgentTurn, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetAgentProviderTurnRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetTurn(ctx, ToWireGetAgentProviderTurnRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentTurn)
 }
@@ -807,11 +783,7 @@ func (c *Agent) ListTurns(ctx context.Context, sessionId string, opts *AgentList
 
 // ListTurnsRaw is the faithful form of [Agent.ListTurns].
 func (c *Agent) ListTurnsRaw(ctx context.Context, request *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ListAgentProviderTurnsRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.ListTurns(ctx, ToWireListAgentProviderTurnsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireListAgentProviderTurnsResponse)
 }
@@ -835,11 +807,7 @@ func (c *Agent) CancelTurn(ctx context.Context, turnId string, opts *AgentCancel
 
 // CancelTurnRaw is the faithful form of [Agent.CancelTurn].
 func (c *Agent) CancelTurnRaw(ctx context.Context, request *CancelAgentProviderTurnRequest) (*AgentTurn, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *CancelAgentProviderTurnRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.CancelTurn(ctx, ToWireCancelAgentProviderTurnRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentTurn)
 }
@@ -868,11 +836,7 @@ func (c *Agent) ListTurnEvents(ctx context.Context, turnId string, opts *AgentLi
 
 // ListTurnEventsRaw is the faithful form of [Agent.ListTurnEvents].
 func (c *Agent) ListTurnEventsRaw(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ListAgentProviderTurnEventsRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.ListTurnEvents(ctx, ToWireListAgentProviderTurnEventsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireListAgentProviderTurnEventsResponse)
 }
@@ -886,11 +850,7 @@ func (c *Agent) GetInteraction(ctx context.Context, interactionId string) (*Agen
 
 // GetInteractionRaw is the faithful form of [Agent.GetInteraction].
 func (c *Agent) GetInteractionRaw(ctx context.Context, request *GetAgentProviderInteractionRequest) (*AgentInteraction, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *GetAgentProviderInteractionRequest, context *RequestContext) { request.Context = context })
 	response, err := c.client.GetInteraction(ctx, ToWireGetAgentProviderInteractionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentInteraction)
 }
@@ -917,11 +877,9 @@ func (c *Agent) ListInteractions(ctx context.Context, turnId string, opts *Agent
 
 // ListInteractionsRaw is the faithful form of [Agent.ListInteractions].
 func (c *Agent) ListInteractionsRaw(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ListAgentProviderInteractionsRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.ListInteractions(ctx, ToWireListAgentProviderInteractionsRequest(request))
 	return decodeUnaryResponse(response, err, FromWireListAgentProviderInteractionsResponse)
 }
@@ -944,11 +902,9 @@ func (c *Agent) ResolveInteraction(ctx context.Context, interactionId string, tu
 
 // ResolveInteractionRaw is the faithful form of [Agent.ResolveInteraction].
 func (c *Agent) ResolveInteractionRaw(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
-	if request.Context == nil && c.context != nil {
-		shallow := *request
-		shallow.Context = c.context
-		request = &shallow
-	}
+	request = withDefaultRequestContext(request, request.Context, c.context, func(request *ResolveAgentProviderInteractionRequest, context *RequestContext) {
+		request.Context = context
+	})
 	response, err := c.client.ResolveInteraction(ctx, ToWireResolveAgentProviderInteractionRequest(request))
 	return decodeUnaryResponse(response, err, FromWireAgentInteraction)
 }

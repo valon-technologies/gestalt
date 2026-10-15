@@ -682,13 +682,9 @@ func (r *renderer) methodRequest(m *model.Method) (param, arg string, prep []str
 		return "", "&emptypb.Empty{}", nil
 	}
 	requestType := r.messageType(m.Input.FullName)
-	if !r.publicClient && findField(m.Input, "context") != nil {
+	if contextField := findField(m.Input, "context"); !r.publicClient && contextField != nil {
 		prep = []string{
-			"\tif request.Context == nil && c.context != nil {",
-			"\t\tshallow := *request",
-			"\t\tshallow.Context = c.context",
-			"\t\trequest = &shallow",
-			"\t}",
+			fmt.Sprintf("\trequest = withDefaultRequestContext(request, request.Context, c.context, func(request *%s, context %s) { request.Context = context })", requestType, r.fieldType(contextField)),
 		}
 	}
 	return ", request *" + requestType, toWireFunc(requestType) + "(request)", prep
