@@ -369,21 +369,6 @@ func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
 	}, nil
 }
 
-func agentSessionsToProto(values []AgentSession) ([]*proto.AgentSession, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentSession, 0, len(values))
-	for index := range values {
-		pbValue, err := agentSessionToProto(&values[index])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
-	}
-	return out, nil
-}
-
 func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
 	if req == nil {
 		return &CreateAgentProviderSessionRequest{}
@@ -467,7 +452,7 @@ func listAgentProviderSessionsResponseToProto(value *ListAgentProviderSessionsRe
 	if value == nil {
 		return nil, nil
 	}
-	sessions, err := agentSessionsToProto(value.Sessions)
+	sessions, err := convertProtoSlicePointers(value.Sessions, agentSessionToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -512,21 +497,6 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 	}
 	if err := applyAgentTurnOutputToProto(out, value.Output); err != nil {
 		return nil, err
-	}
-	return out, nil
-}
-
-func agentTurnsToProto(values []AgentTurn) ([]*proto.AgentTurn, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentTurn, 0, len(values))
-	for index := range values {
-		pbValue, err := agentTurnToProto(&values[index])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
 	}
 	return out, nil
 }
@@ -584,7 +554,7 @@ func listAgentProviderTurnsResponseToProto(value *ListAgentProviderTurnsResponse
 	if value == nil {
 		return nil, nil
 	}
-	turns, err := agentTurnsToProto(value.Turns)
+	turns, err := convertProtoSlicePointers(value.Turns, agentTurnToProto)
 	if err != nil {
 		return nil, err
 	}
@@ -729,26 +699,11 @@ func agentInteractionToProto(value *AgentInteraction) (*proto.AgentInteraction, 
 	}, nil
 }
 
-func agentInteractionsToProto(values []AgentInteraction) ([]*proto.AgentInteraction, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentInteraction, 0, len(values))
-	for index := range values {
-		pbValue, err := agentInteractionToProto(&values[index])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
-	}
-	return out, nil
-}
-
 func listAgentProviderInteractionsResponseToProto(value *ListAgentProviderInteractionsResponse) (*proto.ListAgentProviderInteractionsResponse, error) {
 	if value == nil {
 		return nil, nil
 	}
-	interactions, err := agentInteractionsToProto(value.Interactions)
+	interactions, err := convertProtoSlicePointers(value.Interactions, agentInteractionToProto)
 	if err != nil {
 		return nil, err
 	}

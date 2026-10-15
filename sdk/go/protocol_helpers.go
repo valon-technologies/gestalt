@@ -357,3 +357,19 @@ func convertProtoSliceErr[Input, Output any](values []Input, convert func(Input)
 	}
 	return out, nil
 }
+
+// convertProtoSlicePointers converts the original elements without copying them.
+func convertProtoSlicePointers[Input, Output any](values []Input, convert func(*Input) (Output, error)) ([]Output, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]Output, 0, len(values))
+	for index := range values {
+		converted, err := convert(&values[index])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, converted)
+	}
+	return out, nil
+}
