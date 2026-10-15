@@ -6,9 +6,8 @@ import (
 )
 
 func cloneRequestContext(reqCtx *proto.RequestContext) *proto.RequestContext {
-	if reqCtx == nil {
-		return nil
-	}
-	cloned, _ := gproto.Clone(reqCtx).(*proto.RequestContext)
-	return cloned
+	return convertProtoMessage(reqCtx, func(reqCtx *proto.RequestContext) *proto.RequestContext {
+		cloned, _ := gproto.Clone(reqCtx).(*proto.RequestContext)
+		return cloned
+	})
 }

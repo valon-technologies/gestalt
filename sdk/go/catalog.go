@@ -351,20 +351,19 @@ func (r *OperationResponseSpec) IsStream() bool {
 
 // cloneOperationResponseSpec returns a deep copy of spec.
 func cloneOperationResponseSpec(spec *OperationResponseSpec) *OperationResponseSpec {
-	if spec == nil {
-		return nil
-	}
-	out := &OperationResponseSpec{}
-	if spec.Unary != nil {
-		out.Unary = &UnaryResponseSpec{Schema: spec.Unary.Schema}
-	}
-	if spec.Stream != nil {
-		out.Stream = &StreamResponseSpec{
-			MediaType:  spec.Stream.MediaType,
-			ItemSchema: spec.Stream.ItemSchema,
+	return convertProtoMessage(spec, func(spec *OperationResponseSpec) *OperationResponseSpec {
+		out := &OperationResponseSpec{}
+		if spec.Unary != nil {
+			out.Unary = &UnaryResponseSpec{Schema: spec.Unary.Schema}
 		}
-	}
-	return out
+		if spec.Stream != nil {
+			out.Stream = &StreamResponseSpec{
+				MediaType:  spec.Stream.MediaType,
+				ItemSchema: spec.Stream.ItemSchema,
+			}
+		}
+		return out
+	})
 }
 
 // operationResponseSpecToProto converts the SDK response spec to the proto
@@ -472,71 +471,67 @@ func cloneCatalog(src *Catalog) *Catalog {
 }
 
 func cloneCatalogOperation(src *CatalogOperation) *CatalogOperation {
-	if src == nil {
-		return nil
-	}
-	out := &CatalogOperation{
-		Id:             src.Id,
-		Method:         src.Method,
-		Title:          src.Title,
-		Description:    src.Description,
-		InputSchema:    src.InputSchema,
-		OutputSchema:   src.OutputSchema,
-		Response:       cloneOperationResponseSpec(src.Response),
-		Annotations:    cloneOperationAnnotations(src.Annotations),
-		Parameters:     make([]*CatalogParameter, 0, len(src.Parameters)),
-		RequiredScopes: append([]string(nil), src.RequiredScopes...),
-		Tags:           append([]string(nil), src.Tags...),
-		ReadOnly:       src.ReadOnly,
-		Transport:      src.Transport,
-		AllowedRoles:   append([]string(nil), src.AllowedRoles...),
-	}
-	if src.API != nil {
-		api := *src.API
-		out.API = &api
-	}
-	if src.Visible != nil {
-		visible := *src.Visible
-		out.Visible = &visible
-	}
-	for _, param := range src.Parameters {
-		out.Parameters = append(out.Parameters, cloneCatalogParameter(param))
-	}
-	return out
+	return convertProtoMessage(src, func(src *CatalogOperation) *CatalogOperation {
+		out := &CatalogOperation{
+			Id:             src.Id,
+			Method:         src.Method,
+			Title:          src.Title,
+			Description:    src.Description,
+			InputSchema:    src.InputSchema,
+			OutputSchema:   src.OutputSchema,
+			Response:       cloneOperationResponseSpec(src.Response),
+			Annotations:    cloneOperationAnnotations(src.Annotations),
+			Parameters:     make([]*CatalogParameter, 0, len(src.Parameters)),
+			RequiredScopes: append([]string(nil), src.RequiredScopes...),
+			Tags:           append([]string(nil), src.Tags...),
+			ReadOnly:       src.ReadOnly,
+			Transport:      src.Transport,
+			AllowedRoles:   append([]string(nil), src.AllowedRoles...),
+		}
+		if src.API != nil {
+			api := *src.API
+			out.API = &api
+		}
+		if src.Visible != nil {
+			visible := *src.Visible
+			out.Visible = &visible
+		}
+		for _, param := range src.Parameters {
+			out.Parameters = append(out.Parameters, cloneCatalogParameter(param))
+		}
+		return out
+	})
 }
 
 func cloneCatalogParameter(src *CatalogParameter) *CatalogParameter {
-	if src == nil {
-		return nil
-	}
-	return &CatalogParameter{
-		Name:        src.Name,
-		Type:        src.Type,
-		Description: src.Description,
-		Required:    src.Required,
-		Default:     cloneCatalogDefault(src.Default),
-		HasDefault:  src.HasDefault,
-	}
+	return convertProtoMessage(src, func(src *CatalogParameter) *CatalogParameter {
+		return &CatalogParameter{
+			Name:        src.Name,
+			Type:        src.Type,
+			Description: src.Description,
+			Required:    src.Required,
+			Default:     cloneCatalogDefault(src.Default),
+			HasDefault:  src.HasDefault,
+		}
+	})
 }
 
 func cloneOperationAnnotations(src *OperationAnnotations) *OperationAnnotations {
-	if src == nil {
-		return nil
-	}
-	return &OperationAnnotations{
-		ReadOnlyHint:    cloneBool(src.ReadOnlyHint),
-		IdempotentHint:  cloneBool(src.IdempotentHint),
-		DestructiveHint: cloneBool(src.DestructiveHint),
-		OpenWorldHint:   cloneBool(src.OpenWorldHint),
-	}
+	return convertProtoMessage(src, func(src *OperationAnnotations) *OperationAnnotations {
+		return &OperationAnnotations{
+			ReadOnlyHint:    cloneBool(src.ReadOnlyHint),
+			IdempotentHint:  cloneBool(src.IdempotentHint),
+			DestructiveHint: cloneBool(src.DestructiveHint),
+			OpenWorldHint:   cloneBool(src.OpenWorldHint),
+		}
+	})
 }
 
 func cloneBool(src *bool) *bool {
-	if src == nil {
-		return nil
-	}
-	v := *src
-	return &v
+	return convertProtoMessage(src, func(src *bool) *bool {
+		v := *src
+		return &v
+	})
 }
 
 func cloneCatalogDefault(value any) any {
@@ -650,15 +645,14 @@ func catalogParameterToProto(param *CatalogParameter) (*proto.CatalogParameter, 
 }
 
 func operationAnnotationsToProto(annotations *OperationAnnotations) *proto.OperationAnnotations {
-	if annotations == nil {
-		return nil
-	}
-	return &proto.OperationAnnotations{
-		ReadOnlyHint:    cloneBool(annotations.ReadOnlyHint),
-		IdempotentHint:  cloneBool(annotations.IdempotentHint),
-		DestructiveHint: cloneBool(annotations.DestructiveHint),
-		OpenWorldHint:   cloneBool(annotations.OpenWorldHint),
-	}
+	return convertProtoMessage(annotations, func(annotations *OperationAnnotations) *proto.OperationAnnotations {
+		return &proto.OperationAnnotations{
+			ReadOnlyHint:    cloneBool(annotations.ReadOnlyHint),
+			IdempotentHint:  cloneBool(annotations.IdempotentHint),
+			DestructiveHint: cloneBool(annotations.DestructiveHint),
+			OpenWorldHint:   cloneBool(annotations.OpenWorldHint),
+		}
+	})
 }
 
 func catalogDefaultToProto(value any) (*structpb.Value, error) {
@@ -672,8 +666,7 @@ func catalogDefaultToProto(value any) (*structpb.Value, error) {
 }
 
 func cloneProtoValue(value *structpb.Value) *structpb.Value {
-	if value == nil {
-		return nil
-	}
-	return gproto.Clone(value).(*structpb.Value)
+	return convertProtoMessage(value, func(value *structpb.Value) *structpb.Value {
+		return gproto.Clone(value).(*structpb.Value)
+	})
 }

@@ -313,14 +313,13 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 }
 
 func operationResultProto(result *OperationResult) *proto.OperationResult {
-	if result == nil {
-		return nil
-	}
-	return &proto.OperationResult{
-		Status:  int32(result.Status),
-		Headers: httpHeaderToProto(result.Headers),
-		Body:    result.Body,
-	}
+	return convertProtoMessage(result, func(result *OperationResult) *proto.OperationResult {
+		return &proto.OperationResult{
+			Status:  int32(result.Status),
+			Headers: httpHeaderToProto(result.Headers),
+			Body:    result.Body,
+		}
+	})
 }
 
 func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {

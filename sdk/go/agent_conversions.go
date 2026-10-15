@@ -148,14 +148,13 @@ func inferAgentMessagePartType(input AgentMessagePart) AgentMessagePartType {
 }
 
 func agentMessagePartToolCallFromProto(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
-	if value == nil {
-		return nil
-	}
-	return &AgentMessagePartToolCall{
-		ID:        value.GetId(),
-		ToolID:    value.GetToolId(),
-		Arguments: mapFromStruct(value.GetArguments()),
-	}
+	return convertProtoMessage(value, func(value *proto.AgentMessagePartToolCall) *AgentMessagePartToolCall {
+		return &AgentMessagePartToolCall{
+			ID:        value.GetId(),
+			ToolID:    value.GetToolId(),
+			Arguments: mapFromStruct(value.GetArguments()),
+		}
+	})
 }
 
 func agentMessagePartToolCallToProto(value *AgentMessagePartToolCall) (*proto.AgentMessagePartToolCall, error) {
@@ -174,15 +173,14 @@ func agentMessagePartToolCallToProto(value *AgentMessagePartToolCall) (*proto.Ag
 }
 
 func agentMessagePartToolResultFromProto(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
-	if value == nil {
-		return nil
-	}
-	return &AgentMessagePartToolResult{
-		ToolCallID: value.GetToolCallId(),
-		Status:     value.GetStatus(),
-		Content:    value.GetContent(),
-		Output:     mapFromStruct(value.GetOutput()),
-	}
+	return convertProtoMessage(value, func(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
+		return &AgentMessagePartToolResult{
+			ToolCallID: value.GetToolCallId(),
+			Status:     value.GetStatus(),
+			Content:    value.GetContent(),
+			Output:     mapFromStruct(value.GetOutput()),
+		}
+	})
 }
 
 func agentMessagePartToolResultToProto(value *AgentMessagePartToolResult) (*proto.AgentMessagePartToolResult, error) {
@@ -202,59 +200,54 @@ func agentMessagePartToolResultToProto(value *AgentMessagePartToolResult) (*prot
 }
 
 func agentMessagePartImageRefFromProto(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
-	if value == nil {
-		return nil
-	}
-	return &AgentMessagePartImageRef{
-		URI:      value.GetUri(),
-		MimeType: value.GetMimeType(),
-	}
+	return convertProtoMessage(value, func(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
+		return &AgentMessagePartImageRef{
+			URI:      value.GetUri(),
+			MimeType: value.GetMimeType(),
+		}
+	})
 }
 
 func agentMessagePartImageRefToProto(value *AgentMessagePartImageRef) *proto.AgentMessagePartImageRef {
-	if value == nil {
-		return nil
-	}
-	return &proto.AgentMessagePartImageRef{
-		Uri:      value.URI,
-		MimeType: value.MimeType,
-	}
+	return convertProtoMessage(value, func(value *AgentMessagePartImageRef) *proto.AgentMessagePartImageRef {
+		return &proto.AgentMessagePartImageRef{
+			Uri:      value.URI,
+			MimeType: value.MimeType,
+		}
+	})
 }
 
 func subjectFromProto(value *proto.SubjectContext) *Subject {
-	if value == nil {
-		return nil
-	}
-	return &Subject{
-		ID:          value.GetId(),
-		Email:       value.GetEmail(),
-		DisplayName: value.GetDisplayName(),
-		Scopes:      cloneStrings(value.GetScopes()),
-		Permissions: subjectPermissionsFromProto(value.GetPermissions()),
-	}
+	return convertProtoMessage(value, func(value *proto.SubjectContext) *Subject {
+		return &Subject{
+			ID:          value.GetId(),
+			Email:       value.GetEmail(),
+			DisplayName: value.GetDisplayName(),
+			Scopes:      cloneStrings(value.GetScopes()),
+			Permissions: subjectPermissionsFromProto(value.GetPermissions()),
+		}
+	})
 }
 
 func subjectToProto(value *Subject) *proto.SubjectContext {
-	if value == nil {
-		return nil
-	}
-	return &proto.SubjectContext{
-		Id:          value.ID,
-		Email:       value.Email,
-		DisplayName: value.DisplayName,
-		Scopes:      cloneStrings(value.Scopes),
-		Permissions: subjectPermissionsToProto(value.Permissions),
-	}
+	return convertProtoMessage(value, func(value *Subject) *proto.SubjectContext {
+		return &proto.SubjectContext{
+			Id:          value.ID,
+			Email:       value.Email,
+			DisplayName: value.DisplayName,
+			Scopes:      cloneStrings(value.Scopes),
+			Permissions: subjectPermissionsToProto(value.Permissions),
+		}
+	})
 }
 
 func agentPreparedWorkspaceFromProto(value *proto.PreparedAgentWorkspace) *AgentPreparedWorkspace {
-	if value == nil {
-		return nil
-	}
-	return &AgentPreparedWorkspace{
-		Root: value.GetRoot(),
-		Cwd:  value.GetCwd(),
-	}
+	return convertProtoMessage(value, func(value *proto.PreparedAgentWorkspace) *AgentPreparedWorkspace {
+		return &AgentPreparedWorkspace{
+			Root: value.GetRoot(),
+			Cwd:  value.GetCwd(),
+		}
+	})
 }
 
 func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
@@ -332,25 +325,24 @@ func agentToolConfigFromProto(value *proto.AgentToolConfig) AgentToolConfig {
 }
 
 func agentProviderCapabilitiesToProto(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
-	if value == nil {
-		return nil
-	}
-	sources := make([]proto.AgentToolSourceMode, 0, len(value.SupportedToolSources))
-	for _, source := range value.SupportedToolSources {
-		sources = append(sources, proto.AgentToolSourceMode(source))
-	}
-	return &proto.AgentProviderCapabilities{
-		StreamingText:             value.StreamingText,
-		ToolCalls:                 value.ToolCalls,
-		ParallelToolCalls:         value.ParallelToolCalls,
-		Interactions:              value.Interactions,
-		ResumableTurns:            value.ResumableTurns,
-		ReasoningSummaries:        value.ReasoningSummaries,
-		BoundedListHydration:      value.BoundedListHydration,
-		SupportedToolSources:      sources,
-		SupportsSessionStart:      value.SupportsSessionStart,
-		SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
-	}
+	return convertProtoMessage(value, func(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
+		sources := make([]proto.AgentToolSourceMode, 0, len(value.SupportedToolSources))
+		for _, source := range value.SupportedToolSources {
+			sources = append(sources, proto.AgentToolSourceMode(source))
+		}
+		return &proto.AgentProviderCapabilities{
+			StreamingText:             value.StreamingText,
+			ToolCalls:                 value.ToolCalls,
+			ParallelToolCalls:         value.ParallelToolCalls,
+			Interactions:              value.Interactions,
+			ResumableTurns:            value.ResumableTurns,
+			ReasoningSummaries:        value.ReasoningSummaries,
+			BoundedListHydration:      value.BoundedListHydration,
+			SupportedToolSources:      sources,
+			SupportsSessionStart:      value.SupportsSessionStart,
+			SupportsPreparedWorkspace: value.SupportsPreparedWorkspace,
+		}
+	})
 }
 
 func agentOutputFromProto(value *proto.AgentOutput) *AgentOutput {
@@ -477,14 +469,13 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 }
 
 func agentSessionStartConfigFromProto(value *proto.AgentSessionStartConfig) *AgentSessionStartConfig {
-	if value == nil {
-		return nil
-	}
-	hooks := make([]AgentSessionStartHook, 0, len(value.GetHooks()))
-	for _, hook := range value.GetHooks() {
-		hooks = append(hooks, agentSessionStartHookFromProto(hook))
-	}
-	return &AgentSessionStartConfig{Hooks: hooks}
+	return convertProtoMessage(value, func(value *proto.AgentSessionStartConfig) *AgentSessionStartConfig {
+		hooks := make([]AgentSessionStartHook, 0, len(value.GetHooks()))
+		for _, hook := range value.GetHooks() {
+			hooks = append(hooks, agentSessionStartHookFromProto(hook))
+		}
+		return &AgentSessionStartConfig{Hooks: hooks}
+	})
 }
 
 func agentSessionStartHookFromProto(value *proto.AgentSessionStartHook) AgentSessionStartHook {
@@ -503,13 +494,12 @@ func agentSessionStartHookFromProto(value *proto.AgentSessionStartHook) AgentSes
 }
 
 func agentSessionStartHookOutputFromProto(value *proto.AgentSessionStartHookOutput) *AgentSessionStartHookOutput {
-	if value == nil {
-		return nil
-	}
-	return &AgentSessionStartHookOutput{
-		AdditionalContext: value.GetAdditionalContext(),
-		Metadata:          value.GetMetadata(),
-	}
+	return convertProtoMessage(value, func(value *proto.AgentSessionStartHookOutput) *AgentSessionStartHookOutput {
+		return &AgentSessionStartHookOutput{
+			AdditionalContext: value.GetAdditionalContext(),
+			Metadata:          value.GetMetadata(),
+		}
+	})
 }
 
 func getAgentProviderSessionRequestFromProto(req *proto.GetAgentProviderSessionRequest) *GetAgentProviderSessionRequest {
@@ -892,15 +882,14 @@ func listedAgentToolsFromProto(values []*proto.ListedAgentTool) []ListedAgentToo
 }
 
 func agentToolAnnotationsFromProto(value *proto.OperationAnnotations) *AgentToolAnnotations {
-	if value == nil {
-		return nil
-	}
-	return &AgentToolAnnotations{
-		ReadOnlyHint:    value.ReadOnlyHint,
-		IdempotentHint:  value.IdempotentHint,
-		DestructiveHint: value.DestructiveHint,
-		OpenWorldHint:   value.OpenWorldHint,
-	}
+	return convertProtoMessage(value, func(value *proto.OperationAnnotations) *AgentToolAnnotations {
+		return &AgentToolAnnotations{
+			ReadOnlyHint:    value.ReadOnlyHint,
+			IdempotentHint:  value.IdempotentHint,
+			DestructiveHint: value.DestructiveHint,
+			OpenWorldHint:   value.OpenWorldHint,
+		}
+	})
 }
 
 func optionalValueFromAny(value any) (*structpb.Value, error) {
