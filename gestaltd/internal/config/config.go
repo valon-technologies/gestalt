@@ -730,22 +730,20 @@ type RuntimePlacementLifecyclePolicy struct {
 }
 
 func (c *RuntimePlacementConfig) LifecyclePolicyFieldsSet() bool {
-	if c == nil {
-		return false
-	}
-	return c.Pool != nil && c.Pool.lifecyclePolicyFieldsSet()
+	return withOptionalConfig(c, func(c *RuntimePlacementConfig) bool {
+		return c.Pool.lifecyclePolicyFieldsSet()
+	})
 }
 
 func (c *RuntimePlacementPoolConfig) lifecyclePolicyFieldsSet() bool {
-	if c == nil {
-		return false
-	}
-	return c.MinReadyInstances != 0 ||
-		c.MaxReadyInstances != 0 ||
-		strings.TrimSpace(c.StartupTimeout) != "" ||
-		strings.TrimSpace(c.HealthCheckInterval) != "" ||
-		strings.TrimSpace(string(c.RestartPolicy)) != "" ||
-		strings.TrimSpace(c.DrainTimeout) != ""
+	return withOptionalConfig(c, func(c *RuntimePlacementPoolConfig) bool {
+		return c.MinReadyInstances != 0 ||
+			c.MaxReadyInstances != 0 ||
+			strings.TrimSpace(c.StartupTimeout) != "" ||
+			strings.TrimSpace(c.HealthCheckInterval) != "" ||
+			strings.TrimSpace(string(c.RestartPolicy)) != "" ||
+			strings.TrimSpace(c.DrainTimeout) != ""
+	})
 }
 
 func (c *RuntimePlacementConfig) LifecyclePolicy() (RuntimePlacementLifecyclePolicy, error) {
@@ -776,13 +774,12 @@ func (c *RuntimePlacementConfig) LifecyclePolicy() (RuntimePlacementLifecyclePol
 }
 
 func (c *RuntimePlacementConfig) lifecyclePolicyConfig() RuntimePlacementPoolConfig {
-	if c == nil {
+	return withOptionalConfig(c, func(c *RuntimePlacementConfig) RuntimePlacementPoolConfig {
+		if c.Pool != nil {
+			return *c.Pool
+		}
 		return RuntimePlacementPoolConfig{}
-	}
-	if c.Pool != nil {
-		return *c.Pool
-	}
-	return RuntimePlacementPoolConfig{}
+	})
 }
 
 type WorkflowsConfig struct {
@@ -1400,27 +1397,22 @@ func trimStringSlice(values []string) []string {
 }
 
 func (e *ProviderEntry) EffectiveAllowedHosts() []string {
-	if e == nil {
+	return withOptionalConfig(e, func(e *ProviderEntry) []string {
+		if e.Egress != nil {
+			return slices.Clone(e.Egress.AllowedHosts)
+		}
 		return nil
-	}
-	if e.Egress != nil {
-		return slices.Clone(e.Egress.AllowedHosts)
-	}
-	return nil
+	})
 }
 
 func (e *ProviderEntry) UsesRuntimePlacement() bool {
-	if e == nil {
-		return false
-	}
-	return e.Runtime != nil
+	return e.RuntimePlacementConfig() != nil
 }
 
 func (e *ProviderEntry) RuntimePlacementConfig() *RuntimePlacementConfig {
-	if e == nil {
-		return nil
-	}
-	return e.Runtime
+	return withOptionalConfig(e, func(e *ProviderEntry) *RuntimePlacementConfig {
+		return e.Runtime
+	})
 }
 
 func cloneProviderEgressConfig(src *ProviderEgressConfig) *ProviderEgressConfig {
@@ -1676,54 +1668,51 @@ func (e *ProviderEntry) SourceTreeURL() string {
 }
 
 func (e *ProviderEntry) SourceMetadataURL() string {
-	if e == nil {
-		return ""
-	}
-	if e.Source.IsPackage() {
-		return e.Source.ResolvedPackageMetadataURL()
-	}
-	return e.Source.MetadataURL()
+	return withOptionalConfig(e, func(e *ProviderEntry) string {
+		if e.Source.IsPackage() {
+			return e.Source.ResolvedPackageMetadataURL()
+		}
+		return e.Source.MetadataURL()
+	})
 }
 
 func (e *ProviderEntry) SourceRemoteLocation() string {
-	if e == nil {
+	return withOptionalConfig(e, func(e *ProviderEntry) string {
+		if e.Source.IsMetadataURL() {
+			return e.Source.MetadataURL()
+		}
+		if e.Source.IsGitHubRelease() {
+			return e.Source.GitHubReleaseLocation()
+		}
+		if e.Source.IsPackage() {
+			return e.Source.ResolvedPackageMetadataURL()
+		}
+		if e.Source.IsGit() {
+			return e.Source.GitLocation()
+		}
 		return ""
-	}
-	if e.Source.IsMetadataURL() {
-		return e.Source.MetadataURL()
-	}
-	if e.Source.IsGitHubRelease() {
-		return e.Source.GitHubReleaseLocation()
-	}
-	if e.Source.IsPackage() {
-		return e.Source.ResolvedPackageMetadataURL()
-	}
-	if e.Source.IsGit() {
-		return e.Source.GitLocation()
-	}
-	return ""
+	})
 }
 
 func (e *ProviderEntry) SourceReleaseLocation() string {
-	if e == nil {
+	return withOptionalConfig(e, func(e *ProviderEntry) string {
+		if e.Source.IsMetadataURL() {
+			return e.Source.MetadataURL()
+		}
+		if e.Source.IsGitHubRelease() {
+			return e.Source.GitHubReleaseLocation()
+		}
+		if e.Source.IsLocalMetadataPath() {
+			return e.Source.MetadataPath()
+		}
+		if e.Source.IsPackage() {
+			return e.Source.ResolvedPackageMetadataURL()
+		}
+		if e.Source.IsGit() {
+			return e.Source.GitLocation()
+		}
 		return ""
-	}
-	if e.Source.IsMetadataURL() {
-		return e.Source.MetadataURL()
-	}
-	if e.Source.IsGitHubRelease() {
-		return e.Source.GitHubReleaseLocation()
-	}
-	if e.Source.IsLocalMetadataPath() {
-		return e.Source.MetadataPath()
-	}
-	if e.Source.IsPackage() {
-		return e.Source.ResolvedPackageMetadataURL()
-	}
-	if e.Source.IsGit() {
-		return e.Source.GitLocation()
-	}
-	return ""
+	})
 }
 
 func (e *ProviderEntry) SourcePath() string {
@@ -1752,16 +1741,15 @@ func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
 }
 
 func (e *ProviderEntry) EffectiveAllowedOperations() map[string]*OperationOverride {
-	if e == nil {
+	return withOptionalConfig(e, func(e *ProviderEntry) map[string]*OperationOverride {
+		if e.AllowedOperations != nil {
+			return e.AllowedOperations
+		}
+		if spec := e.ManifestSpec(); spec != nil {
+			return operationexposure.FromManifestAllowed(spec.AllowedOperations)
+		}
 		return nil
-	}
-	if e.AllowedOperations != nil {
-		return e.AllowedOperations
-	}
-	if spec := e.ManifestSpec(); spec != nil {
-		return operationexposure.FromManifestAllowed(spec.AllowedOperations)
-	}
-	return nil
+	})
 }
 
 func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityScheme {
@@ -1807,23 +1795,19 @@ func (e *ProviderEntry) EffectiveHTTPBindings() map[string]*HTTPBinding {
 }
 
 func (e *ProviderEntry) DeclaresMCP() bool {
-	if e == nil {
-		return false
-	}
-	if e.MCP {
-		return true
-	}
-	spec := e.ManifestSpec()
-	if spec == nil {
-		return false
-	}
-	return spec.MCP
+	return withOptionalConfig(e, func(e *ProviderEntry) bool {
+		if e.MCP {
+			return true
+		}
+		spec := e.ManifestSpec()
+		if spec == nil {
+			return false
+		}
+		return spec.MCP
+	})
 }
 
 func (e *ProviderEntry) HasMCPSurface() bool {
-	if e == nil {
-		return false
-	}
 	if ProviderSurfaceURLOverride(e, SpecSurfaceMCP) != "" {
 		return true
 	}

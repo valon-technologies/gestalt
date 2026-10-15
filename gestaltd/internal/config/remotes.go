@@ -41,39 +41,38 @@ func EntryBuildsLocal(entry *ProviderEntry) bool {
 // ReferencedRemoteNames returns the sorted unique remote names referenced by
 // configured provider entries.
 func (cfg *Config) ReferencedRemoteNames() []string {
-	if cfg == nil {
-		return nil
-	}
-	seen := make(map[string]struct{})
-	add := func(entry *ProviderEntry) {
-		if entry == nil || entry.Local {
-			return
+	return withOptionalConfig(cfg, func(cfg *Config) []string {
+		seen := make(map[string]struct{})
+		add := func(entry *ProviderEntry) {
+			if entry == nil || entry.Local {
+				return
+			}
+			if entry.DevActive && !entry.RemotePreviewActive {
+				return
+			}
+			if name := EntryPlacementRemote(entry); name != "" {
+				seen[name] = struct{}{}
+			}
 		}
-		if entry.DevActive && !entry.RemotePreviewActive {
-			return
-		}
-		if name := EntryPlacementRemote(entry); name != "" {
-			seen[name] = struct{}{}
-		}
-	}
-	for _, entry := range cfg.Apps {
-		add(entry)
-	}
-	for _, entries := range []map[string]*ProviderEntry{
-		cfg.Providers.Identity,
-		cfg.Providers.Authorization,
-		cfg.Providers.IndexedDB,
-		cfg.Providers.Workflow,
-		cfg.Providers.Agent,
-	} {
-		for _, entry := range entries {
+		for _, entry := range cfg.Apps {
 			add(entry)
 		}
-	}
-	if len(seen) == 0 {
-		return nil
-	}
-	return slices.Sorted(maps.Keys(seen))
+		for _, entries := range []map[string]*ProviderEntry{
+			cfg.Providers.Identity,
+			cfg.Providers.Authorization,
+			cfg.Providers.IndexedDB,
+			cfg.Providers.Workflow,
+			cfg.Providers.Agent,
+		} {
+			for _, entry := range entries {
+				add(entry)
+			}
+		}
+		if len(seen) == 0 {
+			return nil
+		}
+		return slices.Sorted(maps.Keys(seen))
+	})
 }
 
 // DefaultRemoteEntry returns the named default remote configuration.
