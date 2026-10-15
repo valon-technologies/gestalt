@@ -274,10 +274,7 @@ func (s *Server) publicGRPCMiddleware(next http.Handler) http.Handler {
 }
 
 func stripInternalIdentityMetadata(ctx context.Context) context.Context {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ctx
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	if len(md.Get(gestalt.TrustedCallerSubjectMetadataKey)) == 0 &&
 		len(md.Get(gestalt.CallerBearerTokenMetadataKey)) == 0 {
 		return ctx

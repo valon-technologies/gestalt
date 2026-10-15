@@ -10,10 +10,7 @@ import (
 )
 
 func BindingFromIncomingContext(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	for _, value := range md.Get(HostServiceBindingHeader) {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed

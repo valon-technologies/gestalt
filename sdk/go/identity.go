@@ -109,10 +109,7 @@ func AppendIdentityCallMetadata(ctx context.Context) context.Context {
 }
 
 func trustedCallerSubjectFromIncomingMetadata(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	for _, value := range md.Get(TrustedCallerSubjectMetadataKey) {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed
@@ -123,10 +120,7 @@ func trustedCallerSubjectFromIncomingMetadata(ctx context.Context) string {
 
 // CallerBearerTokenFromIncomingContext reads the caller bearer token from gRPC metadata.
 func CallerBearerTokenFromIncomingContext(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	for _, value := range md.Get(CallerBearerTokenMetadataKey) {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed
@@ -136,10 +130,7 @@ func CallerBearerTokenFromIncomingContext(ctx context.Context) string {
 }
 
 func bearerTokenFromIncomingContext(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	for _, value := range md.Get("authorization") {
 		value = strings.TrimSpace(value)
 		if len(value) <= len("Bearer ") || !strings.EqualFold(value[:len("Bearer ")], "Bearer ") {

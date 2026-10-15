@@ -155,10 +155,7 @@ func (t *ProviderGatewayTransport) enforcePublicAuthorization(
 }
 
 func bearerTokenFromContext(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	for _, value := range md.Get("authorization") {
 		value = strings.TrimSpace(value)
 		if len(value) > 7 && strings.EqualFold(value[:7], "Bearer ") {
