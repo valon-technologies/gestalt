@@ -267,38 +267,36 @@ func (s *CompactService) listGroups(ctx context.Context, cid, raw string, start,
 		knownGroupIDs[recordString(row, "id")] = struct{}{}
 	}
 	allowedGroups := map[string]struct{}{}
-	if len(memberClauses) > 0 {
-		for i, clause := range memberClauses {
-			target, ok, err := s.groupMemberTarget(ctx, cid, clause.value)
-			if err != nil {
-				return listResponse[Group]{}, unavailable("could not validate group member")
+	for i, clause := range memberClauses {
+		target, ok, err := s.groupMemberTarget(ctx, cid, clause.value)
+		if err != nil {
+			return listResponse[Group]{}, unavailable("could not validate group member")
+		}
+		if !ok {
+			return listResponse[Group]{Schemas: []string{ListSchemaURN}, TotalResults: 0, StartIndex: 1, ItemsPerPage: 0, Resources: []Group{}}, nil
+		}
+		relations, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
+		if err != nil {
+			return listResponse[Group]{}, unavailable("could not read group membership")
+		}
+		current := map[string]struct{}{}
+		for _, relationship := range relations {
+			if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
+				continue
 			}
-			if !ok {
-				return listResponse[Group]{Schemas: []string{ListSchemaURN}, TotalResults: 0, StartIndex: 1, ItemsPerPage: 0, Resources: []Group{}}, nil
-			}
-			relations, err := s.listRelationships(ctx, &proto.RelationshipFilter{Target: target, Relation: "member", SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME}, 100)
-			if err != nil {
-				return listResponse[Group]{}, unavailable("could not read group membership")
-			}
-			current := map[string]struct{}{}
-			for _, relationship := range relations {
-				if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || !sameRelationshipTarget(relationship.GetTuple().GetTarget(), target) {
-					continue
-				}
-				resource := relationship.GetTuple().GetResource()
-				if resource.GetType() == "group" {
-					if _, exists := knownGroupIDs[resource.GetId()]; exists {
-						current[resource.GetId()] = struct{}{}
-					}
+			resource := relationship.GetTuple().GetResource()
+			if resource.GetType() == "group" {
+				if _, exists := knownGroupIDs[resource.GetId()]; exists {
+					current[resource.GetId()] = struct{}{}
 				}
 			}
-			if i == 0 {
-				allowedGroups = current
-			} else {
-				for groupID := range allowedGroups {
-					if _, exists := current[groupID]; !exists {
-						delete(allowedGroups, groupID)
-					}
+		}
+		if i == 0 {
+			allowedGroups = current
+		} else {
+			for groupID := range allowedGroups {
+				if _, exists := current[groupID]; !exists {
+					delete(allowedGroups, groupID)
 				}
 			}
 		}
