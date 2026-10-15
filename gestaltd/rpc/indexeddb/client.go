@@ -1,6 +1,7 @@
 package indexeddb
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -101,9 +102,7 @@ func (db *clientDB) Transaction(ctx context.Context, stores []string, mode idb.T
 	if mode == idb.TransactionVersionChange {
 		return nil, fmt.Errorf("%w: versionchange transactions", idb.ErrUnsupported)
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	streamCtx, cancel := context.WithCancel(ctx)
 	stream, err := db.client.Transaction(streamCtx)
 	if err != nil {
@@ -966,9 +965,7 @@ func cursorDirectionToProto(dir idb.CursorDirection) proto.CursorDirection {
 }
 
 func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, query any, dir idb.CursorDirection, keysOnly bool) (idb.Cursor, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	streamCtx, streamCancel := context.WithCancel(ctx)
 	stream, err := client.OpenCursor(streamCtx)
 	if err != nil {
