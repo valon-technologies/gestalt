@@ -1631,15 +1631,15 @@ func (e *ProviderEntry) HasMetadataSource() bool {
 }
 
 func (e *ProviderEntry) HasReleaseMetadataSource() bool {
-	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsLocalMetadataPath() || e.Source.IsPackage())
+	return e.HasMetadataSource() || e.HasLocalReleaseSource()
 }
 
 func (e *ProviderEntry) HasRemoteSource() bool {
-	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsPackage() || e.Source.IsGit())
+	return e.HasMetadataSource() || e.HasGitSource()
 }
 
 func (e *ProviderEntry) HasRemoteReleaseSource() bool {
-	return e != nil && (e.Source.IsMetadataURL() || e.Source.IsGitHubRelease() || e.Source.IsPackage())
+	return e.HasMetadataSource()
 }
 
 func (e *ProviderEntry) HasLocalSource() bool {
