@@ -40,11 +40,7 @@ func (s *AppRolloutService) Get(ctx context.Context, app string) (*core.AppRollo
 	if s == nil {
 		return nil, fmt.Errorf("get app rollout: service is not configured")
 	}
-	app = strings.TrimSpace(app)
-	if app == "" {
-		return nil, fmt.Errorf("get app rollout: app is required")
-	}
-	return getStoredValue(ctx, s.store, app, "get app rollout", recordToAppRollout)
+	return getRequiredStoredValue(ctx, s.store, app, "get app rollout", "app", recordToAppRollout)
 }
 
 func (s *AppRolloutService) Create(ctx context.Context, rollout *core.AppRollout) (*core.AppRollout, error) {

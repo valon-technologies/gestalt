@@ -38,11 +38,7 @@ func (s *AutoDeploySettingsService) Get(ctx context.Context, app string) (*core.
 	if s == nil {
 		return nil, fmt.Errorf("get app auto-deploy settings: service is not configured")
 	}
-	app = strings.TrimSpace(app)
-	if app == "" {
-		return nil, fmt.Errorf("get app auto-deploy settings: app is required")
-	}
-	return getStoredValue(ctx, s.store, app, "get app auto-deploy settings", recordToAppAutoDeploySettings)
+	return getRequiredStoredValue(ctx, s.store, app, "get app auto-deploy settings", "app", recordToAppAutoDeploySettings)
 }
 
 func (s *AutoDeploySettingsService) ListAll(ctx context.Context) ([]*core.AppAutoDeploySettings, error) {

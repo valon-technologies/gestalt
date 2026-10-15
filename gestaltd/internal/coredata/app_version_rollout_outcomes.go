@@ -36,11 +36,7 @@ func (s *AppVersionRolloutOutcomeService) Get(ctx context.Context, changeRequest
 	if s == nil {
 		return nil, fmt.Errorf("get app version rollout outcome: service is not configured")
 	}
-	changeRequestID = strings.TrimSpace(changeRequestID)
-	if changeRequestID == "" {
-		return nil, fmt.Errorf("get app version rollout outcome: change request id is required")
-	}
-	return getStoredValue(ctx, s.store, changeRequestID, "get app version rollout outcome", recordToAppVersionRolloutOutcome)
+	return getRequiredStoredValue(ctx, s.store, changeRequestID, "get app version rollout outcome", "change request id", recordToAppVersionRolloutOutcome)
 }
 
 func (s *AppVersionRolloutOutcomeService) GetMany(ctx context.Context, changeRequestIDs []string) (map[string]*core.AppVersionRolloutOutcome, error) {
