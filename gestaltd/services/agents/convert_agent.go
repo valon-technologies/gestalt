@@ -184,9 +184,6 @@ func setAgentTurnOutputProto(turn *proto.AgentTurn, output coreagent.TurnOutput)
 }
 
 func agentTurnOutputFromProto(turn *proto.AgentTurn) coreagent.TurnOutput {
-	if turn == nil {
-		return coreagent.TurnOutput{}
-	}
 	if structured := turn.GetStructured(); structured != nil {
 		return coreagent.TurnOutput{
 			Structured: &coreagent.TurnStructuredOutput{

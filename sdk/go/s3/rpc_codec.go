@@ -16,9 +16,6 @@ func objectRefToProto(ref ObjectRef) *proto.S3ObjectRef {
 }
 
 func objectRefFromProto(ref *proto.S3ObjectRef) ObjectRef {
-	if ref == nil {
-		return ObjectRef{}
-	}
 	return ObjectRef{
 		Key:       ref.GetKey(),
 		VersionID: ref.GetVersionId(),
@@ -41,9 +38,6 @@ func objectMetaToProto(meta ObjectMeta) *proto.S3ObjectMeta {
 }
 
 func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
-	if meta == nil {
-		return ObjectMeta{}
-	}
 	out := ObjectMeta{
 		Ref: ObjectRef{
 			Key:       meta.GetRef().GetKey(),
@@ -99,9 +93,6 @@ func byteRangeFromProto(r *proto.ByteRange) *ByteRange {
 }
 
 func readRequestFromProto(req *proto.ReadObjectRequest) ReadRequest {
-	if req == nil {
-		return ReadRequest{}
-	}
 	out := ReadRequest{
 		Ref:         objectRefFromProto(req.GetRef()),
 		Range:       byteRangeFromProto(req.GetRange()),
@@ -120,9 +111,6 @@ func readRequestFromProto(req *proto.ReadObjectRequest) ReadRequest {
 }
 
 func writeRequestFromProto(open *proto.WriteObjectOpen) WriteRequest {
-	if open == nil {
-		return WriteRequest{}
-	}
 	return WriteRequest{
 		Ref:                objectRefFromProto(open.GetRef()),
 		ContentType:        open.GetContentType(),
@@ -178,9 +166,6 @@ func presignMethodToProto(method PresignMethod) proto.PresignMethod {
 }
 
 func presignRequestFromProto(req *proto.PresignObjectRequest) PresignRequest {
-	if req == nil {
-		return PresignRequest{}
-	}
 	return PresignRequest{
 		Ref:                objectRefFromProto(req.GetRef()),
 		Method:             presignMethodFromProto(req.GetMethod()),

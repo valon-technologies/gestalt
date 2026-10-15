@@ -212,9 +212,6 @@ func workflowAgentOutputToProto(output coreagent.Output) (*proto.AgentOutput, er
 }
 
 func workflowAgentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
-	if output == nil {
-		return coreagent.Output{}
-	}
 	if structured := output.GetStructured(); structured != nil {
 		return coreagent.Output{
 			Structured: &coreagent.StructuredOutput{Schema: protoutil.MapFromStruct(structured.GetSchema())},
