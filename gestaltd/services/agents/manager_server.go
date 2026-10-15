@@ -88,18 +88,9 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 		return nil, err
 	}
 	sessions, err := s.manager.ListSessions(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	resp := &proto.ListAgentProviderSessionsResponse{Sessions: make([]*proto.AgentSession, 0, len(sessions))}
-	for _, session := range sessions {
-		encoded, err := agentSessionToProto(session)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "encode agent session: %v", err)
-		}
-		resp.Sessions = append(resp.Sessions, encoded)
-	}
-	return resp, nil
+	return agentManagerListResponse(sessions, err, "session", agentSessionToProto, func(encoded []*proto.AgentSession) *proto.ListAgentProviderSessionsResponse {
+		return &proto.ListAgentProviderSessionsResponse{Sessions: encoded}
+	})
 }
 
 func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
@@ -150,18 +141,9 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 		return nil, err
 	}
 	turns, err := s.manager.ListTurns(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	resp := &proto.ListAgentProviderTurnsResponse{Turns: make([]*proto.AgentTurn, 0, len(turns))}
-	for _, turn := range turns {
-		encoded, err := agentTurnToProto(turn)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "encode agent turn: %v", err)
-		}
-		resp.Turns = append(resp.Turns, encoded)
-	}
-	return resp, nil
+	return agentManagerListResponse(turns, err, "turn", agentTurnToProto, func(encoded []*proto.AgentTurn) *proto.ListAgentProviderTurnsResponse {
+		return &proto.ListAgentProviderTurnsResponse{Turns: encoded}
+	})
 }
 
 func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
@@ -185,10 +167,9 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 		return nil, err
 	}
 	events, err := s.manager.ListTurnEvents(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return &proto.ListAgentProviderTurnEventsResponse{Events: turnEventsToProto(events)}, nil
+	return agentManagerResponse(events, err, func(values []*coreagent.TurnEvent) (*proto.ListAgentProviderTurnEventsResponse, error) {
+		return &proto.ListAgentProviderTurnEventsResponse{Events: turnEventsToProto(values)}, nil
+	})
 }
 
 func (s *ProviderServer) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
@@ -204,10 +185,9 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 		return nil, err
 	}
 	interactions, err := s.manager.ListInteractions(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
-	if err != nil {
-		return nil, agentManagerStatusError(err)
-	}
-	return &proto.ListAgentProviderInteractionsResponse{Interactions: interactionsToProto(interactions)}, nil
+	return agentManagerResponse(interactions, err, func(values []*coreagent.Interaction) (*proto.ListAgentProviderInteractionsResponse, error) {
+		return &proto.ListAgentProviderInteractionsResponse{Interactions: interactionsToProto(values)}, nil
+	})
 }
 
 func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
@@ -299,9 +279,6 @@ func rejectWorkflowAgentRequest(reqCtx appaccessservice.ProviderRequestContext, 
 }
 
 func agentManagerStatusError(err error) error {
-	if err == nil {
-		return nil
-	}
 	if existing, ok := status.FromError(err); ok {
 		return existing.Err()
 	}
@@ -332,4 +309,18 @@ func agentManagerResponse[T, R any](value T, err error, encode func(T) (*R, erro
 		return nil, agentManagerStatusError(err)
 	}
 	return encode(value)
+}
+
+func agentManagerListResponse[T, P, R any](values []T, err error, label string, encode func(T) (P, error), response func([]P) *R) (*R, error) {
+	return agentManagerResponse(values, err, func(values []T) (*R, error) {
+		out := make([]P, 0, len(values))
+		for _, value := range values {
+			encoded, err := encode(value)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "encode agent %s: %v", label, err)
+			}
+			out = append(out, encoded)
+		}
+		return response(out), nil
+	})
 }
