@@ -2,7 +2,6 @@ package providerdrivers
 
 import (
 	"context"
-	"fmt"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -13,20 +12,15 @@ import (
 )
 
 func WorkflowFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps WorkflowDeps) (coreworkflow.Provider, error) {
-	var cfg componentprovider.YAMLConfig
-	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("workflow provider: parsing config: %w", err)
-	}
-	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
+	prepared, err := prepareYAMLExecution(node, componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindWorkflow,
 		Subject:              "workflow provider",
 		SourceMissingMessage: "no Go, Rust, or Python workflow provider source package found",
-		Config:               cfg,
 	})
 	if err != nil {
 		return nil, err
 	}
-	cfg = prepared.YAMLConfig
+	cfg := prepared.YAMLConfig
 
 	return workflowservice.NewExecutable(ctx, workflowservice.ExecConfig{
 		Command:      cfg.Command,

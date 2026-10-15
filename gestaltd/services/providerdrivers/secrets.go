@@ -2,7 +2,6 @@ package providerdrivers
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -12,20 +11,15 @@ import (
 )
 
 func SecretsProviderFactory(node yaml.Node) (core.SecretManager, error) {
-	var cfg componentprovider.YAMLConfig
-	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("secrets provider: parsing config: %w", err)
-	}
-	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
+	prepared, err := prepareYAMLExecution(node, componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindSecrets,
 		Subject:              "secrets provider",
 		SourceMissingMessage: "no Go, Rust, or Python secrets provider source package found",
-		Config:               cfg,
 	})
 	if err != nil {
 		return nil, err
 	}
-	cfg = prepared.YAMLConfig
+	cfg := prepared.YAMLConfig
 
 	return secretsservice.NewExecutable(context.Background(), secretsservice.ExecConfig{
 		Command:    cfg.Command,
