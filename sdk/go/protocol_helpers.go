@@ -329,3 +329,15 @@ func jsonFieldName(field reflect.StructField) (name string, omitEmpty bool, skip
 	}
 	return name, omitEmpty, false, explicitName
 }
+
+// convertProtoSlice preserves empty-list normalization and element order.
+func convertProtoSlice[Input, Output any](values []Input, convert func(Input) Output) []Output {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]Output, 0, len(values))
+	for _, value := range values {
+		out = append(out, convert(value))
+	}
+	return out
+}

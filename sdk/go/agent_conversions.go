@@ -15,20 +15,9 @@ func agentMessageFromProto(value *proto.AgentMessage) AgentMessage {
 	return AgentMessage{
 		Role:     value.GetRole(),
 		Text:     value.GetText(),
-		Parts:    agentMessagePartsFromProto(value.GetParts()),
+		Parts:    convertProtoSlice(value.GetParts(), agentMessagePartFromProto),
 		Metadata: mapFromStruct(value.GetMetadata()),
 	}
-}
-
-func agentMessagesFromProto(values []*proto.AgentMessage) []AgentMessage {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentMessage, 0, len(values))
-	for _, value := range values {
-		out = append(out, agentMessageFromProto(value))
-	}
-	return out
 }
 
 func agentMessageToProto(value AgentMessage) (*proto.AgentMessage, error) {
@@ -61,17 +50,6 @@ func agentMessagesToProto(values []AgentMessage) ([]*proto.AgentMessage, error) 
 		out = append(out, pbValue)
 	}
 	return out, nil
-}
-
-func agentMessagePartsFromProto(values []*proto.AgentMessagePart) []AgentMessagePart {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentMessagePart, 0, len(values))
-	for _, value := range values {
-		out = append(out, agentMessagePartFromProto(value))
-	}
-	return out
 }
 
 func agentMessagePartFromProto(value *proto.AgentMessagePart) AgentMessagePart {
@@ -274,17 +252,6 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 	}
 }
 
-func agentToolRefsFromProto(values []*proto.AgentToolRef) []AgentToolRef {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentToolRef, 0, len(values))
-	for _, value := range values {
-		out = append(out, agentToolRefFromProto(value))
-	}
-	return out
-}
-
 func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
 		App:            value.App,
@@ -297,17 +264,6 @@ func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 		System:         value.System,
 		RunAs:          subjectToProto(value.RunAs),
 	}
-}
-
-func agentToolRefsToProto(values []AgentToolRef) []*proto.AgentToolRef {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolRef, 0, len(values))
-	for _, value := range values {
-		out = append(out, agentToolRefToProto(value))
-	}
-	return out
 }
 
 func agentToolConfigFromProto(value *proto.AgentToolConfig) AgentToolConfig {
@@ -323,8 +279,8 @@ func agentToolConfigFromProto(value *proto.AgentToolConfig) AgentToolConfig {
 			catalog = &proto.AgentCatalogToolConfig{}
 		}
 		return &AgentCatalogToolConfig{
-			Refs:  agentToolRefsFromProto(catalog.GetRefs()),
-			Tools: listedAgentToolsFromProto(catalog.GetTools()),
+			Refs:  convertProtoSlice(catalog.GetRefs(), agentToolRefFromProto),
+			Tools: convertProtoSlice(catalog.GetTools(), listedAgentToolFromProto),
 		}
 	default:
 		return nil
@@ -613,18 +569,18 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
 	}
 	return &CreateAgentProviderTurnRequest{
-		ProviderName:       req.GetProviderName(),
-		TurnID:             req.GetTurnId(),
-		SessionID:          req.GetSessionId(),
-		IdempotencyKey:     req.GetIdempotencyKey(),
-		Model:              req.GetModel(),
-		Messages:           agentMessagesFromProto(req.GetMessages()),
-		Output:             agentOutputFromProto(req.GetOutput()),
-		Metadata:           mapFromStruct(req.GetMetadata()),
-		ExecutionRef:       req.GetExecutionRef(),
-		ModelOptions:       mapFromStruct(req.GetModelOptions()),
-		Context:            cloneRequestContext(req.GetContext()),
-		TimeoutSeconds:     req.GetTimeoutSeconds(),
+		ProviderName:   req.GetProviderName(),
+		TurnID:         req.GetTurnId(),
+		SessionID:      req.GetSessionId(),
+		IdempotencyKey: req.GetIdempotencyKey(),
+		Model:          req.GetModel(),
+		Messages:       convertProtoSlice(req.GetMessages(), agentMessageFromProto),
+		Output:         agentOutputFromProto(req.GetOutput()),
+		Metadata:       mapFromStruct(req.GetMetadata()),
+		ExecutionRef:   req.GetExecutionRef(),
+		ModelOptions:   mapFromStruct(req.GetModelOptions()),
+		Context:        cloneRequestContext(req.GetContext()),
+		TimeoutSeconds: req.GetTimeoutSeconds(),
 	}, nil
 }
 
@@ -878,17 +834,6 @@ func listedAgentToolFromProto(value *proto.ListedAgentTool) ListedAgentTool {
 		Tags:         append([]string(nil), value.GetTags()...),
 		SearchText:   value.GetSearchText(),
 	}
-}
-
-func listedAgentToolsFromProto(values []*proto.ListedAgentTool) []ListedAgentTool {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]ListedAgentTool, 0, len(values))
-	for _, value := range values {
-		out = append(out, listedAgentToolFromProto(value))
-	}
-	return out
 }
 
 func agentToolAnnotationsFromProto(value *proto.OperationAnnotations) *AgentToolAnnotations {

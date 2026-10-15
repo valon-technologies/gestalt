@@ -254,7 +254,7 @@ func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.Workflow
 		SessionKey:   input.SessionKey,
 		Prompt:       workflowTextToProto(input.Prompt),
 		Messages:     messages,
-		Tools:        agentToolRefsToProto(input.Tools),
+		Tools:        convertProtoSlice(input.Tools, agentToolRefToProto),
 		Output:       output,
 		ModelOptions: modelOptions,
 	}, nil
@@ -270,7 +270,7 @@ func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *Workflo
 		SessionKey:   value.GetSessionKey(),
 		Prompt:       workflowTextFromProto(value.GetPrompt()),
 		Messages:     workflowAgentMessagesFromProto(value.GetMessages()),
-		Tools:        agentToolRefsFromProto(value.GetTools()),
+		Tools:        convertProtoSlice(value.GetTools(), agentToolRefFromProto),
 		Output:       agentOutputFromProto(value.GetOutput()),
 		ModelOptions: mapFromStruct(value.GetModelOptions()),
 	}
