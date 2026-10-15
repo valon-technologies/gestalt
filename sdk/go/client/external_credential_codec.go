@@ -175,9 +175,7 @@ func ToWireExternalCredentialAuthConfig(value *ExternalCredentialAuthConfig) *pr
 		AccessTokenPath: value.AccessTokenPath,
 		RefreshToken:    value.RefreshToken,
 	}
-	for _, item := range value.TokenExchangeDrivers {
-		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, ToWireExternalCredentialTokenExchangeDriver(item))
-	}
+	appendMessageSlice(&out.TokenExchangeDrivers, value.TokenExchangeDrivers, ToWireExternalCredentialTokenExchangeDriver)
 	return out
 }
 
@@ -204,9 +202,7 @@ func FromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthCon
 		AccessTokenPath: value.AccessTokenPath,
 		RefreshToken:    value.RefreshToken,
 	}
-	for _, item := range value.TokenExchangeDrivers {
-		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, FromWireExternalCredentialTokenExchangeDriver(item))
-	}
+	appendMessageSlice(&out.TokenExchangeDrivers, value.TokenExchangeDrivers, FromWireExternalCredentialTokenExchangeDriver)
 	return out
 }
 
@@ -417,9 +413,7 @@ func ToWireListExternalCredentialsResponse(value *ListExternalCredentialsRespons
 		return nil
 	}
 	out := &proto.ListExternalCredentialsResponse{}
-	for _, item := range value.Credentials {
-		out.Credentials = append(out.Credentials, ToWireExternalCredential(item))
-	}
+	appendMessageSlice(&out.Credentials, value.Credentials, ToWireExternalCredential)
 	return out
 }
 
@@ -428,9 +422,7 @@ func FromWireListExternalCredentialsResponse(value *proto.ListExternalCredential
 		return nil
 	}
 	out := &ListExternalCredentialsResponse{}
-	for _, item := range value.Credentials {
-		out.Credentials = append(out.Credentials, FromWireExternalCredential(item))
-	}
+	appendMessageSlice(&out.Credentials, value.Credentials, FromWireExternalCredential)
 	return out
 }
 

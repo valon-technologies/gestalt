@@ -227,9 +227,7 @@ func ToWireListObjectsResponse(value *ListObjectsResponse) *proto.ListObjectsRes
 		NextContinuationToken: value.NextContinuationToken,
 		HasMore:               value.HasMore,
 	}
-	for _, item := range value.Objects {
-		out.Objects = append(out.Objects, ToWireS3ObjectMeta(item))
-	}
+	appendMessageSlice(&out.Objects, value.Objects, ToWireS3ObjectMeta)
 	return out
 }
 
@@ -242,9 +240,7 @@ func FromWireListObjectsResponse(value *proto.ListObjectsResponse) *ListObjectsR
 		NextContinuationToken: value.NextContinuationToken,
 		HasMore:               value.HasMore,
 	}
-	for _, item := range value.Objects {
-		out.Objects = append(out.Objects, FromWireS3ObjectMeta(item))
-	}
+	appendMessageSlice(&out.Objects, value.Objects, FromWireS3ObjectMeta)
 	return out
 }
 

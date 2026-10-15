@@ -78,7 +78,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			return nil, err
 		}
 	}
-	if err := set.Add("client/support_codec.go", []byte(codecSupportFile)); err != nil {
+	if err := set.Add("client/support_codec.go", []byte(codecSupportFile + messageSliceSupportFile)); err != nil {
 		return nil, err
 	}
 	for _, g := range groupFiles(services, messages, enums) {

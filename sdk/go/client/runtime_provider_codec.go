@@ -81,9 +81,7 @@ func ToWireListRuntimeSessionsResponse(value *ListRuntimeSessionsResponse) *prot
 	out := &proto.ListRuntimeSessionsResponse{
 		NextPageToken: value.NextPageToken,
 	}
-	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, ToWireRuntimeSession(item))
-	}
+	appendMessageSlice(&out.Sessions, value.Sessions, ToWireRuntimeSession)
 	return out
 }
 
@@ -94,9 +92,7 @@ func FromWireListRuntimeSessionsResponse(value *proto.ListRuntimeSessionsRespons
 	out := &ListRuntimeSessionsResponse{
 		NextPageToken: value.NextPageToken,
 	}
-	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, FromWireRuntimeSession(item))
-	}
+	appendMessageSlice(&out.Sessions, value.Sessions, FromWireRuntimeSession)
 	return out
 }
 

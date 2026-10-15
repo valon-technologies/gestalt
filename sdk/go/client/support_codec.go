@@ -115,3 +115,10 @@ func FromWireStatus(value *rpcstatus.Status) *RpcStatus {
 	}
 	return &RpcStatus{Code: GestaltErrorCode(value.GetCode()), Message: value.GetMessage()}
 }
+
+// appendMessageSlice preserves the original destination-field append behavior.
+func appendMessageSlice[Input, Output any](out *[]*Output, values []*Input, convert func(*Input) *Output) {
+	for _, item := range values {
+		*out = append(*out, convert(item))
+	}
+}

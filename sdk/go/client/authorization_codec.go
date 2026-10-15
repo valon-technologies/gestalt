@@ -76,9 +76,7 @@ func ToWireAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationMod
 		Id:      value.Id,
 		Version: value.Version,
 	}
-	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, ToWireAuthorizationModelResourceType(item))
-	}
+	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, ToWireAuthorizationModelResourceType)
 	return out
 }
 
@@ -90,9 +88,7 @@ func FromWireAuthorizationModel(value *proto.AuthorizationModel) *AuthorizationM
 		Id:      value.Id,
 		Version: value.Version,
 	}
-	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, FromWireAuthorizationModelResourceType(item))
-	}
+	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, FromWireAuthorizationModelResourceType)
 	return out
 }
 
@@ -129,12 +125,8 @@ func ToWireAuthorizationModelResourceType(value *AuthorizationModelResourceType)
 		SourceLayer: proto.SourceLayer(value.SourceLayer),
 		DefaultRole: value.DefaultRole,
 	}
-	for _, item := range value.Relations {
-		out.Relations = append(out.Relations, ToWireModelRelation(item))
-	}
-	for _, item := range value.Actions {
-		out.Actions = append(out.Actions, ToWireModelAction(item))
-	}
+	appendMessageSlice(&out.Relations, value.Relations, ToWireModelRelation)
+	appendMessageSlice(&out.Actions, value.Actions, ToWireModelAction)
 	return out
 }
 
@@ -147,12 +139,8 @@ func FromWireAuthorizationModelResourceType(value *proto.AuthorizationModelResou
 		SourceLayer: SourceLayer(value.SourceLayer),
 		DefaultRole: value.DefaultRole,
 	}
-	for _, item := range value.Relations {
-		out.Relations = append(out.Relations, FromWireModelRelation(item))
-	}
-	for _, item := range value.Actions {
-		out.Actions = append(out.Actions, FromWireModelAction(item))
-	}
+	appendMessageSlice(&out.Relations, value.Relations, FromWireModelRelation)
+	appendMessageSlice(&out.Actions, value.Actions, FromWireModelAction)
 	return out
 }
 
@@ -183,9 +171,7 @@ func ToWireCheckAccessManyRequest(value *CheckAccessManyRequest) *proto.CheckAcc
 		return nil
 	}
 	out := &proto.CheckAccessManyRequest{}
-	for _, item := range value.Requests {
-		out.Requests = append(out.Requests, ToWireCheckAccessRequest(item))
-	}
+	appendMessageSlice(&out.Requests, value.Requests, ToWireCheckAccessRequest)
 	return out
 }
 
@@ -194,9 +180,7 @@ func FromWireCheckAccessManyRequest(value *proto.CheckAccessManyRequest) *CheckA
 		return nil
 	}
 	out := &CheckAccessManyRequest{}
-	for _, item := range value.Requests {
-		out.Requests = append(out.Requests, FromWireCheckAccessRequest(item))
-	}
+	appendMessageSlice(&out.Requests, value.Requests, FromWireCheckAccessRequest)
 	return out
 }
 
@@ -205,9 +189,7 @@ func ToWireCheckAccessManyResponse(value *CheckAccessManyResponse) *proto.CheckA
 		return nil
 	}
 	out := &proto.CheckAccessManyResponse{}
-	for _, item := range value.Decisions {
-		out.Decisions = append(out.Decisions, ToWireCheckAccessResponse(item))
-	}
+	appendMessageSlice(&out.Decisions, value.Decisions, ToWireCheckAccessResponse)
 	return out
 }
 
@@ -216,9 +198,7 @@ func FromWireCheckAccessManyResponse(value *proto.CheckAccessManyResponse) *Chec
 		return nil
 	}
 	out := &CheckAccessManyResponse{}
-	for _, item := range value.Decisions {
-		out.Decisions = append(out.Decisions, FromWireCheckAccessResponse(item))
-	}
+	appendMessageSlice(&out.Decisions, value.Decisions, FromWireCheckAccessResponse)
 	return out
 }
 
@@ -358,9 +338,7 @@ func ToWireListActiveModelResourceTypesResponse(value *ListActiveModelResourceTy
 		NextPageToken: value.NextPageToken,
 		ModelId:       value.ModelId,
 	}
-	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, ToWireAuthorizationModelResourceType(item))
-	}
+	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, ToWireAuthorizationModelResourceType)
 	return out
 }
 
@@ -372,9 +350,7 @@ func FromWireListActiveModelResourceTypesResponse(value *proto.ListActiveModelRe
 		NextPageToken: value.NextPageToken,
 		ModelId:       value.ModelId,
 	}
-	for _, item := range value.ResourceTypes {
-		out.ResourceTypes = append(out.ResourceTypes, FromWireAuthorizationModelResourceType(item))
-	}
+	appendMessageSlice(&out.ResourceTypes, value.ResourceTypes, FromWireAuthorizationModelResourceType)
 	return out
 }
 
@@ -409,9 +385,7 @@ func ToWireListRelationshipsResponse(value *ListRelationshipsResponse) *proto.Li
 	out := &proto.ListRelationshipsResponse{
 		NextPageToken: value.NextPageToken,
 	}
-	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, ToWireRelationship(item))
-	}
+	appendMessageSlice(&out.Relationships, value.Relationships, ToWireRelationship)
 	return out
 }
 
@@ -422,9 +396,7 @@ func FromWireListRelationshipsResponse(value *proto.ListRelationshipsResponse) *
 	out := &ListRelationshipsResponse{
 		NextPageToken: value.NextPageToken,
 	}
-	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, FromWireRelationship(item))
-	}
+	appendMessageSlice(&out.Relationships, value.Relationships, FromWireRelationship)
 	return out
 }
 
@@ -489,9 +461,7 @@ func ToWireModelRelation(value *ModelRelation) *proto.ModelRelation {
 	out := &proto.ModelRelation{
 		Name: value.Name,
 	}
-	for _, item := range value.AllowedTargets {
-		out.AllowedTargets = append(out.AllowedTargets, ToWireModelAllowedTarget(item))
-	}
+	appendMessageSlice(&out.AllowedTargets, value.AllowedTargets, ToWireModelAllowedTarget)
 	return out
 }
 
@@ -502,9 +472,7 @@ func FromWireModelRelation(value *proto.ModelRelation) *ModelRelation {
 	out := &ModelRelation{
 		Name: value.Name,
 	}
-	for _, item := range value.AllowedTargets {
-		out.AllowedTargets = append(out.AllowedTargets, FromWireModelAllowedTarget(item))
-	}
+	appendMessageSlice(&out.AllowedTargets, value.AllowedTargets, FromWireModelAllowedTarget)
 	return out
 }
 
@@ -735,9 +703,7 @@ func ToWireSetAuthorizationStateRequest(value *SetAuthorizationStateRequest) *pr
 	out := &proto.SetAuthorizationStateRequest{
 		Model: ToWireAuthorizationModel(value.Model),
 	}
-	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, ToWireRelationship(item))
-	}
+	appendMessageSlice(&out.Relationships, value.Relationships, ToWireRelationship)
 	return out
 }
 
@@ -748,9 +714,7 @@ func FromWireSetAuthorizationStateRequest(value *proto.SetAuthorizationStateRequ
 	out := &SetAuthorizationStateRequest{
 		Model: FromWireAuthorizationModel(value.Model),
 	}
-	for _, item := range value.Relationships {
-		out.Relationships = append(out.Relationships, FromWireRelationship(item))
-	}
+	appendMessageSlice(&out.Relationships, value.Relationships, FromWireRelationship)
 	return out
 }
 
@@ -847,12 +811,8 @@ func ToWireWriteRelationshipsRequest(value *WriteRelationshipsRequest) *proto.Wr
 		return nil
 	}
 	out := &proto.WriteRelationshipsRequest{}
-	for _, item := range value.Updates {
-		out.Updates = append(out.Updates, ToWireRelationshipUpdate(item))
-	}
-	for _, item := range value.OptionalPreconditions {
-		out.OptionalPreconditions = append(out.OptionalPreconditions, ToWirePrecondition(item))
-	}
+	appendMessageSlice(&out.Updates, value.Updates, ToWireRelationshipUpdate)
+	appendMessageSlice(&out.OptionalPreconditions, value.OptionalPreconditions, ToWirePrecondition)
 	return out
 }
 
@@ -861,12 +821,8 @@ func FromWireWriteRelationshipsRequest(value *proto.WriteRelationshipsRequest) *
 		return nil
 	}
 	out := &WriteRelationshipsRequest{}
-	for _, item := range value.Updates {
-		out.Updates = append(out.Updates, FromWireRelationshipUpdate(item))
-	}
-	for _, item := range value.OptionalPreconditions {
-		out.OptionalPreconditions = append(out.OptionalPreconditions, FromWirePrecondition(item))
-	}
+	appendMessageSlice(&out.Updates, value.Updates, FromWireRelationshipUpdate)
+	appendMessageSlice(&out.OptionalPreconditions, value.OptionalPreconditions, FromWirePrecondition)
 	return out
 }
 

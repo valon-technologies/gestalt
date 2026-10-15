@@ -54,9 +54,7 @@ func ToWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest)
 		Output:         gestaltclient.ToWireAgentOutput(value.Output),
 		ProviderName:   value.ProviderName,
 	}
-	for _, item := range value.Messages {
-		out.Messages = append(out.Messages, gestaltclient.ToWireAgentMessage(item))
-	}
+	appendMessageSlice(&out.Messages, value.Messages, gestaltclient.ToWireAgentMessage)
 	return out
 }
 

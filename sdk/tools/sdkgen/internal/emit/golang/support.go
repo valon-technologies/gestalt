@@ -15,6 +15,16 @@ var supportFile string
 //go:embed support_codec.go.tmpl
 var codecSupportFile string
 
+// messageSliceSupportFile keeps list conversion semantics shared by both clients.
+const messageSliceSupportFile = `
+// appendMessageSlice preserves the original destination-field append behavior.
+func appendMessageSlice[Input, Output any](out *[]*Output, values []*Input, convert func(*Input) *Output) {
+	for _, item := range values {
+		*out = append(*out, convert(item))
+	}
+}
+`
+
 const publicRPCSupportFile = `package generated
 
 import gestaltclient "github.com/valon-technologies/gestalt/sdk/go/client"
