@@ -137,7 +137,7 @@ func runtimeSessionToProto(session RuntimeSession) *proto.RuntimeSession {
 	return &proto.RuntimeSession{
 		Id:           session.ID,
 		State:        session.State,
-		Metadata:     cloneStringMap(session.Metadata),
+		Metadata:     cloneMap(session.Metadata),
 		Lifecycle:    runtimeLifecycleToProto(session.Lifecycle),
 		StateReason:  session.StateReason,
 		StateMessage: session.StateMessage,
@@ -170,7 +170,7 @@ func startRuntimeSessionRequestFromProto(req *proto.StartRuntimeSessionRequest) 
 		AppName:       req.GetAppName(),
 		Template:      req.GetTemplate(),
 		Image:         req.GetImage(),
-		Metadata:      cloneStringMap(req.GetMetadata()),
+		Metadata:      cloneMap(req.GetMetadata()),
 		ImagePullAuth: pullAuth,
 	}
 }
@@ -184,7 +184,7 @@ func startHostedAppRequestFromProto(req *proto.StartHostedAppRequest) StartHoste
 		AppName:       req.GetAppName(),
 		Command:       req.GetCommand(),
 		Args:          append([]string(nil), req.GetArgs()...),
-		Env:           cloneStringMap(req.GetEnv()),
+		Env:           cloneMap(req.GetEnv()),
 		AllowedHosts:  append([]string(nil), req.GetAllowedHosts()...),
 		DefaultAction: req.GetDefaultAction(),
 		HostBinary:    req.GetHostBinary(),

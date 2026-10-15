@@ -252,7 +252,7 @@ func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) HTTPSubjectReque
 		RawBody:         append([]byte(nil), req.GetRawBody()...),
 		SecurityScheme:  req.GetSecurityScheme(),
 		VerifiedSubject: req.GetVerifiedSubject(),
-		VerifiedClaims:  cloneStringMap(req.GetVerifiedClaims()),
+		VerifiedClaims:  cloneMap(req.GetVerifiedClaims()),
 	}
 }
 

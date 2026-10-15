@@ -53,7 +53,7 @@ func externalCredentialFromProto(value *proto.ExternalCredential) (*ExternalCred
 			ClientSecretExpiresAt: clientSecretExpiresAt,
 		}
 	case *proto.ExternalCredential_Opaque:
-		out.Opaque = &ExternalCredentialOpaque{Fields: copyStringMap(variant.Opaque.GetFields())}
+		out.Opaque = &ExternalCredentialOpaque{Fields: cloneMap(variant.Opaque.GetFields())}
 	}
 	return out, nil
 }
@@ -90,7 +90,7 @@ func externalCredentialToProto(value *ExternalCredential) *proto.ExternalCredent
 		}}
 	case value.Opaque != nil:
 		out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
-			Fields: copyStringMap(value.Opaque.GetFields()),
+			Fields: cloneMap(value.Opaque.GetFields()),
 		}}
 	}
 	return out
@@ -178,8 +178,8 @@ func externalCredentialAuthConfigFromProto(value *proto.ExternalCredentialAuthCo
 		Scopes:               copyStringSlice(value.GetScopes()),
 		ScopeParam:           value.GetScopeParam(),
 		ScopeSeparator:       value.GetScopeSeparator(),
-		TokenParams:          copyStringMap(value.GetTokenParams()),
-		RefreshParams:        copyStringMap(value.GetRefreshParams()),
+		TokenParams:          cloneMap(value.GetTokenParams()),
+		RefreshParams:        cloneMap(value.GetRefreshParams()),
 		AcceptHeader:         value.GetAcceptHeader(),
 		AccessTokenPath:      value.GetAccessTokenPath(),
 		TokenExchangeDrivers: drivers,
@@ -197,7 +197,7 @@ func externalCredentialTokenExchangeDriverFromProto(value *proto.ExternalCredent
 		Scopes:          copyStringSlice(value.GetScopes()),
 		LifetimeSeconds: value.GetLifetimeSeconds(),
 		Endpoint:        value.GetEndpoint(),
-		Params:          copyStringMap(value.GetParams()),
+		Params:          cloneMap(value.GetParams()),
 	}
 }
 
@@ -211,7 +211,7 @@ func validateExternalCredentialConfigRequestFromProto(value *proto.ValidateExter
 		ConnectionID:     value.GetConnectionId(),
 		Mode:             value.GetMode(),
 		Auth:             externalCredentialAuthConfigFromProto(value.GetAuth()),
-		ConnectionParams: copyStringMap(value.GetConnectionParams()),
+		ConnectionParams: cloneMap(value.GetConnectionParams()),
 	}
 }
 
@@ -228,7 +228,7 @@ func resolveExternalCredentialRequestFromProto(value *proto.ResolveExternalCrede
 		ActorSubjectID:      value.GetActorSubjectId(),
 		Instance:            value.GetInstance(),
 		Auth:                externalCredentialAuthConfigFromProto(value.GetAuth()),
-		ConnectionParams:    copyStringMap(value.GetConnectionParams()),
+		ConnectionParams:    cloneMap(value.GetConnectionParams()),
 	}
 }
 
@@ -240,7 +240,7 @@ func resolveExternalCredentialResponseToProto(value *ResolveExternalCredentialRe
 		Token:        value.GetToken(),
 		ExpiresAt:    timestampFromOptionalTime(value.GetExpiresAt()),
 		MetadataJson: value.GetMetadataJson(),
-		Params:       copyStringMap(value.GetParams()),
+		Params:       cloneMap(value.GetParams()),
 		Credential:   externalCredentialToProto(value.GetCredential()),
 	}
 }
@@ -272,7 +272,7 @@ func exchangeExternalCredentialRequestFromProto(value *proto.ExchangeExternalCre
 		Instance:            value.GetInstance(),
 		Auth:                externalCredentialAuthConfigFromProto(value.GetAuth()),
 		CredentialJSON:      value.GetCredentialJson(),
-		ConnectionParams:    copyStringMap(value.GetConnectionParams()),
+		ConnectionParams:    cloneMap(value.GetConnectionParams()),
 	}
 }
 
@@ -283,17 +283,6 @@ func exchangeExternalCredentialResponseToProto(value *ExchangeExternalCredential
 	return &proto.ExchangeExternalCredentialResponse{
 		TokenResponse: externalCredentialTokenResponseToProto(value.GetTokenResponse()),
 	}
-}
-
-func copyStringMap(value map[string]string) map[string]string {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(value))
-	for key, entry := range value {
-		out[key] = entry
-	}
-	return out
 }
 
 func copyStringSlice(value []string) []string {

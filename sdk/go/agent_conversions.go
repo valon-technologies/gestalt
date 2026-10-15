@@ -497,7 +497,7 @@ func agentSessionStartHookFromProto(value *proto.AgentSessionStartHook) AgentSes
 		Command: append([]string(nil), value.GetCommand()...),
 		Cwd:     value.GetCwd(),
 		Timeout: value.GetTimeout(),
-		Env:     cloneStringMap(value.GetEnv()),
+		Env:     cloneMap(value.GetEnv()),
 		Output:  agentSessionStartHookOutputFromProto(value.GetOutput()),
 	}
 }
