@@ -3886,49 +3886,47 @@ func trimAuthorizationStringSlice(values []string) []string {
 }
 
 func normalizeAdminConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	admin := cfg.Server.Admin
-	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
-	admin.AuthorizationAction = strings.TrimSpace(admin.AuthorizationAction)
-	if len(admin.AllowedRoles) == 0 {
-		if admin.AuthorizationPolicy != "" {
-			admin.AllowedRoles = []string{"admin"}
-		} else {
-			admin.AllowedRoles = nil
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		admin := cfg.Server.Admin
+		admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
+		admin.AuthorizationAction = strings.TrimSpace(admin.AuthorizationAction)
+		if len(admin.AllowedRoles) == 0 {
+			if admin.AuthorizationPolicy != "" {
+				admin.AllowedRoles = []string{"admin"}
+			} else {
+				admin.AllowedRoles = nil
+			}
+			cfg.Server.Admin = admin
+			return nil
 		}
+
+		roles, err := packageio.NormalizeUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
+		if err != nil {
+			return fmt.Errorf("normalize admin config: %w", err)
+		}
+		admin.AllowedRoles = roles
 		cfg.Server.Admin = admin
 		return nil
-	}
-
-	roles, err := packageio.NormalizeUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
-	if err != nil {
-		return fmt.Errorf("normalize admin config: %w", err)
-	}
-	admin.AllowedRoles = roles
-	cfg.Server.Admin = admin
-	return nil
+	})
 }
 
 func normalizeUserLookupConfig(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	lookup := cfg.Server.UserLookup
-	lookup.AuthorizationPolicy = strings.TrimSpace(lookup.AuthorizationPolicy)
-	if len(lookup.AllowedRoles) == 0 {
-		lookup.AllowedRoles = nil
+	return withOptionalConfig(cfg, func(cfg *Config) error {
+		lookup := cfg.Server.UserLookup
+		lookup.AuthorizationPolicy = strings.TrimSpace(lookup.AuthorizationPolicy)
+		if len(lookup.AllowedRoles) == 0 {
+			lookup.AllowedRoles = nil
+			cfg.Server.UserLookup = lookup
+			return nil
+		}
+		roles, err := packageio.NormalizeUIAllowedRoles("server.userLookup.allowedRoles", lookup.AllowedRoles)
+		if err != nil {
+			return fmt.Errorf("normalize user lookup config: %w", err)
+		}
+		lookup.AllowedRoles = roles
 		cfg.Server.UserLookup = lookup
 		return nil
-	}
-	roles, err := packageio.NormalizeUIAllowedRoles("server.userLookup.allowedRoles", lookup.AllowedRoles)
-	if err != nil {
-		return fmt.Errorf("normalize user lookup config: %w", err)
-	}
-	lookup.AllowedRoles = roles
-	cfg.Server.UserLookup = lookup
-	return nil
+	})
 }
 
 func resolveBaseURL(cfg *Config) {
