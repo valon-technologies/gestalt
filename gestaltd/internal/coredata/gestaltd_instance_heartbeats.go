@@ -12,6 +12,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 )
 
 type GestaltdInstanceHeartbeatService struct {
@@ -219,12 +220,10 @@ func cloneHeartbeatApps(apps map[string]core.GestaltdInstanceAppHeartbeat) map[s
 	if apps == nil {
 		return nil
 	}
-	out := make(map[string]core.GestaltdInstanceAppHeartbeat, len(apps))
-	for app, observation := range apps {
+	return maputil.Convert(apps, func(observation core.GestaltdInstanceAppHeartbeat) core.GestaltdInstanceAppHeartbeat {
 		observation.ObservedAt = normalizedHeartbeatTime(observation.ObservedAt)
-		out[app] = observation
-	}
-	return out
+		return observation
+	})
 }
 
 func recordToGestaltdInstanceHeartbeat(rec idb.Record) *core.GestaltdInstanceHeartbeat {
