@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -212,35 +212,19 @@ func CursorKeyToProto(key any) (*proto.KeyValue, error) {
 }
 
 func EncodeKey(value any) ([]byte, error) {
-	kv, err := AnyToKeyValue(value)
-	if err != nil {
-		return nil, err
-	}
-	return gproto.Marshal(kv)
+	return idb.EncodeIndexedDBKey(value)
 }
 
 func DecodeKey(data []byte) (any, error) {
-	kv := &proto.KeyValue{}
-	if err := gproto.Unmarshal(data, kv); err != nil {
-		return nil, err
-	}
-	return KeyValueToAny(kv)
+	return idb.DecodeIndexedDBKey(data)
 }
 
 func EncodeRecord(record Record) ([]byte, error) {
-	pbRecord, err := RecordToProto(record)
-	if err != nil {
-		return nil, err
-	}
-	return gproto.Marshal(pbRecord)
+	return idb.EncodeIndexedDBRecord(record)
 }
 
 func DecodeRecord(data []byte) (Record, error) {
-	pbRecord := &proto.Record{}
-	if err := gproto.Unmarshal(data, pbRecord); err != nil {
-		return nil, err
-	}
-	return RecordFromProto(pbRecord)
+	return idb.DecodeIndexedDBRecord(data)
 }
 
 func KeyValueArrayParts(v any) ([]any, bool) {
@@ -251,9 +235,6 @@ func KeyValueArrayParts(v any) ([]any, bool) {
 		return nil, false
 	}
 	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return nil, false
-	}
 	switch rv.Kind() {
 	case reflect.Slice, reflect.Array:
 	default:
