@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -1519,36 +1520,16 @@ func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecuritySc
 		return cloned["_"]
 	}
 	merged := *base
-	if override.Type != "" {
-		merged.Type = override.Type
-	}
-	if override.Description != "" {
-		merged.Description = override.Description
-	}
-	if override.SignatureHeader != "" {
-		merged.SignatureHeader = override.SignatureHeader
-	}
-	if override.SignaturePrefix != "" {
-		merged.SignaturePrefix = override.SignaturePrefix
-	}
-	if override.PayloadTemplate != "" {
-		merged.PayloadTemplate = override.PayloadTemplate
-	}
-	if override.TimestampHeader != "" {
-		merged.TimestampHeader = override.TimestampHeader
-	}
-	if override.MaxAgeSeconds != 0 {
-		merged.MaxAgeSeconds = override.MaxAgeSeconds
-	}
-	if override.Name != "" {
-		merged.Name = override.Name
-	}
-	if override.In != "" {
-		merged.In = override.In
-	}
-	if override.Scheme != "" {
-		merged.Scheme = override.Scheme
-	}
+	merged.Type = cmp.Or(override.Type, merged.Type)
+	merged.Description = cmp.Or(override.Description, merged.Description)
+	merged.SignatureHeader = cmp.Or(override.SignatureHeader, merged.SignatureHeader)
+	merged.SignaturePrefix = cmp.Or(override.SignaturePrefix, merged.SignaturePrefix)
+	merged.PayloadTemplate = cmp.Or(override.PayloadTemplate, merged.PayloadTemplate)
+	merged.TimestampHeader = cmp.Or(override.TimestampHeader, merged.TimestampHeader)
+	merged.MaxAgeSeconds = cmp.Or(override.MaxAgeSeconds, merged.MaxAgeSeconds)
+	merged.Name = cmp.Or(override.Name, merged.Name)
+	merged.In = cmp.Or(override.In, merged.In)
+	merged.Scheme = cmp.Or(override.Scheme, merged.Scheme)
 	if override.Secret != nil {
 		merged.Secret = cloneHTTPSecretRef(override.Secret)
 	}
@@ -1568,32 +1549,18 @@ func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 		return cloned["_"]
 	}
 	merged := *base
-	if override.Path != "" {
-		merged.Path = override.Path
-	}
-	if override.Method != "" {
-		merged.Method = override.Method
-	}
-	if override.CredentialMode != "" {
-		merged.CredentialMode = override.CredentialMode
-	}
-	if override.Security != "" {
-		merged.Security = override.Security
-	}
-	if override.Streaming {
-		merged.Streaming = true
-	}
-	if override.Target != "" {
-		merged.Target = override.Target
-	}
+	merged.Path = cmp.Or(override.Path, merged.Path)
+	merged.Method = cmp.Or(override.Method, merged.Method)
+	merged.CredentialMode = cmp.Or(override.CredentialMode, merged.CredentialMode)
+	merged.Security = cmp.Or(override.Security, merged.Security)
+	merged.Streaming = cmp.Or(override.Streaming, merged.Streaming)
+	merged.Target = cmp.Or(override.Target, merged.Target)
 	if override.RequestBody != nil {
 		if merged.RequestBody == nil {
 			merged.RequestBody = cloneHTTPRequestBody(override.RequestBody)
 		} else {
 			requestBody := *merged.RequestBody
-			if override.RequestBody.Required {
-				requestBody.Required = true
-			}
+			requestBody.Required = cmp.Or(override.RequestBody.Required, requestBody.Required)
 			if override.RequestBody.Content != nil {
 				requestBody.Content = cloneHTTPRequestBody(override.RequestBody).Content
 			}
