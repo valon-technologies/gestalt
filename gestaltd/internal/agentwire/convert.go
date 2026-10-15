@@ -96,11 +96,10 @@ func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 }
 
 func RunAsSubjectFromProto(subject *proto.SubjectContext) *core.RunAsSubject {
-	if subject == nil {
-		return nil
-	}
-	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID: subject.GetId(),
+	return protoutil.ConvertMessage(subject, func(subject *proto.SubjectContext) *core.RunAsSubject {
+		return core.NormalizeRunAsSubject(&core.RunAsSubject{
+			SubjectID: subject.GetId(),
+		})
 	})
 }
 
