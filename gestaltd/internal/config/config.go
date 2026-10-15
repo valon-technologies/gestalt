@@ -3538,15 +3538,7 @@ func normalizeAuthorizationConfig(cfg *Config) error {
 }
 
 func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {
-	if len(cfg.Models) == 0 {
-		cfg.Models = nil
-	} else {
-		models := make(map[string]AuthorizationModelDef, len(cfg.Models))
-		for name, model := range cfg.Models {
-			models[name] = normalizedAuthorizationModelDef(model)
-		}
-		cfg.Models = models
-	}
+	cfg.Models = normalizedAuthorizationValues(cfg.Models, normalizedAuthorizationModelDef)
 	if len(cfg.Relationships) == 0 {
 		cfg.Relationships = nil
 	} else {
@@ -3557,50 +3549,22 @@ func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig 
 	if len(cfg.ResourceTypes) == 0 {
 		cfg.ResourceTypes = nil
 	} else {
-		resourceTypes := make(map[string]AuthorizationResourcePolicyDef, len(cfg.ResourceTypes))
-		for name, policy := range cfg.ResourceTypes {
-			resourceTypes[name] = policy
-		}
-		cfg.ResourceTypes = resourceTypes
+		cfg.ResourceTypes = maps.Clone(cfg.ResourceTypes)
 	}
 	return cfg
 }
 
 func normalizedAuthorizationModelDef(def AuthorizationModelDef) AuthorizationModelDef {
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
-	if len(def.ResourceTypes) == 0 {
-		def.ResourceTypes = nil
-		return def
-	}
-	resourceTypes := make(map[string]AuthorizationResourceTypeDef, len(def.ResourceTypes))
-	for name, resourceType := range def.ResourceTypes {
-		resourceTypes[name] = normalizedAuthorizationResourceTypeDef(resourceType)
-	}
-	def.ResourceTypes = resourceTypes
+	def.ResourceTypes = normalizedAuthorizationValues(def.ResourceTypes, normalizedAuthorizationResourceTypeDef)
 	return def
 }
 
 func normalizedAuthorizationResourceTypeDef(def AuthorizationResourceTypeDef) AuthorizationResourceTypeDef {
 	def.DefaultRole = strings.TrimSpace(def.DefaultRole)
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
-	if len(def.Relations) == 0 {
-		def.Relations = nil
-	} else {
-		relations := make(map[string]AuthorizationRelationDef, len(def.Relations))
-		for name, relation := range def.Relations {
-			relations[name] = normalizedAuthorizationRelationDef(relation)
-		}
-		def.Relations = relations
-	}
-	if len(def.Actions) == 0 {
-		def.Actions = nil
-	} else {
-		actions := make(map[string]AuthorizationActionDef, len(def.Actions))
-		for name, action := range def.Actions {
-			actions[name] = normalizedAuthorizationActionDef(action)
-		}
-		def.Actions = actions
-	}
+	def.Relations = normalizedAuthorizationValues(def.Relations, normalizedAuthorizationRelationDef)
+	def.Actions = normalizedAuthorizationValues(def.Actions, normalizedAuthorizationActionDef)
 	return def
 }
 
@@ -3630,15 +3594,7 @@ func normalizedAuthorizationRelationshipDef(def AuthorizationRelationshipDef) Au
 	def.Resource = normalizedAuthorizationResourceDef(def.Resource)
 	def.Target = normalizedAuthorizationRelationshipTargetDef(def.Target)
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
-	if len(def.Properties) == 0 {
-		def.Properties = nil
-	} else {
-		properties := make(map[string]string, len(def.Properties))
-		for key, value := range def.Properties {
-			properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
-		}
-		def.Properties = properties
-	}
+	def.Properties = normalizedAuthorizationProperties(def.Properties)
 	return def
 }
 
@@ -3646,30 +3602,14 @@ func normalizedAuthorizationSubjectDef(def AuthorizationSubjectDef) Authorizatio
 	def.Type = strings.TrimSpace(def.Type)
 	def.ID = strings.TrimSpace(def.ID)
 	def.Email = strings.ToLower(strings.TrimSpace(def.Email))
-	if len(def.Properties) == 0 {
-		def.Properties = nil
-	} else {
-		properties := make(map[string]string, len(def.Properties))
-		for key, value := range def.Properties {
-			properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
-		}
-		def.Properties = properties
-	}
+	def.Properties = normalizedAuthorizationProperties(def.Properties)
 	return def
 }
 
 func normalizedAuthorizationResourceDef(def AuthorizationResourceDef) AuthorizationResourceDef {
 	def.Type = strings.TrimSpace(def.Type)
 	def.ID = strings.TrimSpace(def.ID)
-	if len(def.Properties) == 0 {
-		def.Properties = nil
-	} else {
-		properties := make(map[string]string, len(def.Properties))
-		for key, value := range def.Properties {
-			properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
-		}
-		def.Properties = properties
-	}
+	def.Properties = normalizedAuthorizationProperties(def.Properties)
 	return def
 }
 
@@ -4008,4 +3948,26 @@ func providerEntrySource(entry *ProviderEntry) ProviderSource {
 	return withOptionalConfig(entry, func(entry *ProviderEntry) ProviderSource {
 		return entry.Source
 	})
+}
+
+func normalizedAuthorizationValues[T any](values map[string]T, normalize func(T) T) map[string]T {
+	if len(values) == 0 {
+		return nil
+	}
+	normalized := make(map[string]T, len(values))
+	for name, value := range values {
+		normalized[name] = normalize(value)
+	}
+	return normalized
+}
+
+func normalizedAuthorizationProperties(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	normalized := make(map[string]string, len(values))
+	for key, value := range values {
+		normalized[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	return normalized
 }
