@@ -13,12 +13,11 @@ import (
 )
 
 const (
-	operationErrorField       = "error"
-	unknownOperationMessage   = "unknown operation"
-	routerNilMessage          = "router is nil"
-	nilResultMessage          = "provider returned nil result"
-	internalErrorMessage      = "internal error"
-	internalErrorBodyFallback = `{"error":"internal error"}`
+	operationErrorField     = "error"
+	unknownOperationMessage = "unknown operation"
+	routerNilMessage        = "router is nil"
+	nilResultMessage        = "provider returned nil result"
+	internalErrorMessage    = "internal error"
 )
 
 type operationError struct {
@@ -182,10 +181,7 @@ func operationResult(status int, message string) *OperationResult {
 }
 
 func operationErrorBody(message string) []byte {
-	data, err := json.Marshal(map[string]string{operationErrorField: message})
-	if err != nil {
-		return []byte(internalErrorBodyFallback)
-	}
+	data, _ := json.Marshal(map[string]string{operationErrorField: message})
 	return data
 }
 
@@ -209,11 +205,7 @@ func providerRPCError(operation string, err error) error {
 		return status.Error(grpcCode(coded.code), coded.message)
 	}
 	switch {
-	case errors.Is(err, ErrSecretNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, ErrExternalCredentialNotFound):
-		return status.Error(codes.NotFound, err.Error())
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, ErrSecretNotFound), errors.Is(err, ErrExternalCredentialNotFound), errors.Is(err, ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrAlreadyExists):
 		return status.Error(codes.AlreadyExists, err.Error())
