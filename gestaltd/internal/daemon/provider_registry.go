@@ -109,7 +109,7 @@ func runProviderRepoAdd(args []string) error {
 	}
 	if len(configPaths) > 0 {
 		path := operator.ResolveConfigPaths(configPaths)[0]
-		if err := editProjectProviderRepository(path, name, repoURL, false); err != nil {
+		if err := editProjectProviderRepository(path, name, repoURL); err != nil {
 			return err
 		}
 		providerCommandStatus("Added provider repository %q", name)
@@ -650,7 +650,7 @@ func parseSetFlags(flags []string) map[string]string {
 	return values
 }
 
-func editProjectProviderRepository(path, name, repoURL string, dryRun bool) error {
+func editProjectProviderRepository(path, name, repoURL string) error {
 	root, doc, err := readConfigDocument(path)
 	if err != nil {
 		return err
@@ -659,9 +659,6 @@ func editProjectProviderRepository(path, name, repoURL string, dryRun bool) erro
 	repos := ensureMapping(doc, "providerRepositories")
 	repoNode := yamlMapping(map[string]any{"url": repoURL})
 	setNode(repos, name, repoNode)
-	if dryRun {
-		return nil
-	}
 	return writeConfigDocument(path, root)
 }
 

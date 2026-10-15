@@ -140,7 +140,7 @@ func runProviderPublish(args []string) (err error) {
 		return fmt.Errorf("create publish temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
-	if err := writeProviderReleaseMetadata(tmpDir, releaseManifest, releaseVersion, releaseArchives, rawManifest, false); err != nil {
+	if err := writeProviderReleaseMetadata(tmpDir, releaseManifest, releaseVersion, releaseArchives, rawManifest); err != nil {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 

@@ -51,7 +51,7 @@ func runProviderRelease(args []string) (err error) {
 		return err
 	}
 	validationProgress := startCommandProgress("Validating provider release metadata")
-	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, nil, false); err != nil {
+	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, nil); err != nil {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 	validationProgress.done("Validated provider release metadata for %s", releaseVersion)
@@ -285,7 +285,7 @@ func releaseArchiveTargetFromName(manifest *providermanifestv1.Manifest, archive
 	return platform, true
 }
 
-func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, rawManifest []byte, verbose bool) error {
+func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, rawManifest []byte) error {
 	metadata, err := buildProviderReleaseMetadata(manifest, version, archives, rawManifest)
 	if err != nil {
 		return err
@@ -295,13 +295,7 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 		return fmt.Errorf("encode %s: %w", providerrelease.MetadataFile, err)
 	}
 	path := filepath.Join(dir, providerrelease.MetadataFile)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return err
-	}
-	if verbose {
-		_, _ = fmt.Fprintf(os.Stdout, "created %s\n", path)
-	}
-	return nil
+	return os.WriteFile(path, data, 0o644)
 }
 
 func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, rawManifest []byte) (*providerrelease.Metadata, error) {
