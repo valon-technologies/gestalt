@@ -7,7 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func validateToolInvocation(ctx context.Context, cfg Config, provName, opName string, fallbackOp catalog.CatalogOperation, hasFallbackOp bool, args map[string]any) error {
+func validateToolInvocation(ctx context.Context, cfg Config, provName, opName string, fallbackOp catalog.CatalogOperation, args map[string]any) error {
 	if cfg.InvocationValidator == nil || cfg.Providers == nil {
 		return nil
 	}
@@ -16,13 +16,8 @@ func validateToolInvocation(ctx context.Context, cfg Config, provName, opName st
 		return err
 	}
 	op := fallbackOp
-	hasOp := hasFallbackOp
 	if staticOp, ok := invocation.CatalogOperation(prov.Catalog(), opName); ok {
 		op = staticOp
-		hasOp = true
-	}
-	if !hasOp {
-		return nil
 	}
 	return cfg.InvocationValidator(ctx, provName, prov, op, args, invocation.ConnectionFromContext(ctx))
 }

@@ -269,7 +269,7 @@ func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpg
 	if resolvedConnection != "" {
 		ctx = invocation.WithConnection(ctx, resolvedConnection)
 	}
-	if err := validateToolInvocation(ctx, h.cfg, provName, ref.operation, projectedOp, true, args); err != nil {
+	if err := validateToolInvocation(ctx, h.cfg, provName, ref.operation, projectedOp, args); err != nil {
 		if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrScopeDenied) {
 			return mcpgo.NewToolResultError("operation access denied"), nil
 		}
