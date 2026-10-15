@@ -153,16 +153,7 @@ func (s *ManagedSecretService) EnsureStore(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("managed secrets service is not configured")
 	}
-	if _, err := s.db.CreateObjectStore(ctx, StoreManagedSecrets, ManagedSecretsSchema); err != nil {
-		return fmt.Errorf("ensure managed_secrets store: %w", err)
-	}
-	if _, err := s.db.CreateObjectStore(ctx, StoreManagedSecretVersions, ManagedSecretVersionsSchema); err != nil {
-		return fmt.Errorf("ensure managed_secret_versions store: %w", err)
-	}
-	if _, err := s.db.CreateObjectStore(ctx, StoreManagedSecretAuditLogs, ManagedSecretAuditLogsSchema); err != nil {
-		return fmt.Errorf("ensure managed_secret_audit_logs store: %w", err)
-	}
-	return nil
+	return ensureManagedSecretStores(ctx, s.db)
 }
 
 func (s *ManagedSecretService) Get(ctx context.Context, name string) (*ManagedSecret, error) {
