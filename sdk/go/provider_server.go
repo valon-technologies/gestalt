@@ -238,22 +238,21 @@ func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.Reso
 }
 
 func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) HTTPSubjectRequest {
-	if req == nil {
-		return HTTPSubjectRequest{}
-	}
-	return HTTPSubjectRequest{
-		Binding:         req.GetBinding(),
-		Method:          req.GetMethod(),
-		Path:            req.GetPath(),
-		ContentType:     req.GetContentType(),
-		Headers:         httpHeaderFromProto(req.GetHeaders()),
-		Query:           urlValuesFromProto(req.GetQuery()),
-		Params:          req.GetParams().AsMap(),
-		RawBody:         append([]byte(nil), req.GetRawBody()...),
-		SecurityScheme:  req.GetSecurityScheme(),
-		VerifiedSubject: req.GetVerifiedSubject(),
-		VerifiedClaims:  cloneMap(req.GetVerifiedClaims()),
-	}
+	return convertProtoMessage(req, func(req *proto.HTTPSubjectRequest) HTTPSubjectRequest {
+		return HTTPSubjectRequest{
+			Binding:         req.GetBinding(),
+			Method:          req.GetMethod(),
+			Path:            req.GetPath(),
+			ContentType:     req.GetContentType(),
+			Headers:         httpHeaderFromProto(req.GetHeaders()),
+			Query:           urlValuesFromProto(req.GetQuery()),
+			Params:          req.GetParams().AsMap(),
+			RawBody:         append([]byte(nil), req.GetRawBody()...),
+			SecurityScheme:  req.GetSecurityScheme(),
+			VerifiedSubject: req.GetVerifiedSubject(),
+			VerifiedClaims:  cloneMap(req.GetVerifiedClaims()),
+		}
+	})
 }
 
 func httpHeaderFromProto(values map[string]*proto.StringList) http.Header {

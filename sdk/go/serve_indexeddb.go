@@ -353,26 +353,25 @@ func (s indexedDBProviderServer) Transaction(stream proto.IndexedDB_TransactionS
 }
 
 func objectStoreOptionsFromProto(schema *proto.ObjectStoreSchema) ObjectStoreOptions {
-	if schema == nil {
-		return ObjectStoreOptions{}
-	}
-	out := ObjectStoreOptions{
-		Indexes: make([]IndexSchema, len(schema.GetIndexes())),
-		Columns: make([]ColumnDef, len(schema.GetColumns())),
-	}
-	for i, idx := range schema.GetIndexes() {
-		out.Indexes[i] = IndexSchema{Name: idx.GetName(), KeyPath: idx.GetKeyPath(), Unique: idx.GetUnique()}
-	}
-	for i, col := range schema.GetColumns() {
-		out.Columns[i] = ColumnDef{
-			Name:       col.GetName(),
-			Type:       ColumnType(col.GetType()),
-			PrimaryKey: col.GetPrimaryKey(),
-			NotNull:    col.GetNotNull(),
-			Unique:     col.GetUnique(),
+	return convertProtoMessage(schema, func(schema *proto.ObjectStoreSchema) ObjectStoreOptions {
+		out := ObjectStoreOptions{
+			Indexes: make([]IndexSchema, len(schema.GetIndexes())),
+			Columns: make([]ColumnDef, len(schema.GetColumns())),
 		}
-	}
-	return out
+		for i, idx := range schema.GetIndexes() {
+			out.Indexes[i] = IndexSchema{Name: idx.GetName(), KeyPath: idx.GetKeyPath(), Unique: idx.GetUnique()}
+		}
+		for i, col := range schema.GetColumns() {
+			out.Columns[i] = ColumnDef{
+				Name:       col.GetName(),
+				Type:       ColumnType(col.GetType()),
+				PrimaryKey: col.GetPrimaryKey(),
+				NotNull:    col.GetNotNull(),
+				Unique:     col.GetUnique(),
+			}
+		}
+		return out
+	})
 }
 
 func objectStoreRequestFromProto(req *proto.ObjectStoreRequest) IndexedDBObjectStoreRequest {
