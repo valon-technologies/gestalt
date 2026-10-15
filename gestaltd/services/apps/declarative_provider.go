@@ -82,7 +82,7 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
-	if manifest.Spec == nil || !manifest.Spec.IsDeclarative() {
+	if !manifest.Spec.IsDeclarative() {
 		return nil, fmt.Errorf("manifest is not a declarative provider")
 	}
 

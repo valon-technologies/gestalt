@@ -12,7 +12,7 @@ import (
 
 type Service struct{ compact *CompactService }
 
-func (s *Service) Enabled() bool { return s != nil && s.compact != nil && s.compact.Enabled() }
+func (s *Service) Enabled() bool { return s != nil && s.compact.Enabled() }
 
 func (s *Service) ClientForToken(token string) (string, bool) {
 	if s == nil || s.compact == nil {

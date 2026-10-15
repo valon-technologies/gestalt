@@ -646,7 +646,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 
 	lock := newLockfile()
 	for name, entry := range cfg.Apps {
-		if entry == nil || !sourceBacked(entry) || entry.HasLocalSource() {
+		if !sourceBacked(entry) || entry.HasLocalSource() {
 			continue
 		}
 		if entry.Source.IsRegistry() {
@@ -669,7 +669,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for name, entry := range collection.entries {
-			if entry == nil || !sourceBacked(entry) {
+			if !sourceBacked(entry) {
 				continue
 			}
 			if collection.kind == config.HostProviderKindSecrets {
@@ -925,7 +925,7 @@ func (l *Lifecycle) validateLocalSourceAppsForExecution(cfg *config.Config) erro
 	}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
-		if entry == nil || !entry.HasLocalSource() {
+		if !entry.HasLocalSource() {
 			continue
 		}
 		if _, err := normalizeLocalSource(entry.SourcePath()); err != nil {
@@ -2183,7 +2183,7 @@ func preparedDirectoryDigest(root string) (string, error) {
 }
 
 func localSourceDigest(provider *config.ProviderEntry) (string, error) {
-	if provider == nil || !provider.HasLocalSource() {
+	if !provider.HasLocalSource() {
 		return "", fmt.Errorf("local source provider is required")
 	}
 	return fingerprintLocalSourceDigest(provider.SourcePath())
@@ -2439,7 +2439,7 @@ func lockEntryFresh(paths lifecyclePaths, kind, name string, provider *config.Pr
 }
 
 func localSourcePathMissing(provider *config.ProviderEntry) bool {
-	if provider == nil || !provider.HasLocalSource() {
+	if !provider.HasLocalSource() {
 		return false
 	}
 	if _, err := os.Stat(provider.SourcePath()); err != nil {
@@ -2557,17 +2557,13 @@ func lockEntryFingerprintMatchesProvider(name string, provider *config.ProviderE
 }
 
 func lockEntryFingerprintMatchesProviderForMode(name string, provider *config.ProviderEntry, configDir string, entry LockEntry, mode artifactMode) (bool, error) {
-	if mode.toleratesStale() && providerHasReadOnlyLocalSource(provider) {
+	if mode.toleratesStale() && provider.HasLocalSource() {
 		return true, nil
 	}
-	if providerHasReadOnlyLocalSource(provider) && localSourcePathMissing(provider) {
+	if provider.HasLocalSource() && localSourcePathMissing(provider) {
 		return true, nil
 	}
 	return lockEntryFingerprintMatchesProvider(name, provider, configDir, entry)
-}
-
-func providerHasReadOnlyLocalSource(provider *config.ProviderEntry) bool {
-	return provider != nil && provider.HasLocalSource()
 }
 
 func resolveLockedArchiveLocation(configDir, sourceLocation, archiveRef string) (string, error) {
@@ -2955,7 +2951,7 @@ func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, 
 		ArtifactManifest: manifestPath,
 		Executable:       executablePath,
 	}
-	if app != nil && app.HasLocalSource() {
+	if app.HasLocalSource() {
 		if err := writePreparedLockMetadata(paths, install, kind, name, app); err != nil {
 			return LockEntry{}, fmt.Errorf("write prepared lock metadata for %s %q: %w", kind, name, err)
 		}
@@ -3084,7 +3080,7 @@ func catalogsEqual(a, b *catalog.Catalog) bool {
 }
 
 func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, subject, destDir string, provider *config.ProviderEntry, configMap map[string]any, mode artifactMode) (LockEntry, error) {
-	if provider == nil || !sourceBacked(provider) {
+	if !sourceBacked(provider) {
 		return LockEntry{}, fmt.Errorf("%s requires source configuration", subject)
 	}
 	isAppProvider := kind == providermanifestv1.KindApp && destDir == providerDestDir(paths, name)
@@ -3719,7 +3715,7 @@ func (l *Lifecycle) applyStaticValidationProviders(ctx context.Context, paths li
 }
 
 func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecyclePaths, lockEntries map[string]LockEntry, kind, name string, provider *config.ProviderEntry, configMap map[string]any, destDir, platform string, bind func(string, *providermanifestv1.Manifest) error) error {
-	if provider == nil || !sourceBacked(provider) {
+	if !sourceBacked(provider) {
 		return nil
 	}
 	if provider.HasLocalSource() {
@@ -3828,7 +3824,7 @@ func staticValidationEntryNeedsSourceAuthSecret(paths lifecyclePaths, lockEntrie
 	if err != nil || !usesSecret {
 		return false, err
 	}
-	if provider == nil || !sourceBacked(provider) || provider.HasLocalSource() {
+	if !sourceBacked(provider) || provider.HasLocalSource() {
 		return false, nil
 	}
 	var entry LockEntry
@@ -3989,7 +3985,7 @@ func sourceManifestCacheRequest(kind, name, subject, destDir, sourceDigest strin
 }
 
 func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name string, provider *config.ProviderEntry, configMap map[string]any, destDir, subject string, mode artifactMode) (*preparedInstall, error) {
-	if provider == nil || !provider.HasLocalSource() {
+	if !provider.HasLocalSource() {
 		return nil, fmt.Errorf("%s requires local source configuration", subject)
 	}
 	start := time.Now()
@@ -4299,7 +4295,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 }
 
 func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockEntry, kind, name string, app *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
-	if app != nil && app.HasLocalSource() {
+	if app.HasLocalSource() {
 		return l.applyLocalComponentEntry(paths, kind, name, app, configMap, destDir, mode)
 	}
 	if entry == nil {

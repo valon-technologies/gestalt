@@ -1741,7 +1741,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	var scimHandler http.Handler
 	if prepared.SCIMRuntime != nil {
 		scimHandler = prepared.SCIMRuntime.Handler()
-	} else if prepared.SCIM != nil && prepared.SCIM.Enabled() {
+	} else if prepared.SCIM.Enabled() {
 		scimHandler = scim.NewHandler(prepared.SCIM)
 	}
 	result := &Result{
@@ -2152,7 +2152,7 @@ func buildNamedSecretManager(name string, secrets *config.ProviderEntry, factori
 		logicalName = "secrets"
 	}
 
-	if secrets != nil && (secrets.HasRemoteSource() || secrets.HasLocalSource() || secrets.HasLocalReleaseSource()) {
+	if secrets.HasRemoteSource() || secrets.HasLocalSource() || secrets.HasLocalReleaseSource() {
 		factory, ok := factories.Secrets["provider"]
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: secrets provider factory is not registered")
