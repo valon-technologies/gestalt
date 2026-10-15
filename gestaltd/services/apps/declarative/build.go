@@ -340,7 +340,7 @@ func BuildOAuthUpstream(def *Definition, conn ConnectionDef, baseURL string, cli
 				return checkBodyMatch(data, rcd)
 			}
 			if rcd.ErrorMessagePath != "" {
-				if msg, ok := extractJSONPath(data, rcd.ErrorMessagePath); ok && msg != "" {
+				if msg, _ := extractJSONPath(data, rcd.ErrorMessagePath); msg != "" {
 					return fmt.Errorf("%s", msg)
 				}
 			}

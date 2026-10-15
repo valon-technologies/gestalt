@@ -173,7 +173,7 @@ func dialTarget(ctx context.Context, serviceName, target string, extraOpts ...gr
 // Target reads the host service endpoint and relay token the daemon
 // advertised through the environment.
 func Target(serviceName string) (string, string, error) {
-	if raw, ok := os.LookupEnv(EnvHostServices); ok && raw != "" {
+	if raw := os.Getenv(EnvHostServices); raw != "" {
 		found := false
 		for _, name := range strings.Split(raw, ",") {
 			if strings.TrimSpace(name) == serviceName {

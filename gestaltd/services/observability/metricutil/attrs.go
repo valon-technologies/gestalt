@@ -136,10 +136,7 @@ func AddHTTPServerMetricDims(ctx context.Context, dims HTTPMetricDims) {
 }
 
 func httpServerHasIngressKind(ctx context.Context) bool {
-	labeler, ok := otelhttp.LabelerFromContext(ctx)
-	if !ok {
-		return false
-	}
+	labeler, _ := otelhttp.LabelerFromContext(ctx)
 	for _, attr := range labeler.Get() {
 		if attr.Key == attrGestaltdIngressKind {
 			return true
@@ -189,10 +186,7 @@ func DBClientAttrs(dims DBMetricDims) []attribute.KeyValue {
 }
 
 func ClientKindFromContext(ctx context.Context) string {
-	labeler, ok := otelhttp.LabelerFromContext(ctx)
-	if !ok {
-		return ""
-	}
+	labeler, _ := otelhttp.LabelerFromContext(ctx)
 	for _, attr := range labeler.Get() {
 		if attr.Key == attrGestaltdClientKind {
 			return attr.Value.AsString()
