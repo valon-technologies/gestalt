@@ -139,62 +139,50 @@ func ToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
 	return out
 }
 
+var toolSourceModesFromProto = map[proto.AgentToolSourceMode]coreagent.ToolSourceMode{
+	proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG: coreagent.ToolSourceModeCatalog,
+	proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE:    coreagent.ToolSourceModeNone,
+}
+
 func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
-	switch mode {
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG:
-		return coreagent.ToolSourceModeCatalog
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE:
-		return coreagent.ToolSourceModeNone
-	default:
-		return coreagent.ToolSourceModeUnspecified
-	}
+	return toolSourceModesFromProto[mode]
+}
+
+var toolSourceModesToProto = map[coreagent.ToolSourceMode]proto.AgentToolSourceMode{
+	coreagent.ToolSourceModeCatalog: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
+	coreagent.ToolSourceModeNone:    proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 }
 
 func ToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
-	switch mode {
-	case coreagent.ToolSourceModeCatalog:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG
-	case coreagent.ToolSourceModeNone:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE
-	default:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-	}
+	return toolSourceModesToProto[mode]
+}
+
+var messagePartTypesFromProto = map[proto.AgentMessagePartType]coreagent.MessagePartType{
+	proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED: "",
+	proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT:        coreagent.MessagePartTypeText,
+	proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON:        coreagent.MessagePartTypeJSON,
+	proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL:   coreagent.MessagePartTypeToolCall,
+	proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT: coreagent.MessagePartTypeToolResult,
+	proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF:   coreagent.MessagePartTypeImageRef,
 }
 
 func MessagePartTypeFromProto(partType proto.AgentMessagePartType) (coreagent.MessagePartType, error) {
-	switch partType {
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT:
-		return coreagent.MessagePartTypeText, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON:
-		return coreagent.MessagePartTypeJSON, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL:
-		return coreagent.MessagePartTypeToolCall, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT:
-		return coreagent.MessagePartTypeToolResult, nil
-	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF:
-		return coreagent.MessagePartTypeImageRef, nil
-	default:
-		return "", fmt.Errorf("unknown agent message part type %v", partType)
+	if mapped, ok := messagePartTypesFromProto[partType]; ok {
+		return mapped, nil
 	}
+	return "", fmt.Errorf("unknown agent message part type %v", partType)
+}
+
+var messagePartTypesToProto = map[coreagent.MessagePartType]proto.AgentMessagePartType{
+	coreagent.MessagePartTypeText:       proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT,
+	coreagent.MessagePartTypeJSON:       proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON,
+	coreagent.MessagePartTypeToolCall:   proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL,
+	coreagent.MessagePartTypeToolResult: proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT,
+	coreagent.MessagePartTypeImageRef:   proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF,
 }
 
 func MessagePartTypeToProto(partType coreagent.MessagePartType) proto.AgentMessagePartType {
-	switch partType {
-	case coreagent.MessagePartTypeText:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT
-	case coreagent.MessagePartTypeJSON:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON
-	case coreagent.MessagePartTypeToolCall:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL
-	case coreagent.MessagePartTypeToolResult:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
-	case coreagent.MessagePartTypeImageRef:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF
-	default:
-		return proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
-	}
+	return messagePartTypesToProto[partType]
 }
 
 func MessagePartToProto(part coreagent.MessagePart) (*proto.AgentMessagePart, error) {

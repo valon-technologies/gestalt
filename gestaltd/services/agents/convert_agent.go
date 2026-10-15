@@ -379,60 +379,52 @@ func agentProviderCapabilitiesFromProto(value *proto.AgentProviderCapabilities) 
 	}
 }
 
+var agentInteractionTypesFromProto = map[proto.AgentInteractionType]coreagent.InteractionType{
+	proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED:   "",
+	proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL:      coreagent.InteractionTypeApproval,
+	proto.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION: coreagent.InteractionTypeClarification,
+	proto.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT:         coreagent.InteractionTypeInput,
+}
+
 func agentInteractionTypeFromProto(value proto.AgentInteractionType) (coreagent.InteractionType, error) {
-	switch value {
-	case proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL:
-		return coreagent.InteractionTypeApproval, nil
-	case proto.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION:
-		return coreagent.InteractionTypeClarification, nil
-	case proto.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT:
-		return coreagent.InteractionTypeInput, nil
-	default:
-		return "", fmt.Errorf("unknown agent interaction type %v", value)
+	if mapped, ok := agentInteractionTypesFromProto[value]; ok {
+		return mapped, nil
 	}
+	return "", fmt.Errorf("unknown agent interaction type %v", value)
+}
+
+var agentInteractionTypesToProto = map[coreagent.InteractionType]proto.AgentInteractionType{
+	coreagent.InteractionTypeApproval:      proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL,
+	coreagent.InteractionTypeClarification: proto.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION,
+	coreagent.InteractionTypeInput:         proto.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT,
 }
 
 func agentInteractionTypeToProto(value coreagent.InteractionType) proto.AgentInteractionType {
-	switch value {
-	case coreagent.InteractionTypeApproval:
-		return proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL
-	case coreagent.InteractionTypeClarification:
-		return proto.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION
-	case coreagent.InteractionTypeInput:
-		return proto.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT
-	default:
-		return proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED
-	}
+	return agentInteractionTypesToProto[value]
+}
+
+var agentInteractionStatesToProto = map[coreagent.InteractionState]proto.AgentInteractionState{
+	coreagent.InteractionStatePending:  proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING,
+	coreagent.InteractionStateResolved: proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED,
+	coreagent.InteractionStateCanceled: proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED,
 }
 
 func agentInteractionStateToProto(value coreagent.InteractionState) proto.AgentInteractionState {
-	switch value {
-	case coreagent.InteractionStatePending:
-		return proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING
-	case coreagent.InteractionStateResolved:
-		return proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED
-	case coreagent.InteractionStateCanceled:
-		return proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED
-	default:
-		return proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED
-	}
+	return agentInteractionStatesToProto[value]
+}
+
+var agentInteractionStatesFromProto = map[proto.AgentInteractionState]coreagent.InteractionState{
+	proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED: "",
+	proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING:     coreagent.InteractionStatePending,
+	proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED:    coreagent.InteractionStateResolved,
+	proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED:    coreagent.InteractionStateCanceled,
 }
 
 func agentInteractionStateFromProto(value proto.AgentInteractionState) (coreagent.InteractionState, error) {
-	switch value {
-	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED:
-		return "", nil
-	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING:
-		return coreagent.InteractionStatePending, nil
-	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED:
-		return coreagent.InteractionStateResolved, nil
-	case proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED:
-		return coreagent.InteractionStateCanceled, nil
-	default:
-		return "", fmt.Errorf("unknown agent interaction state %v", value)
+	if mapped, ok := agentInteractionStatesFromProto[value]; ok {
+		return mapped, nil
 	}
+	return "", fmt.Errorf("unknown agent interaction state %v", value)
 }
 
 func agentInteractionFromProto(value *proto.AgentInteraction) (*coreagent.Interaction, error) {
