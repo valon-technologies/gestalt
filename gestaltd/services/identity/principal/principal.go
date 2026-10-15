@@ -346,9 +346,6 @@ func PermissionSetFromScopes(scopes []string) PermissionSet {
 		}
 		set[scope] = nil
 	}
-	if len(set) == 0 {
-		return PermissionSet{}
-	}
 	return set
 }
 
