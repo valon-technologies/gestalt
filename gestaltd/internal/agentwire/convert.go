@@ -54,14 +54,7 @@ func MessageFromProto(message *proto.AgentMessage) coreagent.Message {
 }
 
 func MessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message {
-	if len(messages) == 0 {
-		return nil
-	}
-	out := make([]coreagent.Message, 0, len(messages))
-	for _, message := range messages {
-		out = append(out, MessageFromProto(message))
-	}
-	return out
+	return protoutil.ConvertSlice(messages, MessageFromProto)
 }
 
 func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
@@ -119,14 +112,7 @@ func ToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {
 }
 
 func ToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]*proto.AgentToolRef, 0, len(refs))
-	for i := range refs {
-		out = append(out, ToolRefToProto(refs[i]))
-	}
-	return out
+	return protoutil.ConvertSlice(refs, ToolRefToProto)
 }
 
 func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
@@ -291,12 +277,5 @@ func MessagePartFromProto(part *proto.AgentMessagePart) coreagent.MessagePart {
 }
 
 func MessagePartsFromProto(parts []*proto.AgentMessagePart) []coreagent.MessagePart {
-	if len(parts) == 0 {
-		return nil
-	}
-	out := make([]coreagent.MessagePart, 0, len(parts))
-	for _, part := range parts {
-		out = append(out, MessagePartFromProto(part))
-	}
-	return out
+	return protoutil.ConvertSlice(parts, MessagePartFromProto)
 }
