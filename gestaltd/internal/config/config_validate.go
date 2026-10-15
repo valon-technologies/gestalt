@@ -477,47 +477,45 @@ func inlineConnectionID(kind, name, localName string) string {
 }
 
 func connectionBindingHasCredentialMaterial(conn *ConnectionDef) bool {
-	if conn == nil {
-		return false
-	}
-	return conn.Mode != "" ||
-		conn.Auth.Type != "" ||
-		conn.Auth.Token != "" ||
-		conn.Auth.GrantType != "" ||
-		conn.Auth.RefreshToken != "" ||
-		conn.Auth.AuthorizationURL != "" ||
-		conn.Auth.TokenURL != "" ||
-		conn.Auth.ClientID != "" ||
-		conn.Auth.ClientSecret != "" ||
-		conn.Auth.RedirectURL != "" ||
-		conn.Auth.ClientAuth != "" ||
-		conn.Auth.TokenExchange != "" ||
-		conn.Auth.TokenPrefix != "" ||
-		len(conn.Auth.Scopes) > 0 ||
-		conn.Auth.ScopeParam != "" ||
-		conn.Auth.ScopeSeparator != "" ||
-		conn.Auth.PKCE ||
-		len(conn.Auth.AuthorizationParams) > 0 ||
-		len(conn.Auth.TokenParams) > 0 ||
-		len(conn.Auth.RefreshParams) > 0 ||
-		conn.Auth.AcceptHeader != "" ||
-		conn.Auth.AccessTokenPath != "" ||
-		len(conn.Auth.TokenMetadata) > 0 ||
-		len(conn.Auth.Credentials) > 0 ||
-		conn.Auth.AuthMapping != nil ||
-		len(conn.ConnectionParams) > 0
+	return withOptionalConfig(conn, func(conn *ConnectionDef) bool {
+		return conn.Mode != "" ||
+			conn.Auth.Type != "" ||
+			conn.Auth.Token != "" ||
+			conn.Auth.GrantType != "" ||
+			conn.Auth.RefreshToken != "" ||
+			conn.Auth.AuthorizationURL != "" ||
+			conn.Auth.TokenURL != "" ||
+			conn.Auth.ClientID != "" ||
+			conn.Auth.ClientSecret != "" ||
+			conn.Auth.RedirectURL != "" ||
+			conn.Auth.ClientAuth != "" ||
+			conn.Auth.TokenExchange != "" ||
+			conn.Auth.TokenPrefix != "" ||
+			len(conn.Auth.Scopes) > 0 ||
+			conn.Auth.ScopeParam != "" ||
+			conn.Auth.ScopeSeparator != "" ||
+			conn.Auth.PKCE ||
+			len(conn.Auth.AuthorizationParams) > 0 ||
+			len(conn.Auth.TokenParams) > 0 ||
+			len(conn.Auth.RefreshParams) > 0 ||
+			conn.Auth.AcceptHeader != "" ||
+			conn.Auth.AccessTokenPath != "" ||
+			len(conn.Auth.TokenMetadata) > 0 ||
+			len(conn.Auth.Credentials) > 0 ||
+			conn.Auth.AuthMapping != nil ||
+			len(conn.ConnectionParams) > 0
+	})
 }
 
 func connectionBindingRequiresUserCredential(conn *ConnectionDef) bool {
-	if conn == nil {
-		return false
-	}
-	switch conn.Auth.Type {
-	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeOAuth2, providermanifestv1.AuthTypeMCPOAuth:
-		return true
-	default:
-		return false
-	}
+	return withOptionalConfig(conn, func(conn *ConnectionDef) bool {
+		switch conn.Auth.Type {
+		case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeOAuth2, providermanifestv1.AuthTypeMCPOAuth:
+			return true
+		default:
+			return false
+		}
+	})
 }
 
 func cloneConnectionDef(src ConnectionDef) ConnectionDef {
@@ -1208,16 +1206,15 @@ func gestaltConfigPath() string {
 }
 
 func runtimeProviderUsesSource(entry *RuntimeProviderEntry) bool {
-	if entry == nil {
-		return false
-	}
-	return entry.Source.IsBuiltin() ||
-		entry.Source.IsMetadataURL() ||
-		entry.Source.IsGitHubRelease() ||
-		entry.Source.IsGit() ||
-		entry.Source.IsLocalMetadataPath() ||
-		entry.Source.IsLocal() ||
-		entry.Source.UnsupportedURL() != ""
+	return withOptionalConfig(entry, func(entry *RuntimeProviderEntry) bool {
+		return entry.Source.IsBuiltin() ||
+			entry.Source.IsMetadataURL() ||
+			entry.Source.IsGitHubRelease() ||
+			entry.Source.IsGit() ||
+			entry.Source.IsLocalMetadataPath() ||
+			entry.Source.IsLocal() ||
+			entry.Source.UnsupportedURL() != ""
+	})
 }
 
 func validateApp(cfg *Config, name string, entry *ProviderEntry) error {

@@ -20,24 +20,22 @@ type RemoteConfig struct {
 // EntryPlacementRemote returns the canonical remote name for provider placement.
 // An empty string means the entry builds locally.
 func EntryPlacementRemote(entry *ProviderEntry) string {
-	if entry == nil {
-		return ""
-	}
-	return strings.TrimSpace(entry.Remote)
+	return withOptionalConfig(entry, func(entry *ProviderEntry) string {
+		return strings.TrimSpace(entry.Remote)
+	})
 }
 
 // EntryBuildsLocal reports whether an entry should be built in-process locally.
 func EntryBuildsLocal(entry *ProviderEntry) bool {
-	if entry == nil {
-		return false
-	}
-	if entry.RemotePreviewActive {
-		return false
-	}
-	if entry.DevActive || entry.Local {
-		return true
-	}
-	return EntryPlacementRemote(entry) == ""
+	return withOptionalConfig(entry, func(entry *ProviderEntry) bool {
+		if entry.RemotePreviewActive {
+			return false
+		}
+		if entry.DevActive || entry.Local {
+			return true
+		}
+		return EntryPlacementRemote(entry) == ""
+	})
 }
 
 // ReferencedRemoteNames returns the sorted unique remote names referenced by
