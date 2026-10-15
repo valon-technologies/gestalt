@@ -187,21 +187,20 @@ func workflowStepFromProto(step *proto.WorkflowStep) WorkflowStep {
 }
 
 func workflowStepAppCallToProto(input *WorkflowStepAppCall) (*proto.WorkflowStepAppCall, error) {
-	if input == nil {
-		return nil, nil
-	}
-	value, err := workflowValueToProto(input.Input)
-	if err != nil {
-		return nil, fmt.Errorf("input: %w", err)
-	}
-	return &proto.WorkflowStepAppCall{
-		Name:           input.Name,
-		Operation:      input.Operation,
-		Input:          value,
-		Connection:     input.Connection,
-		Instance:       input.Instance,
-		CredentialMode: input.CredentialMode,
-	}, nil
+	return convertProtoMessageErr(input, func(input *WorkflowStepAppCall) (*proto.WorkflowStepAppCall, error) {
+		value, err := workflowValueToProto(input.Input)
+		if err != nil {
+			return nil, fmt.Errorf("input: %w", err)
+		}
+		return &proto.WorkflowStepAppCall{
+			Name:           input.Name,
+			Operation:      input.Operation,
+			Input:          value,
+			Connection:     input.Connection,
+			Instance:       input.Instance,
+			CredentialMode: input.CredentialMode,
+		}, nil
+	})
 }
 
 func workflowStepAppCallFromProto(value *proto.WorkflowStepAppCall) *WorkflowStepAppCall {
@@ -218,31 +217,30 @@ func workflowStepAppCallFromProto(value *proto.WorkflowStepAppCall) *WorkflowSte
 }
 
 func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.WorkflowStepAgentTurn, error) {
-	if input == nil {
-		return nil, nil
-	}
-	messages, err := workflowAgentMessagesToProto(input.Messages)
-	if err != nil {
-		return nil, err
-	}
-	output, err := agentOutputToProto(input.Output)
-	if err != nil {
-		return nil, fmt.Errorf("output: %w", err)
-	}
-	modelOptions, err := structFromAny(input.ModelOptions)
-	if err != nil {
-		return nil, fmt.Errorf("model_options: %w", err)
-	}
-	return &proto.WorkflowStepAgentTurn{
-		Provider:     input.Provider,
-		Model:        input.Model,
-		SessionKey:   input.SessionKey,
-		Prompt:       workflowTextToProto(input.Prompt),
-		Messages:     messages,
-		Tools:        agentToolRefsToProto(input.Tools),
-		Output:       output,
-		ModelOptions: modelOptions,
-	}, nil
+	return convertProtoMessageErr(input, func(input *WorkflowStepAgentTurn) (*proto.WorkflowStepAgentTurn, error) {
+		messages, err := workflowAgentMessagesToProto(input.Messages)
+		if err != nil {
+			return nil, err
+		}
+		output, err := agentOutputToProto(input.Output)
+		if err != nil {
+			return nil, fmt.Errorf("output: %w", err)
+		}
+		modelOptions, err := structFromAny(input.ModelOptions)
+		if err != nil {
+			return nil, fmt.Errorf("model_options: %w", err)
+		}
+		return &proto.WorkflowStepAgentTurn{
+			Provider:     input.Provider,
+			Model:        input.Model,
+			SessionKey:   input.SessionKey,
+			Prompt:       workflowTextToProto(input.Prompt),
+			Messages:     messages,
+			Tools:        agentToolRefsToProto(input.Tools),
+			Output:       output,
+			ModelOptions: modelOptions,
+		}, nil
+	})
 }
 
 func workflowStepAgentTurnFromProto(value *proto.WorkflowStepAgentTurn) *WorkflowStepAgentTurn {
@@ -304,18 +302,17 @@ func workflowTextFromProto(value *proto.WorkflowText) WorkflowText {
 }
 
 func workflowStepWhenToProto(input *WorkflowStepWhen) (*proto.WorkflowStepWhen, error) {
-	if input == nil {
-		return nil, nil
-	}
-	value, err := workflowValueToProto(input.Value)
-	if err != nil {
-		return nil, fmt.Errorf("value: %w", err)
-	}
-	equals, err := valueFromAny(input.Equals)
-	if err != nil {
-		return nil, fmt.Errorf("equals: %w", err)
-	}
-	return &proto.WorkflowStepWhen{Value: value, Equals: equals}, nil
+	return convertProtoMessageErr(input, func(input *WorkflowStepWhen) (*proto.WorkflowStepWhen, error) {
+		value, err := workflowValueToProto(input.Value)
+		if err != nil {
+			return nil, fmt.Errorf("value: %w", err)
+		}
+		equals, err := valueFromAny(input.Equals)
+		if err != nil {
+			return nil, fmt.Errorf("equals: %w", err)
+		}
+		return &proto.WorkflowStepWhen{Value: value, Equals: equals}, nil
+	})
 }
 
 func workflowStepWhenFromProto(value *proto.WorkflowStepWhen) *WorkflowStepWhen {
@@ -999,17 +996,15 @@ type WorkflowEventMatch struct {
 }
 
 func newOptionalBoundWorkflowTarget(input *BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return boundWorkflowTargetToProto(*input)
+	return convertProtoMessageErr(input, func(input *BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
+		return boundWorkflowTargetToProto(*input)
+	})
 }
 
 func newOptionalWorkflowRunTrigger(input *WorkflowRunTrigger) (*proto.WorkflowRunTrigger, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowRunTriggerToProto(*input)
+	return convertProtoMessageErr(input, func(input *WorkflowRunTrigger) (*proto.WorkflowRunTrigger, error) {
+		return workflowRunTriggerToProto(*input)
+	})
 }
 
 func workflowTargetInputPtrFromTarget(value *proto.BoundWorkflowTarget) *BoundWorkflowTarget {

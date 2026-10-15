@@ -548,60 +548,58 @@ func cloneCatalogDefault(value any) any {
 }
 
 func catalogToProto(cat *Catalog) (*proto.Catalog, error) {
-	if cat == nil {
-		return nil, nil
-	}
-	out := &proto.Catalog{
-		Name:        cat.Name,
-		DisplayName: cat.DisplayName,
-		Description: cat.Description,
-		IconSvg:     cat.IconSvg,
-		Operations:  make([]*proto.CatalogOperation, 0, len(cat.Operations)),
-	}
-	for i, op := range cat.Operations {
-		pbOp, err := catalogOperationToProto(op)
-		if err != nil {
-			return nil, fmt.Errorf("operation %d: %w", i, err)
+	return convertProtoMessageErr(cat, func(cat *Catalog) (*proto.Catalog, error) {
+		out := &proto.Catalog{
+			Name:        cat.Name,
+			DisplayName: cat.DisplayName,
+			Description: cat.Description,
+			IconSvg:     cat.IconSvg,
+			Operations:  make([]*proto.CatalogOperation, 0, len(cat.Operations)),
 		}
-		out.Operations = append(out.Operations, pbOp)
-	}
-	return out, nil
+		for i, op := range cat.Operations {
+			pbOp, err := catalogOperationToProto(op)
+			if err != nil {
+				return nil, fmt.Errorf("operation %d: %w", i, err)
+			}
+			out.Operations = append(out.Operations, pbOp)
+		}
+		return out, nil
+	})
 }
 
 func catalogOperationToProto(op *CatalogOperation) (*proto.CatalogOperation, error) {
-	if op == nil {
-		return nil, nil
-	}
-	out := &proto.CatalogOperation{
-		Id:             op.Id,
-		Method:         op.Method,
-		Title:          op.Title,
-		Description:    op.Description,
-		InputSchema:    op.InputSchema,
-		Response:       operationResponseSpecToProto(op.Response, op.OutputSchema),
-		Annotations:    operationAnnotationsToProto(op.Annotations),
-		Parameters:     make([]*proto.CatalogParameter, 0, len(op.Parameters)),
-		RequiredScopes: append([]string(nil), op.RequiredScopes...),
-		Tags:           append([]string(nil), op.Tags...),
-		ReadOnly:       op.ReadOnly,
-		Visible:        cloneBool(op.Visible),
-		Transport:      op.Transport,
-		AllowedRoles:   append([]string(nil), op.AllowedRoles...),
-	}
-	api, apiMode, err := apiExposureModeToProto(op.API)
-	if err != nil {
-		return nil, err
-	}
-	out.Api = api
-	out.ApiMode = apiMode
-	for i, param := range op.Parameters {
-		pbParam, err := catalogParameterToProto(param)
-		if err != nil {
-			return nil, fmt.Errorf("parameter %d: %w", i, err)
+	return convertProtoMessageErr(op, func(op *CatalogOperation) (*proto.CatalogOperation, error) {
+		out := &proto.CatalogOperation{
+			Id:             op.Id,
+			Method:         op.Method,
+			Title:          op.Title,
+			Description:    op.Description,
+			InputSchema:    op.InputSchema,
+			Response:       operationResponseSpecToProto(op.Response, op.OutputSchema),
+			Annotations:    operationAnnotationsToProto(op.Annotations),
+			Parameters:     make([]*proto.CatalogParameter, 0, len(op.Parameters)),
+			RequiredScopes: append([]string(nil), op.RequiredScopes...),
+			Tags:           append([]string(nil), op.Tags...),
+			ReadOnly:       op.ReadOnly,
+			Visible:        cloneBool(op.Visible),
+			Transport:      op.Transport,
+			AllowedRoles:   append([]string(nil), op.AllowedRoles...),
 		}
-		out.Parameters = append(out.Parameters, pbParam)
-	}
-	return out, nil
+		api, apiMode, err := apiExposureModeToProto(op.API)
+		if err != nil {
+			return nil, err
+		}
+		out.Api = api
+		out.ApiMode = apiMode
+		for i, param := range op.Parameters {
+			pbParam, err := catalogParameterToProto(param)
+			if err != nil {
+				return nil, fmt.Errorf("parameter %d: %w", i, err)
+			}
+			out.Parameters = append(out.Parameters, pbParam)
+		}
+		return out, nil
+	})
 }
 
 func apiExposureModeToProto(mode *APIExposureMode) (*bool, *proto.APIExposureMode, error) {
@@ -625,23 +623,22 @@ func apiExposureModeToProto(mode *APIExposureMode) (*bool, *proto.APIExposureMod
 }
 
 func catalogParameterToProto(param *CatalogParameter) (*proto.CatalogParameter, error) {
-	if param == nil {
-		return nil, nil
-	}
-	out := &proto.CatalogParameter{
-		Name:        param.Name,
-		Type:        param.Type,
-		Description: param.Description,
-		Required:    param.Required,
-	}
-	if param.GetHasDefault() {
-		value, err := catalogDefaultToProto(param.Default)
-		if err != nil {
-			return nil, fmt.Errorf("default: %w", err)
+	return convertProtoMessageErr(param, func(param *CatalogParameter) (*proto.CatalogParameter, error) {
+		out := &proto.CatalogParameter{
+			Name:        param.Name,
+			Type:        param.Type,
+			Description: param.Description,
+			Required:    param.Required,
 		}
-		out.Default = value
-	}
-	return out, nil
+		if param.GetHasDefault() {
+			value, err := catalogDefaultToProto(param.Default)
+			if err != nil {
+				return nil, fmt.Errorf("default: %w", err)
+			}
+			out.Default = value
+		}
+		return out, nil
+	})
 }
 
 func operationAnnotationsToProto(annotations *OperationAnnotations) *proto.OperationAnnotations {

@@ -158,18 +158,17 @@ func agentMessagePartToolCallFromProto(value *proto.AgentMessagePartToolCall) *A
 }
 
 func agentMessagePartToolCallToProto(value *AgentMessagePartToolCall) (*proto.AgentMessagePartToolCall, error) {
-	if value == nil {
-		return nil, nil
-	}
-	arguments, err := structFromAny(value.Arguments)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AgentMessagePartToolCall{
-		Id:        value.ID,
-		ToolId:    value.ToolID,
-		Arguments: arguments,
-	}, nil
+	return convertProtoMessageErr(value, func(value *AgentMessagePartToolCall) (*proto.AgentMessagePartToolCall, error) {
+		arguments, err := structFromAny(value.Arguments)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentMessagePartToolCall{
+			Id:        value.ID,
+			ToolId:    value.ToolID,
+			Arguments: arguments,
+		}, nil
+	})
 }
 
 func agentMessagePartToolResultFromProto(value *proto.AgentMessagePartToolResult) *AgentMessagePartToolResult {
@@ -184,19 +183,18 @@ func agentMessagePartToolResultFromProto(value *proto.AgentMessagePartToolResult
 }
 
 func agentMessagePartToolResultToProto(value *AgentMessagePartToolResult) (*proto.AgentMessagePartToolResult, error) {
-	if value == nil {
-		return nil, nil
-	}
-	output, err := structFromAny(value.Output)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AgentMessagePartToolResult{
-		ToolCallId: value.ToolCallID,
-		Status:     value.Status,
-		Content:    value.Content,
-		Output:     output,
-	}, nil
+	return convertProtoMessageErr(value, func(value *AgentMessagePartToolResult) (*proto.AgentMessagePartToolResult, error) {
+		output, err := structFromAny(value.Output)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentMessagePartToolResult{
+			ToolCallId: value.ToolCallID,
+			Status:     value.Status,
+			Content:    value.Content,
+			Output:     output,
+		}, nil
+	})
 }
 
 func agentMessagePartImageRefFromProto(value *proto.AgentMessagePartImageRef) *AgentMessagePartImageRef {
@@ -363,27 +361,26 @@ func agentOutputFromProto(value *proto.AgentOutput) *AgentOutput {
 }
 
 func agentOutputToProto(value *AgentOutput) (*proto.AgentOutput, error) {
-	if value == nil {
-		return nil, nil
-	}
-	switch {
-	case value.Text != nil && value.Structured != nil:
-		return nil, fmt.Errorf("agent output cannot set both text and structured")
-	case value.Text != nil:
-		return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}, nil
-	case value.Structured != nil:
-		schema, err := structFromAny(value.Structured.Schema)
-		if err != nil {
-			return nil, err
+	return convertProtoMessageErr(value, func(value *AgentOutput) (*proto.AgentOutput, error) {
+		switch {
+		case value.Text != nil && value.Structured != nil:
+			return nil, fmt.Errorf("agent output cannot set both text and structured")
+		case value.Text != nil:
+			return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}, nil
+		case value.Structured != nil:
+			schema, err := structFromAny(value.Structured.Schema)
+			if err != nil {
+				return nil, err
+			}
+			return &proto.AgentOutput{
+				Kind: &proto.AgentOutput_Structured{
+					Structured: &proto.AgentStructuredOutput{Schema: schema},
+				},
+			}, nil
+		default:
+			return nil, nil
 		}
-		return &proto.AgentOutput{
-			Kind: &proto.AgentOutput_Structured{
-				Structured: &proto.AgentStructuredOutput{Schema: schema},
-			},
-		}, nil
-	default:
-		return nil, nil
-	}
+	})
 }
 
 func applyAgentTurnOutputToProto(out *proto.AgentTurn, value *AgentTurnOutput) error {
@@ -414,25 +411,24 @@ func applyAgentTurnOutputToProto(out *proto.AgentTurn, value *AgentTurnOutput) e
 }
 
 func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
-	if value == nil {
-		return nil, nil
-	}
-	metadata, err := structFromAny(value.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AgentSession{
-		Id:                 value.ID,
-		ProviderName:       value.ProviderName,
-		Model:              value.Model,
-		ClientRef:          value.ClientRef,
-		State:              proto.AgentSessionState(value.State),
-		Metadata:           metadata,
-		CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
-		CreatedAt:          timestampFromNonZeroTime(value.CreatedAt),
-		UpdatedAt:          timestampFromNonZeroTime(value.UpdatedAt),
-		LastTurnAt:         timestampFromOptionalTime(value.LastTurnAt),
-	}, nil
+	return convertProtoMessageErr(value, func(value *AgentSession) (*proto.AgentSession, error) {
+		metadata, err := structFromAny(value.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentSession{
+			Id:                 value.ID,
+			ProviderName:       value.ProviderName,
+			Model:              value.Model,
+			ClientRef:          value.ClientRef,
+			State:              proto.AgentSessionState(value.State),
+			Metadata:           metadata,
+			CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
+			CreatedAt:          timestampFromNonZeroTime(value.CreatedAt),
+			UpdatedAt:          timestampFromNonZeroTime(value.UpdatedAt),
+			LastTurnAt:         timestampFromOptionalTime(value.LastTurnAt),
+		}, nil
+	})
 }
 
 func agentSessionsToProto(values []AgentSession) ([]*proto.AgentSession, error) {
@@ -528,14 +524,13 @@ func listAgentProviderSessionsRequestFromProto(req *proto.ListAgentProviderSessi
 }
 
 func listAgentProviderSessionsResponseToProto(value *ListAgentProviderSessionsResponse) (*proto.ListAgentProviderSessionsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	sessions, err := agentSessionsToProto(value.Sessions)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ListAgentProviderSessionsResponse{Sessions: sessions}, nil
+	return convertProtoMessageErr(value, func(value *ListAgentProviderSessionsResponse) (*proto.ListAgentProviderSessionsResponse, error) {
+		sessions, err := agentSessionsToProto(value.Sessions)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListAgentProviderSessionsResponse{Sessions: sessions}, nil
+	})
 }
 
 func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSessionRequest) *UpdateAgentProviderSessionRequest {
@@ -553,31 +548,30 @@ func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSe
 }
 
 func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
-	if value == nil {
-		return nil, nil
-	}
-	messages, err := agentMessagesToProto(value.Messages)
-	if err != nil {
-		return nil, err
-	}
-	out := &proto.AgentTurn{
-		Id:                 value.ID,
-		SessionId:          value.SessionID,
-		ProviderName:       value.ProviderName,
-		Model:              value.Model,
-		Status:             proto.AgentExecutionStatus(value.Status),
-		Messages:           messages,
-		StatusMessage:      value.StatusMessage,
-		CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
-		CreatedAt:          timestampFromNonZeroTime(value.CreatedAt),
-		StartedAt:          timestampFromOptionalTime(value.StartedAt),
-		CompletedAt:        timestampFromOptionalTime(value.CompletedAt),
-		ExecutionRef:       value.ExecutionRef,
-	}
-	if err := applyAgentTurnOutputToProto(out, value.Output); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return convertProtoMessageErr(value, func(value *AgentTurn) (*proto.AgentTurn, error) {
+		messages, err := agentMessagesToProto(value.Messages)
+		if err != nil {
+			return nil, err
+		}
+		out := &proto.AgentTurn{
+			Id:                 value.ID,
+			SessionId:          value.SessionID,
+			ProviderName:       value.ProviderName,
+			Model:              value.Model,
+			Status:             proto.AgentExecutionStatus(value.Status),
+			Messages:           messages,
+			StatusMessage:      value.StatusMessage,
+			CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
+			CreatedAt:          timestampFromNonZeroTime(value.CreatedAt),
+			StartedAt:          timestampFromOptionalTime(value.StartedAt),
+			CompletedAt:        timestampFromOptionalTime(value.CompletedAt),
+			ExecutionRef:       value.ExecutionRef,
+		}
+		if err := applyAgentTurnOutputToProto(out, value.Output); err != nil {
+			return nil, err
+		}
+		return out, nil
+	})
 }
 
 func agentTurnsToProto(values []AgentTurn) ([]*proto.AgentTurn, error) {
@@ -645,14 +639,13 @@ func listAgentProviderTurnsRequestFromProto(req *proto.ListAgentProviderTurnsReq
 }
 
 func listAgentProviderTurnsResponseToProto(value *ListAgentProviderTurnsResponse) (*proto.ListAgentProviderTurnsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	turns, err := agentTurnsToProto(value.Turns)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ListAgentProviderTurnsResponse{Turns: turns}, nil
+	return convertProtoMessageErr(value, func(value *ListAgentProviderTurnsResponse) (*proto.ListAgentProviderTurnsResponse, error) {
+		turns, err := agentTurnsToProto(value.Turns)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListAgentProviderTurnsResponse{Turns: turns}, nil
+	})
 }
 
 func cancelAgentProviderTurnRequestFromProto(req *proto.CancelAgentProviderTurnRequest) *CancelAgentProviderTurnRequest {
@@ -705,35 +698,34 @@ func agentTurnEventsToProto(values []AgentTurnEvent) ([]*proto.AgentTurnEvent, e
 }
 
 func agentTurnDisplayToProto(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, error) {
-	if value == nil {
-		return nil, nil
-	}
-	input, err := optionalValueFromAny(value.Input)
-	if err != nil {
-		return nil, err
-	}
-	output, err := optionalValueFromAny(value.Output)
-	if err != nil {
-		return nil, err
-	}
-	errorValue, err := optionalValueFromAny(value.Error)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AgentTurnDisplay{
-		Kind:      value.Kind,
-		Phase:     value.Phase,
-		Text:      value.Text,
-		Label:     value.Label,
-		Ref:       value.Ref,
-		ParentRef: value.ParentRef,
-		Input:     input,
-		Output:    output,
-		Error:     errorValue,
-		Action:    value.Action,
-		Format:    value.Format,
-		Language:  value.Language,
-	}, nil
+	return convertProtoMessageErr(value, func(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, error) {
+		input, err := optionalValueFromAny(value.Input)
+		if err != nil {
+			return nil, err
+		}
+		output, err := optionalValueFromAny(value.Output)
+		if err != nil {
+			return nil, err
+		}
+		errorValue, err := optionalValueFromAny(value.Error)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentTurnDisplay{
+			Kind:      value.Kind,
+			Phase:     value.Phase,
+			Text:      value.Text,
+			Label:     value.Label,
+			Ref:       value.Ref,
+			ParentRef: value.ParentRef,
+			Input:     input,
+			Output:    output,
+			Error:     errorValue,
+			Action:    value.Action,
+			Format:    value.Format,
+			Language:  value.Language,
+		}, nil
+	})
 }
 
 func listAgentProviderTurnEventsRequestFromProto(req *proto.ListAgentProviderTurnEventsRequest) *ListAgentProviderTurnEventsRequest {
@@ -750,14 +742,13 @@ func listAgentProviderTurnEventsRequestFromProto(req *proto.ListAgentProviderTur
 }
 
 func listAgentProviderTurnEventsResponseToProto(value *ListAgentProviderTurnEventsResponse) (*proto.ListAgentProviderTurnEventsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	events, err := agentTurnEventsToProto(value.Events)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ListAgentProviderTurnEventsResponse{Events: events}, nil
+	return convertProtoMessageErr(value, func(value *ListAgentProviderTurnEventsResponse) (*proto.ListAgentProviderTurnEventsResponse, error) {
+		events, err := agentTurnEventsToProto(value.Events)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListAgentProviderTurnEventsResponse{Events: events}, nil
+	})
 }
 
 func getAgentProviderInteractionRequestFromProto(req *proto.GetAgentProviderInteractionRequest) *GetAgentProviderInteractionRequest {
@@ -782,30 +773,29 @@ func listAgentProviderInteractionsRequestFromProto(req *proto.ListAgentProviderI
 }
 
 func agentInteractionToProto(value *AgentInteraction) (*proto.AgentInteraction, error) {
-	if value == nil {
-		return nil, nil
-	}
-	request, err := structFromAny(value.Request)
-	if err != nil {
-		return nil, err
-	}
-	resolution, err := structFromAny(value.Resolution)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AgentInteraction{
-		Id:         value.ID,
-		Type:       proto.AgentInteractionType(value.Type),
-		State:      proto.AgentInteractionState(value.State),
-		Title:      value.Title,
-		Prompt:     value.Prompt,
-		Request:    request,
-		Resolution: resolution,
-		CreatedAt:  timestampFromNonZeroTime(value.CreatedAt),
-		ResolvedAt: timestampFromOptionalTime(value.ResolvedAt),
-		TurnId:     value.TurnID,
-		SessionId:  value.SessionID,
-	}, nil
+	return convertProtoMessageErr(value, func(value *AgentInteraction) (*proto.AgentInteraction, error) {
+		request, err := structFromAny(value.Request)
+		if err != nil {
+			return nil, err
+		}
+		resolution, err := structFromAny(value.Resolution)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AgentInteraction{
+			Id:         value.ID,
+			Type:       proto.AgentInteractionType(value.Type),
+			State:      proto.AgentInteractionState(value.State),
+			Title:      value.Title,
+			Prompt:     value.Prompt,
+			Request:    request,
+			Resolution: resolution,
+			CreatedAt:  timestampFromNonZeroTime(value.CreatedAt),
+			ResolvedAt: timestampFromOptionalTime(value.ResolvedAt),
+			TurnId:     value.TurnID,
+			SessionId:  value.SessionID,
+		}, nil
+	})
 }
 
 func agentInteractionsToProto(values []AgentInteraction) ([]*proto.AgentInteraction, error) {
@@ -824,14 +814,13 @@ func agentInteractionsToProto(values []AgentInteraction) ([]*proto.AgentInteract
 }
 
 func listAgentProviderInteractionsResponseToProto(value *ListAgentProviderInteractionsResponse) (*proto.ListAgentProviderInteractionsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	interactions, err := agentInteractionsToProto(value.Interactions)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ListAgentProviderInteractionsResponse{Interactions: interactions}, nil
+	return convertProtoMessageErr(value, func(value *ListAgentProviderInteractionsResponse) (*proto.ListAgentProviderInteractionsResponse, error) {
+		interactions, err := agentInteractionsToProto(value.Interactions)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListAgentProviderInteractionsResponse{Interactions: interactions}, nil
+	})
 }
 
 func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {

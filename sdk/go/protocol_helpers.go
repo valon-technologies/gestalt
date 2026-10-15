@@ -88,14 +88,13 @@ func timeFromTimestamp(value *timestamppb.Timestamp) time.Time {
 
 // timePtrFromTimestamp converts an optional protobuf Timestamp into an optional time.
 func timePtrFromTimestamp(value *timestamppb.Timestamp) (*time.Time, error) {
-	if value == nil {
-		return nil, nil
-	}
-	if err := value.CheckValid(); err != nil {
-		return nil, err
-	}
-	out := value.AsTime()
-	return &out, nil
+	return convertProtoMessageErr(value, func(value *timestamppb.Timestamp) (*time.Time, error) {
+		if err := value.CheckValid(); err != nil {
+			return nil, err
+		}
+		out := value.AsTime()
+		return &out, nil
+	})
 }
 
 func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {
@@ -347,6 +346,14 @@ func convertAllocatedProtoSlice[Input, Output any](values []*Input, convert func
 func convertProtoMessage[Input, Output any](value *Input, convert func(*Input) *Output) *Output {
 	if value == nil {
 		return nil
+	}
+	return convert(value)
+}
+
+// convertProtoMessageErr preserves absence before converting a fallible message.
+func convertProtoMessageErr[Input, Output any](value *Input, convert func(*Input) (*Output, error)) (*Output, error) {
+	if value == nil {
+		return nil, nil
 	}
 	return convert(value)
 }

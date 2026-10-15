@@ -14,14 +14,13 @@ func authorizationSubjectFromProto(in *proto.Subject) *AuthorizationSubject {
 }
 
 func protoAuthorizationSubject(in *AuthorizationSubject) (*proto.Subject, error) {
-	if in == nil {
-		return nil, nil
-	}
-	properties, err := structFromMap(in.Properties)
-	if err != nil {
-		return nil, fmt.Errorf("subject properties: %w", err)
-	}
-	return &proto.Subject{Type: in.Type, Id: in.Id, Properties: properties}, nil
+	return convertProtoMessageErr(in, func(in *AuthorizationSubject) (*proto.Subject, error) {
+		properties, err := structFromMap(in.Properties)
+		if err != nil {
+			return nil, fmt.Errorf("subject properties: %w", err)
+		}
+		return &proto.Subject{Type: in.Type, Id: in.Id, Properties: properties}, nil
+	})
 }
 
 func authorizationActionFromProto(in *proto.Action) *AuthorizationAction {
@@ -37,14 +36,13 @@ func authorizationResourceFromProto(in *proto.Resource) *AuthorizationResource {
 }
 
 func protoAuthorizationResource(in *AuthorizationResource) (*proto.Resource, error) {
-	if in == nil {
-		return nil, nil
-	}
-	properties, err := structFromMap(in.Properties)
-	if err != nil {
-		return nil, fmt.Errorf("resource properties: %w", err)
-	}
-	return &proto.Resource{Type: in.Type, Id: in.Id, Properties: properties}, nil
+	return convertProtoMessageErr(in, func(in *AuthorizationResource) (*proto.Resource, error) {
+		properties, err := structFromMap(in.Properties)
+		if err != nil {
+			return nil, fmt.Errorf("resource properties: %w", err)
+		}
+		return &proto.Resource{Type: in.Type, Id: in.Id, Properties: properties}, nil
+	})
 }
 
 func checkAccessRequestFromProto(in *proto.CheckAccessRequest) *CheckAccessRequest {
@@ -95,31 +93,30 @@ func relationshipTargetFromProto(in *proto.RelationshipTarget) *RelationshipTarg
 }
 
 func protoRelationshipTarget(in *RelationshipTarget) (*proto.RelationshipTarget, error) {
-	if in == nil {
-		return nil, nil
-	}
-	if in.Subject != nil {
-		subject, err := protoAuthorizationSubject(in.Subject)
-		if err != nil {
-			return nil, err
+	return convertProtoMessageErr(in, func(in *RelationshipTarget) (*proto.RelationshipTarget, error) {
+		if in.Subject != nil {
+			subject, err := protoAuthorizationSubject(in.Subject)
+			if err != nil {
+				return nil, err
+			}
+			return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: subject}}, nil
 		}
-		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: subject}}, nil
-	}
-	if in.Resource != nil {
-		resource, err := protoAuthorizationResource(in.Resource)
-		if err != nil {
-			return nil, err
+		if in.Resource != nil {
+			resource, err := protoAuthorizationResource(in.Resource)
+			if err != nil {
+				return nil, err
+			}
+			return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Resource{Resource: resource}}, nil
 		}
-		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Resource{Resource: resource}}, nil
-	}
-	if in.SubjectSet != nil {
-		subjectSet, err := protoSubjectSet(in.SubjectSet)
-		if err != nil {
-			return nil, err
+		if in.SubjectSet != nil {
+			subjectSet, err := protoSubjectSet(in.SubjectSet)
+			if err != nil {
+				return nil, err
+			}
+			return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: subjectSet}}, nil
 		}
-		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: subjectSet}}, nil
-	}
-	return &proto.RelationshipTarget{}, nil
+		return &proto.RelationshipTarget{}, nil
+	})
 }
 
 func subjectSetFromProto(in *proto.SubjectSet) *SubjectSet {
@@ -129,14 +126,13 @@ func subjectSetFromProto(in *proto.SubjectSet) *SubjectSet {
 }
 
 func protoSubjectSet(in *SubjectSet) (*proto.SubjectSet, error) {
-	if in == nil {
-		return nil, nil
-	}
-	resource, err := protoAuthorizationResource(in.Resource)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.SubjectSet{Resource: resource, Relation: in.Relation}, nil
+	return convertProtoMessageErr(in, func(in *SubjectSet) (*proto.SubjectSet, error) {
+		resource, err := protoAuthorizationResource(in.Resource)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.SubjectSet{Resource: resource, Relation: in.Relation}, nil
+	})
 }
 
 func relationshipFilterFromProto(in *proto.RelationshipFilter) *RelationshipFilter {
@@ -164,14 +160,13 @@ func listRelationshipsRequestFromProto(in *proto.ListRelationshipsRequest) *List
 }
 
 func protoListRelationshipsResponse(in *ListRelationshipsResponse) (*proto.ListRelationshipsResponse, error) {
-	if in == nil {
-		return nil, nil
-	}
-	relationships, err := protoRelationships(in.Relationships)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ListRelationshipsResponse{Relationships: relationships, NextPageToken: in.NextPageToken}, nil
+	return convertProtoMessageErr(in, func(in *ListRelationshipsResponse) (*proto.ListRelationshipsResponse, error) {
+		relationships, err := protoRelationships(in.Relationships)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.ListRelationshipsResponse{Relationships: relationships, NextPageToken: in.NextPageToken}, nil
+	})
 }
 
 func relationshipUpdateFromProto(in *proto.RelationshipUpdate) *RelationshipUpdate {
@@ -214,18 +209,17 @@ func relationshipFromProto(in *proto.Relationship) *Relationship {
 }
 
 func protoRelationship(in *Relationship) (*proto.Relationship, error) {
-	if in == nil {
-		return nil, nil
-	}
-	tuple, err := protoRelationshipTuple(in.Tuple)
-	if err != nil {
-		return nil, err
-	}
-	properties, err := structFromMap(in.Properties)
-	if err != nil {
-		return nil, fmt.Errorf("relationship properties: %w", err)
-	}
-	return &proto.Relationship{Tuple: tuple, Properties: properties, SourceLayer: proto.SourceLayer(in.SourceLayer)}, nil
+	return convertProtoMessageErr(in, func(in *Relationship) (*proto.Relationship, error) {
+		tuple, err := protoRelationshipTuple(in.Tuple)
+		if err != nil {
+			return nil, err
+		}
+		properties, err := structFromMap(in.Properties)
+		if err != nil {
+			return nil, fmt.Errorf("relationship properties: %w", err)
+		}
+		return &proto.Relationship{Tuple: tuple, Properties: properties, SourceLayer: proto.SourceLayer(in.SourceLayer)}, nil
+	})
 }
 
 func protoRelationships(in []*Relationship) ([]*proto.Relationship, error) {
@@ -251,18 +245,17 @@ func relationshipTupleFromProto(in *proto.RelationshipTuple) *RelationshipTuple 
 }
 
 func protoRelationshipTuple(in *RelationshipTuple) (*proto.RelationshipTuple, error) {
-	if in == nil {
-		return nil, nil
-	}
-	target, err := protoRelationshipTarget(in.Target)
-	if err != nil {
-		return nil, err
-	}
-	resource, err := protoAuthorizationResource(in.Resource)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.RelationshipTuple{Target: target, Relation: in.Relation, Resource: resource}, nil
+	return convertProtoMessageErr(in, func(in *RelationshipTuple) (*proto.RelationshipTuple, error) {
+		target, err := protoRelationshipTarget(in.Target)
+		if err != nil {
+			return nil, err
+		}
+		resource, err := protoAuthorizationResource(in.Resource)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.RelationshipTuple{Target: target, Relation: in.Relation, Resource: resource}, nil
+	})
 }
 
 func addRelationshipRequestFromProto(in *proto.AddRelationshipRequest) *AddRelationshipRequest {
@@ -272,14 +265,13 @@ func addRelationshipRequestFromProto(in *proto.AddRelationshipRequest) *AddRelat
 }
 
 func protoAddRelationshipResponse(in *AddRelationshipResponse) (*proto.AddRelationshipResponse, error) {
-	if in == nil {
-		return nil, nil
-	}
-	relationship, err := protoRelationship(in.Relationship)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AddRelationshipResponse{Relationship: relationship}, nil
+	return convertProtoMessageErr(in, func(in *AddRelationshipResponse) (*proto.AddRelationshipResponse, error) {
+		relationship, err := protoRelationship(in.Relationship)
+		if err != nil {
+			return nil, err
+		}
+		return &proto.AddRelationshipResponse{Relationship: relationship}, nil
+	})
 }
 
 func deleteRelationshipRequestFromProto(in *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
