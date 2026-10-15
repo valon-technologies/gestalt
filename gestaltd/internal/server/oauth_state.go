@@ -69,6 +69,33 @@ func decodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label, encoded
 	return &state, nil
 }
 
+func encodePrefixedState[T any](enc *cryptoutil.AESGCMEncryptor, label, prefix string, state T) (string, error) {
+	encoded, err := encodeEncryptedState(enc, label, state)
+	if err != nil {
+		return "", err
+	}
+	return prefix + encoded, nil
+}
+
+func decodeValidatedState[T any](enc *cryptoutil.AESGCMEncryptor, label, encoded string, now time.Time, validate func(*T, time.Time) error) (*T, error) {
+	state, err := decodeEncryptedState[T](enc, label, encoded)
+	if err != nil {
+		return nil, err
+	}
+	if err := validate(state, now); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func decodePrefixedState[T any](enc *cryptoutil.AESGCMEncryptor, label, prefix, encoded string, now time.Time, malformed string, validate func(*T, time.Time) error) (*T, error) {
+	payload, ok := strings.CutPrefix(strings.TrimSpace(encoded), prefix)
+	if !ok {
+		return nil, fmt.Errorf("%s", malformed)
+	}
+	return decodeValidatedState(enc, label, payload, now, validate)
+}
+
 func validateIntegrationOAuthState(state *integrationOAuthState, now time.Time) error {
 	if state.SubjectID == "" {
 		return fmt.Errorf("oauth state missing subject ID")
@@ -90,14 +117,7 @@ func (c *integrationOAuthStateCodec) Encode(state integrationOAuthState) (string
 }
 
 func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*integrationOAuthState, error) {
-	state, err := decodeEncryptedState[integrationOAuthState](c.encryptor, "oauth state", encoded)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateIntegrationOAuthState(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodeValidatedState(c.encryptor, "oauth state", encoded, now, validateIntegrationOAuthState)
 }
 
 const loginStateTTL = 10 * time.Minute
@@ -221,14 +241,7 @@ func validateLoginState(state *loginState, now time.Time) error {
 }
 
 func decodeLoginState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*loginState, error) {
-	state, err := decodeEncryptedState[loginState](enc, "login state", encoded)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateLoginState(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodeValidatedState(enc, "login state", encoded, now, validateLoginState)
 }
 
 func encodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, state pendingConnectionState) (string, error) {
@@ -258,14 +271,7 @@ func validatePendingConnectionState(state *pendingConnectionState, now time.Time
 }
 
 func decodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*pendingConnectionState, error) {
-	state, err := decodeEncryptedState[pendingConnectionState](enc, "pending connection state", encoded)
-	if err != nil {
-		return nil, err
-	}
-	if err := validatePendingConnectionState(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodeValidatedState(enc, "pending connection state", encoded, now, validatePendingConnectionState)
 }
 
 func encodePendingConnectionBindingState(enc *cryptoutil.AESGCMEncryptor, state pendingConnectionBindingState) (string, error) {
@@ -286,23 +292,12 @@ func validatePendingConnectionBindingState(state *pendingConnectionBindingState,
 }
 
 func decodePendingConnectionBindingState(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*pendingConnectionBindingState, error) {
-	state, err := decodeEncryptedState[pendingConnectionBindingState](enc, "pending connection binding state", encoded)
-	if err != nil {
-		return nil, err
-	}
-	if err := validatePendingConnectionBindingState(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodeValidatedState(enc, "pending connection binding state", encoded, now, validatePendingConnectionBindingState)
 }
 
 func encodeMCPOAuthClientRegistration(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthClientRegistrationState) (string, error) {
 	state.Purpose = mcpOAuthClientRegistrationPurpose
-	encoded, err := encodeEncryptedState(enc, "mcp oauth client registration", state)
-	if err != nil {
-		return "", err
-	}
-	return mcpOAuthClientIDPrefix + encoded, nil
+	return encodePrefixedState(enc, "mcp oauth client registration", mcpOAuthClientIDPrefix, state)
 }
 
 func validateMCPOAuthClientRegistration(state *mcpOAuthClientRegistrationState, now time.Time) error {
@@ -322,27 +317,13 @@ func validateMCPOAuthClientRegistration(state *mcpOAuthClientRegistrationState, 
 }
 
 func decodeMCPOAuthClientRegistration(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthClientRegistrationState, error) {
-	encoded = strings.TrimSpace(encoded)
-	if !strings.HasPrefix(encoded, mcpOAuthClientIDPrefix) {
-		return nil, fmt.Errorf("mcp oauth client registration token is malformed")
-	}
-	state, err := decodeEncryptedState[mcpOAuthClientRegistrationState](enc, "mcp oauth client registration", strings.TrimPrefix(encoded, mcpOAuthClientIDPrefix))
-	if err != nil {
-		return nil, err
-	}
-	if err := validateMCPOAuthClientRegistration(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodePrefixedState(enc, "mcp oauth client registration", mcpOAuthClientIDPrefix, encoded, now,
+		"mcp oauth client registration token is malformed", validateMCPOAuthClientRegistration)
 }
 
 func encodeMCPOAuthConsent(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthConsentState) (string, error) {
 	state.Purpose = mcpOAuthConsentPurpose
-	encoded, err := encodeEncryptedState(enc, "mcp oauth consent", state)
-	if err != nil {
-		return "", err
-	}
-	return mcpOAuthConsentPrefix + encoded, nil
+	return encodePrefixedState(enc, "mcp oauth consent", mcpOAuthConsentPrefix, state)
 }
 
 func validateMCPOAuthConsent(state *mcpOAuthConsentState, now time.Time) error {
@@ -374,27 +355,13 @@ func validateMCPOAuthConsent(state *mcpOAuthConsentState, now time.Time) error {
 }
 
 func decodeMCPOAuthConsent(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthConsentState, error) {
-	encoded = strings.TrimSpace(encoded)
-	if !strings.HasPrefix(encoded, mcpOAuthConsentPrefix) {
-		return nil, fmt.Errorf("mcp oauth consent token is malformed")
-	}
-	state, err := decodeEncryptedState[mcpOAuthConsentState](enc, "mcp oauth consent", strings.TrimPrefix(encoded, mcpOAuthConsentPrefix))
-	if err != nil {
-		return nil, err
-	}
-	if err := validateMCPOAuthConsent(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodePrefixedState(enc, "mcp oauth consent", mcpOAuthConsentPrefix, encoded, now,
+		"mcp oauth consent token is malformed", validateMCPOAuthConsent)
 }
 
 func encodeMCPOAuthAuthorizationCode(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthAuthorizationCodeState) (string, error) {
 	state.Purpose = mcpOAuthAuthorizationCodePurpose
-	encoded, err := encodeEncryptedState(enc, "mcp oauth authorization code", state)
-	if err != nil {
-		return "", err
-	}
-	return mcpOAuthAuthorizationCodePrefix + encoded, nil
+	return encodePrefixedState(enc, "mcp oauth authorization code", mcpOAuthAuthorizationCodePrefix, state)
 }
 
 func validateMCPOAuthAuthorizationCode(state *mcpOAuthAuthorizationCodeState, now time.Time) error {
@@ -423,27 +390,13 @@ func validateMCPOAuthAuthorizationCode(state *mcpOAuthAuthorizationCodeState, no
 }
 
 func decodeMCPOAuthAuthorizationCode(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthAuthorizationCodeState, error) {
-	encoded = strings.TrimSpace(encoded)
-	if !strings.HasPrefix(encoded, mcpOAuthAuthorizationCodePrefix) {
-		return nil, fmt.Errorf("mcp oauth authorization code is malformed")
-	}
-	state, err := decodeEncryptedState[mcpOAuthAuthorizationCodeState](enc, "mcp oauth authorization code", strings.TrimPrefix(encoded, mcpOAuthAuthorizationCodePrefix))
-	if err != nil {
-		return nil, err
-	}
-	if err := validateMCPOAuthAuthorizationCode(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodePrefixedState(enc, "mcp oauth authorization code", mcpOAuthAuthorizationCodePrefix, encoded, now,
+		"mcp oauth authorization code is malformed", validateMCPOAuthAuthorizationCode)
 }
 
 func encodeMCPOAuthRefreshToken(enc *cryptoutil.AESGCMEncryptor, state mcpOAuthRefreshTokenState) (string, error) {
 	state.Purpose = mcpOAuthRefreshTokenPurpose
-	encoded, err := encodeEncryptedState(enc, "mcp oauth refresh token", state)
-	if err != nil {
-		return "", err
-	}
-	return mcpOAuthRefreshTokenPrefix + encoded, nil
+	return encodePrefixedState(enc, "mcp oauth refresh token", mcpOAuthRefreshTokenPrefix, state)
 }
 
 func validateMCPOAuthRefreshToken(state *mcpOAuthRefreshTokenState, now time.Time) error {
@@ -466,18 +419,8 @@ func validateMCPOAuthRefreshToken(state *mcpOAuthRefreshTokenState, now time.Tim
 }
 
 func decodeMCPOAuthRefreshToken(enc *cryptoutil.AESGCMEncryptor, encoded string, now time.Time) (*mcpOAuthRefreshTokenState, error) {
-	encoded = strings.TrimSpace(encoded)
-	if !strings.HasPrefix(encoded, mcpOAuthRefreshTokenPrefix) {
-		return nil, fmt.Errorf("mcp oauth refresh token is malformed")
-	}
-	state, err := decodeEncryptedState[mcpOAuthRefreshTokenState](enc, "mcp oauth refresh token", strings.TrimPrefix(encoded, mcpOAuthRefreshTokenPrefix))
-	if err != nil {
-		return nil, err
-	}
-	if err := validateMCPOAuthRefreshToken(state, now); err != nil {
-		return nil, err
-	}
-	return state, nil
+	return decodePrefixedState(enc, "mcp oauth refresh token", mcpOAuthRefreshTokenPrefix, encoded, now,
+		"mcp oauth refresh token is malformed", validateMCPOAuthRefreshToken)
 }
 
 func setURLQueryParam(rawURL, key, value string) (string, error) {
