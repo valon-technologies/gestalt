@@ -1219,10 +1219,7 @@ func cloneHTTPMediaType(src *HTTPMediaType) *HTTPMediaType {
 func decodeJSONKnownFields(data []byte, out any) error {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(out); err != nil {
-		return err
-	}
-	return nil
+	return dec.Decode(out)
 }
 
 func decodeYAMLKnownFields(node *yaml.Node, out any) error {

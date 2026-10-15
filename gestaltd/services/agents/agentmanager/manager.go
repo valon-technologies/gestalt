@@ -3898,10 +3898,7 @@ func validateAgentStructuredValue(schema map[string]any, value map[string]any) e
 	if err != nil {
 		return fmt.Errorf("compile response schema: %w", err)
 	}
-	if err := compiled.Validate(value); err != nil {
-		return err
-	}
-	return nil
+	return compiled.Validate(value)
 }
 
 func agentTurnPermissions(ctx context.Context, p *principal.Principal, callerKind invocation.ProviderKind, callerName string, refs []coreagent.ToolRef) []core.AccessPermission {

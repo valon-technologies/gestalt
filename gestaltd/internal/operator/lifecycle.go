@@ -3333,10 +3333,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, lockfilePath, art
 	if locked && configRequiresCommittedLock(cfg) && !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{}) {
 		return lockMetadataStaleError(paths, "lockfile stale")
 	}
-	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
-		return err
-	}
-	return nil
+	return l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1})
 }
 
 func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage, func() error, func() error, error) {
@@ -3927,10 +3924,7 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 		}
 		work.entry.IconFile = cmp.Or(work.entry.IconFile, work.entry.ResolvedIconFile)
 	}
-	if err := l.resolveConfiguredAppStaticBindings(paths, ordered); err != nil {
-		return err
-	}
-	return nil
+	return l.resolveConfiguredAppStaticBindings(paths, ordered)
 }
 
 func (l *Lifecycle) resolveConfiguredAppStaticBindings(paths lifecyclePaths, work []*preparedAppWork) error {

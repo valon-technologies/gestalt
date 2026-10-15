@@ -1512,10 +1512,7 @@ func normalizeRuntimePlacementConfig(subject string, runtimeCfg *RuntimePlacemen
 	if runtimeCfg.Metadata != nil {
 		runtimeCfg.Metadata = trimmed
 	}
-	if err := normalizeRuntimePlacementWorkspaceConfig(subject, runtimeCfg.Workspace); err != nil {
-		return err
-	}
-	return nil
+	return normalizeRuntimePlacementWorkspaceConfig(subject, runtimeCfg.Workspace)
 }
 
 func normalizeRuntimePlacementWorkspaceConfig(subject string, workspace *RuntimePlacementWorkspaceConfig) error {
@@ -2088,10 +2085,7 @@ func validateAuthorizationRelationshipDef(path string, relationship Authorizatio
 	if _, ok := relations[strings.TrimSpace(relationship.Relation)]; !ok {
 		return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", path, relationship.Relation, resourceType)
 	}
-	if err := validateAuthorizationSourceMetadata(path+".source", relationship.Source); err != nil {
-		return err
-	}
-	return nil
+	return validateAuthorizationSourceMetadata(path+".source", relationship.Source)
 }
 
 func hasAuthorizationRelationshipTarget(target AuthorizationRelationshipTargetDef) bool {
@@ -2571,10 +2565,7 @@ func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallCon
 	default:
 		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, app.CredentialMode)
 	}
-	if err := normalizeWorkflowValueConfig(path+".input", &app.Input); err != nil {
-		return err
-	}
-	return nil
+	return normalizeWorkflowValueConfig(path+".input", &app.Input)
 }
 
 func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowStepAgentConfig, previousSteps map[string]struct{}) error {
@@ -2609,10 +2600,7 @@ func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowSt
 	if err := validateWorkflowAgentToolsConfig(cfg, path+".tools", agent.Tools); err != nil {
 		return err
 	}
-	if err := validateWorkflowAgentOutputConfig(path+".output", agent.Output); err != nil {
-		return err
-	}
-	return nil
+	return validateWorkflowAgentOutputConfig(path+".output", agent.Output)
 }
 
 func validateWorkflowAgentOutputConfig(path string, output *WorkflowAgentOutputConfig) error {
