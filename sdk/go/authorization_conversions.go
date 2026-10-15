@@ -8,10 +8,9 @@ import (
 )
 
 func authorizationSubjectFromProto(in *proto.Subject) *AuthorizationSubject {
-	if in == nil {
-		return nil
-	}
-	return &AuthorizationSubject{Type: in.GetType(), Id: in.GetId(), Properties: mapFromStruct(in.GetProperties())}
+	return convertProtoMessage(in, func(in *proto.Subject) *AuthorizationSubject {
+		return &AuthorizationSubject{Type: in.GetType(), Id: in.GetId(), Properties: mapFromStruct(in.GetProperties())}
+	})
 }
 
 func protoAuthorizationSubject(in *AuthorizationSubject) (*proto.Subject, error) {
@@ -26,17 +25,15 @@ func protoAuthorizationSubject(in *AuthorizationSubject) (*proto.Subject, error)
 }
 
 func authorizationActionFromProto(in *proto.Action) *AuthorizationAction {
-	if in == nil {
-		return nil
-	}
-	return &AuthorizationAction{Name: in.GetName(), Properties: mapFromStruct(in.GetProperties())}
+	return convertProtoMessage(in, func(in *proto.Action) *AuthorizationAction {
+		return &AuthorizationAction{Name: in.GetName(), Properties: mapFromStruct(in.GetProperties())}
+	})
 }
 
 func authorizationResourceFromProto(in *proto.Resource) *AuthorizationResource {
-	if in == nil {
-		return nil
-	}
-	return &AuthorizationResource{Type: in.GetType(), Id: in.GetId(), Properties: mapFromStruct(in.GetProperties())}
+	return convertProtoMessage(in, func(in *proto.Resource) *AuthorizationResource {
+		return &AuthorizationResource{Type: in.GetType(), Id: in.GetId(), Properties: mapFromStruct(in.GetProperties())}
+	})
 }
 
 func protoAuthorizationResource(in *AuthorizationResource) (*proto.Resource, error) {
@@ -51,63 +48,50 @@ func protoAuthorizationResource(in *AuthorizationResource) (*proto.Resource, err
 }
 
 func checkAccessRequestFromProto(in *proto.CheckAccessRequest) *CheckAccessRequest {
-	if in == nil {
-		return nil
-	}
-	return &CheckAccessRequest{
-		Subject:  authorizationSubjectFromProto(in.GetSubject()),
-		Action:   authorizationActionFromProto(in.GetAction()),
-		Resource: authorizationResourceFromProto(in.GetResource()),
-	}
+	return convertProtoMessage(in, func(in *proto.CheckAccessRequest) *CheckAccessRequest {
+		return &CheckAccessRequest{
+			Subject:  authorizationSubjectFromProto(in.GetSubject()),
+			Action:   authorizationActionFromProto(in.GetAction()),
+			Resource: authorizationResourceFromProto(in.GetResource()),
+		}
+	})
 }
 
 func protoCheckAccessResponse(in *CheckAccessResponse) *proto.CheckAccessResponse {
-	if in == nil {
-		return nil
-	}
-	return &proto.CheckAccessResponse{
-		Allowed:          in.Allowed,
-		ModelId:          in.ModelId,
-		MatchedRelations: append([]string(nil), in.MatchedRelations...),
-	}
+	return convertProtoMessage(in, func(in *CheckAccessResponse) *proto.CheckAccessResponse {
+		return &proto.CheckAccessResponse{
+			Allowed:          in.Allowed,
+			ModelId:          in.ModelId,
+			MatchedRelations: append([]string(nil), in.MatchedRelations...),
+		}
+	})
 }
 
 func checkAccessManyRequestFromProto(in *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
-	if in == nil {
-		return nil
-	}
-	out := &CheckAccessManyRequest{Requests: make([]*CheckAccessRequest, 0, len(in.GetRequests()))}
-	for _, req := range in.GetRequests() {
-		out.Requests = append(out.Requests, checkAccessRequestFromProto(req))
-	}
-	return out
+	return convertProtoMessage(in, func(in *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
+		return &CheckAccessManyRequest{Requests: convertAllocatedProtoSlice(in.GetRequests(), checkAccessRequestFromProto)}
+	})
 }
 
 func protoCheckAccessManyResponse(in *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
-	if in == nil {
-		return nil
-	}
-	out := &proto.CheckAccessManyResponse{Decisions: make([]*proto.CheckAccessResponse, 0, len(in.Decisions))}
-	for _, decision := range in.Decisions {
-		out.Decisions = append(out.Decisions, protoCheckAccessResponse(decision))
-	}
-	return out
+	return convertProtoMessage(in, func(in *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
+		return &proto.CheckAccessManyResponse{Decisions: convertAllocatedProtoSlice(in.Decisions, protoCheckAccessResponse)}
+	})
 }
 
 func relationshipTargetFromProto(in *proto.RelationshipTarget) *RelationshipTarget {
-	if in == nil {
-		return nil
-	}
-	switch kind := in.GetKind().(type) {
-	case *proto.RelationshipTarget_Subject:
-		return &RelationshipTarget{Subject: authorizationSubjectFromProto(kind.Subject)}
-	case *proto.RelationshipTarget_Resource:
-		return &RelationshipTarget{Resource: authorizationResourceFromProto(kind.Resource)}
-	case *proto.RelationshipTarget_SubjectSet:
-		return &RelationshipTarget{SubjectSet: subjectSetFromProto(kind.SubjectSet)}
-	default:
-		return &RelationshipTarget{}
-	}
+	return convertProtoMessage(in, func(in *proto.RelationshipTarget) *RelationshipTarget {
+		switch kind := in.GetKind().(type) {
+		case *proto.RelationshipTarget_Subject:
+			return &RelationshipTarget{Subject: authorizationSubjectFromProto(kind.Subject)}
+		case *proto.RelationshipTarget_Resource:
+			return &RelationshipTarget{Resource: authorizationResourceFromProto(kind.Resource)}
+		case *proto.RelationshipTarget_SubjectSet:
+			return &RelationshipTarget{SubjectSet: subjectSetFromProto(kind.SubjectSet)}
+		default:
+			return &RelationshipTarget{}
+		}
+	})
 }
 
 func protoRelationshipTarget(in *RelationshipTarget) (*proto.RelationshipTarget, error) {
@@ -139,10 +123,9 @@ func protoRelationshipTarget(in *RelationshipTarget) (*proto.RelationshipTarget,
 }
 
 func subjectSetFromProto(in *proto.SubjectSet) *SubjectSet {
-	if in == nil {
-		return nil
-	}
-	return &SubjectSet{Resource: authorizationResourceFromProto(in.GetResource()), Relation: in.GetRelation()}
+	return convertProtoMessage(in, func(in *proto.SubjectSet) *SubjectSet {
+		return &SubjectSet{Resource: authorizationResourceFromProto(in.GetResource()), Relation: in.GetRelation()}
+	})
 }
 
 func protoSubjectSet(in *SubjectSet) (*proto.SubjectSet, error) {
@@ -157,29 +140,27 @@ func protoSubjectSet(in *SubjectSet) (*proto.SubjectSet, error) {
 }
 
 func relationshipFilterFromProto(in *proto.RelationshipFilter) *RelationshipFilter {
-	if in == nil {
-		return nil
-	}
-	return &RelationshipFilter{
-		Target:           relationshipTargetFromProto(in.GetTarget()),
-		Relation:         in.GetRelation(),
-		Resource:         authorizationResourceFromProto(in.GetResource()),
-		TargetType:       RelationshipTargetType(in.GetTargetType()),
-		TargetEntityType: in.GetTargetEntityType(),
-		ResourceType:     in.GetResourceType(),
-		SourceLayer:      SourceLayer(in.GetSourceLayer()),
-	}
+	return convertProtoMessage(in, func(in *proto.RelationshipFilter) *RelationshipFilter {
+		return &RelationshipFilter{
+			Target:           relationshipTargetFromProto(in.GetTarget()),
+			Relation:         in.GetRelation(),
+			Resource:         authorizationResourceFromProto(in.GetResource()),
+			TargetType:       RelationshipTargetType(in.GetTargetType()),
+			TargetEntityType: in.GetTargetEntityType(),
+			ResourceType:     in.GetResourceType(),
+			SourceLayer:      SourceLayer(in.GetSourceLayer()),
+		}
+	})
 }
 
 func listRelationshipsRequestFromProto(in *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
-	if in == nil {
-		return nil
-	}
-	return &ListRelationshipsRequest{
-		Filter:    relationshipFilterFromProto(in.GetFilter()),
-		PageSize:  in.GetPageSize(),
-		PageToken: in.GetPageToken(),
-	}
+	return convertProtoMessage(in, func(in *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
+		return &ListRelationshipsRequest{
+			Filter:    relationshipFilterFromProto(in.GetFilter()),
+			PageSize:  in.GetPageSize(),
+			PageToken: in.GetPageToken(),
+		}
+	})
 }
 
 func protoListRelationshipsResponse(in *ListRelationshipsResponse) (*proto.ListRelationshipsResponse, error) {
@@ -208,31 +189,28 @@ func preconditionFromProto(in *proto.Precondition) *Precondition {
 }
 
 func writeRelationshipsRequestFromProto(in *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
-	if in == nil {
-		return nil
-	}
-	return &WriteRelationshipsRequest{
-		Updates:               convertAllocatedProtoSlice(in.GetUpdates(), relationshipUpdateFromProto),
-		OptionalPreconditions: convertAllocatedProtoSlice(in.GetOptionalPreconditions(), preconditionFromProto),
-	}
+	return convertProtoMessage(in, func(in *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
+		return &WriteRelationshipsRequest{
+			Updates:               convertAllocatedProtoSlice(in.GetUpdates(), relationshipUpdateFromProto),
+			OptionalPreconditions: convertAllocatedProtoSlice(in.GetOptionalPreconditions(), preconditionFromProto),
+		}
+	})
 }
 
 func protoWriteRelationshipsResponse(in *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
-	if in == nil {
-		return nil
-	}
-	return &proto.WriteRelationshipsResponse{}
+	return convertProtoMessage(in, func(in *WriteRelationshipsResponse) *proto.WriteRelationshipsResponse {
+		return &proto.WriteRelationshipsResponse{}
+	})
 }
 
 func relationshipFromProto(in *proto.Relationship) *Relationship {
-	if in == nil {
-		return nil
-	}
-	return &Relationship{
-		Tuple:       relationshipTupleFromProto(in.GetTuple()),
-		Properties:  mapFromStruct(in.GetProperties()),
-		SourceLayer: SourceLayer(in.GetSourceLayer()),
-	}
+	return convertProtoMessage(in, func(in *proto.Relationship) *Relationship {
+		return &Relationship{
+			Tuple:       relationshipTupleFromProto(in.GetTuple()),
+			Properties:  mapFromStruct(in.GetProperties()),
+			SourceLayer: SourceLayer(in.GetSourceLayer()),
+		}
+	})
 }
 
 func protoRelationship(in *Relationship) (*proto.Relationship, error) {
@@ -263,14 +241,13 @@ func protoRelationships(in []*Relationship) ([]*proto.Relationship, error) {
 }
 
 func relationshipTupleFromProto(in *proto.RelationshipTuple) *RelationshipTuple {
-	if in == nil {
-		return nil
-	}
-	return &RelationshipTuple{
-		Target:   relationshipTargetFromProto(in.GetTarget()),
-		Relation: in.GetRelation(),
-		Resource: authorizationResourceFromProto(in.GetResource()),
-	}
+	return convertProtoMessage(in, func(in *proto.RelationshipTuple) *RelationshipTuple {
+		return &RelationshipTuple{
+			Target:   relationshipTargetFromProto(in.GetTarget()),
+			Relation: in.GetRelation(),
+			Resource: authorizationResourceFromProto(in.GetResource()),
+		}
+	})
 }
 
 func protoRelationshipTuple(in *RelationshipTuple) (*proto.RelationshipTuple, error) {
@@ -289,10 +266,9 @@ func protoRelationshipTuple(in *RelationshipTuple) (*proto.RelationshipTuple, er
 }
 
 func addRelationshipRequestFromProto(in *proto.AddRelationshipRequest) *AddRelationshipRequest {
-	if in == nil {
-		return nil
-	}
-	return &AddRelationshipRequest{Relationship: relationshipFromProto(in.GetRelationship())}
+	return convertProtoMessage(in, func(in *proto.AddRelationshipRequest) *AddRelationshipRequest {
+		return &AddRelationshipRequest{Relationship: relationshipFromProto(in.GetRelationship())}
+	})
 }
 
 func protoAddRelationshipResponse(in *AddRelationshipResponse) (*proto.AddRelationshipResponse, error) {
@@ -307,77 +283,68 @@ func protoAddRelationshipResponse(in *AddRelationshipResponse) (*proto.AddRelati
 }
 
 func deleteRelationshipRequestFromProto(in *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
-	if in == nil {
-		return nil
-	}
-	return &DeleteRelationshipRequest{RelationshipTuple: relationshipTupleFromProto(in.GetRelationshipTuple())}
+	return convertProtoMessage(in, func(in *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
+		return &DeleteRelationshipRequest{RelationshipTuple: relationshipTupleFromProto(in.GetRelationshipTuple())}
+	})
 }
 
 func protoDeleteRelationshipResponse(in *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
-	if in == nil {
-		return nil
-	}
-	return &proto.DeleteRelationshipResponse{}
+	return convertProtoMessage(in, func(in *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
+		return &proto.DeleteRelationshipResponse{}
+	})
 }
 
 func setAuthorizationStateRequestFromProto(in *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
-	if in == nil {
-		return nil
-	}
-	return &SetAuthorizationStateRequest{
-		Model:         authorizationModelFromProto(in.GetModel()),
-		Relationships: convertAllocatedProtoSlice(in.GetRelationships(), relationshipFromProto),
-	}
+	return convertProtoMessage(in, func(in *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
+		return &SetAuthorizationStateRequest{
+			Model:         authorizationModelFromProto(in.GetModel()),
+			Relationships: convertAllocatedProtoSlice(in.GetRelationships(), relationshipFromProto),
+		}
+	})
 }
 
 func protoSetAuthorizationStateResponse(in *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
-	if in == nil {
-		return nil
-	}
-	return &proto.SetAuthorizationStateResponse{ActiveModel: protoAuthorizationModelRef(in.ActiveModel)}
+	return convertProtoMessage(in, func(in *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
+		return &proto.SetAuthorizationStateResponse{ActiveModel: protoAuthorizationModelRef(in.ActiveModel)}
+	})
 }
 
 func authorizationModelFromProto(in *proto.AuthorizationModel) *AuthorizationModel {
-	if in == nil {
-		return nil
-	}
-	return &AuthorizationModel{
-		Id:            in.GetId(),
-		Version:       in.GetVersion(),
-		ResourceTypes: convertAllocatedProtoSlice(in.GetResourceTypes(), authorizationModelResourceTypeFromProto),
-	}
+	return convertProtoMessage(in, func(in *proto.AuthorizationModel) *AuthorizationModel {
+		return &AuthorizationModel{
+			Id:            in.GetId(),
+			Version:       in.GetVersion(),
+			ResourceTypes: convertAllocatedProtoSlice(in.GetResourceTypes(), authorizationModelResourceTypeFromProto),
+		}
+	})
 }
 
 func protoAuthorizationModelRef(in *AuthorizationModelRef) *proto.AuthorizationModelRef {
-	if in == nil {
-		return nil
-	}
-	out := &proto.AuthorizationModelRef{Id: in.Id, Version: in.Version}
-	if !in.CreatedAt.IsZero() {
-		out.CreatedAt = timestamppb.New(in.CreatedAt)
-	}
-	return out
+	return convertProtoMessage(in, func(in *AuthorizationModelRef) *proto.AuthorizationModelRef {
+		out := &proto.AuthorizationModelRef{Id: in.Id, Version: in.Version}
+		if !in.CreatedAt.IsZero() {
+			out.CreatedAt = timestamppb.New(in.CreatedAt)
+		}
+		return out
+	})
 }
 
 func protoGetActiveModelRefResponse(in *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
-	if in == nil {
-		return nil
-	}
-	return &proto.GetActiveModelRefResponse{Model: protoAuthorizationModelRef(in.Model)}
+	return convertProtoMessage(in, func(in *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
+		return &proto.GetActiveModelRefResponse{Model: protoAuthorizationModelRef(in.Model)}
+	})
 }
 
 func setActiveModelRequestFromProto(in *proto.SetActiveModelRequest) *SetActiveModelRequest {
-	if in == nil {
-		return nil
-	}
-	return &SetActiveModelRequest{Model: authorizationModelFromProto(in.GetModel())}
+	return convertProtoMessage(in, func(in *proto.SetActiveModelRequest) *SetActiveModelRequest {
+		return &SetActiveModelRequest{Model: authorizationModelFromProto(in.GetModel())}
+	})
 }
 
 func protoSetActiveModelResponse(in *SetActiveModelResponse) *proto.SetActiveModelResponse {
-	if in == nil {
-		return nil
-	}
-	return &proto.SetActiveModelResponse{Model: protoAuthorizationModelRef(in.Model)}
+	return convertProtoMessage(in, func(in *SetActiveModelResponse) *proto.SetActiveModelResponse {
+		return &proto.SetActiveModelResponse{Model: protoAuthorizationModelRef(in.Model)}
+	})
 }
 
 func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
@@ -455,45 +422,40 @@ func protoModelAllowedTarget(in *ModelAllowedTarget) *proto.ModelAllowedTarget {
 }
 
 func subjectSetTypeFromProto(in *proto.SubjectSetType) *SubjectSetType {
-	if in == nil {
-		return nil
-	}
-	return &SubjectSetType{ResourceType: in.GetResourceType(), Relation: in.GetRelation()}
+	return convertProtoMessage(in, func(in *proto.SubjectSetType) *SubjectSetType {
+		return &SubjectSetType{ResourceType: in.GetResourceType(), Relation: in.GetRelation()}
+	})
 }
 
 func protoSubjectSetType(in *SubjectSetType) *proto.SubjectSetType {
-	if in == nil {
-		return nil
-	}
-	return &proto.SubjectSetType{ResourceType: in.ResourceType, Relation: in.Relation}
+	return convertProtoMessage(in, func(in *SubjectSetType) *proto.SubjectSetType {
+		return &proto.SubjectSetType{ResourceType: in.ResourceType, Relation: in.Relation}
+	})
 }
 
 func listActiveModelResourceTypesRequestFromProto(in *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
-	if in == nil {
-		return nil
-	}
-	return &ListActiveModelResourceTypesRequest{
-		Filter:    authorizationModelResourceTypeFilterFromProto(in.GetFilter()),
-		PageSize:  in.GetPageSize(),
-		PageToken: in.GetPageToken(),
-	}
+	return convertProtoMessage(in, func(in *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
+		return &ListActiveModelResourceTypesRequest{
+			Filter:    authorizationModelResourceTypeFilterFromProto(in.GetFilter()),
+			PageSize:  in.GetPageSize(),
+			PageToken: in.GetPageToken(),
+		}
+	})
 }
 
 func authorizationModelResourceTypeFilterFromProto(in *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
-	if in == nil {
-		return nil
-	}
-	return &AuthorizationModelResourceTypeFilter{Name: in.GetName(), SourceLayer: SourceLayer(in.GetSourceLayer())}
+	return convertProtoMessage(in, func(in *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
+		return &AuthorizationModelResourceTypeFilter{Name: in.GetName(), SourceLayer: SourceLayer(in.GetSourceLayer())}
+	})
 }
 
 func protoListActiveModelResourceTypesResponse(in *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
-	if in == nil {
-		return nil
-	}
-	resourceTypes := convertAllocatedProtoSlice(in.ResourceTypes, protoAuthorizationModelResourceType)
-	return &proto.ListActiveModelResourceTypesResponse{
-		ResourceTypes: resourceTypes,
-		NextPageToken: in.NextPageToken,
-		ModelId:       in.ModelId,
-	}
+	return convertProtoMessage(in, func(in *ListActiveModelResourceTypesResponse) *proto.ListActiveModelResourceTypesResponse {
+		resourceTypes := convertAllocatedProtoSlice(in.ResourceTypes, protoAuthorizationModelResourceType)
+		return &proto.ListActiveModelResourceTypesResponse{
+			ResourceTypes: resourceTypes,
+			NextPageToken: in.NextPageToken,
+			ModelId:       in.ModelId,
+		}
+	})
 }
