@@ -53,10 +53,7 @@ func NewProviderServer(pluginName string, manager ManagerService, opts ...Provid
 }
 
 func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -68,10 +65,7 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 }
 
 func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +81,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 }
 
 func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +107,7 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 }
 
 func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -135,10 +123,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 }
 
 func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +139,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 }
 
 func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -173,10 +155,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 }
 
 func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -206,10 +185,7 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 }
 
 func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -225,10 +201,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 }
 
 func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -251,10 +224,7 @@ func (s *ProviderServer) GetInteraction(ctx context.Context, req *proto.GetAgent
 }
 
 func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -273,10 +243,7 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 }
 
 func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	reqCtx, err := s.requestContext(ctx, req.GetContext())
+	reqCtx, err := agentRequestContext(ctx, s, req)
 	if err != nil {
 		return nil, err
 	}
@@ -299,8 +266,15 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 	return nil, status.Error(codes.Unimplemented, "agent get capabilities is not available through the public provider facade")
 }
 
-func (s *ProviderServer) requestContext(ctx context.Context, reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
-	out, err := appaccessservice.ProviderRequestContextFromProto(ctx, reqCtx, "", s.pluginName)
+func agentRequestContext[R interface {
+	comparable
+	GetContext() *proto.RequestContext
+}](ctx context.Context, s *ProviderServer, req R) (appaccessservice.ProviderRequestContext, error) {
+	var zero R
+	if req == zero {
+		return appaccessservice.ProviderRequestContext{}, status.Error(codes.InvalidArgument, "request is required")
+	}
+	out, err := appaccessservice.ProviderRequestContextFromProto(ctx, req.GetContext(), "", s.pluginName)
 	if err != nil {
 		return out, err
 	}
