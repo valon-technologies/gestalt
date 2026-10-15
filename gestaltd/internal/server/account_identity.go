@@ -144,11 +144,7 @@ func accountKeyFromProviderID(integration, providerID string) string {
 }
 
 func normalizeIdentityFacts(facts []identityFact) []identityFact {
-	out := dedupeIdentityFacts(facts)
-	if len(out) == 0 {
-		return nil
-	}
-	return ensurePrimaryIdentityFact(out)
+	return ensurePrimaryIdentityFact(dedupeIdentityFacts(facts))
 }
 
 // dedupeIdentityFacts trims/dedupes and keeps at most one Primary from the

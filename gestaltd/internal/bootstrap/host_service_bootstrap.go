@@ -121,9 +121,6 @@ func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool)
 }
 
 func scopedHostServiceBindings[T comparable](names []string, bindings map[string]T) map[string]T {
-	if len(names) == 0 || len(bindings) == 0 {
-		return nil
-	}
 	var zero T
 	scoped := map[string]T{}
 	for _, name := range names {
