@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -18,4 +19,23 @@ func getStoredValue[T any](ctx context.Context, store idb.ObjectStore, key, oper
 		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return decode(rec), nil
+}
+
+func getStoredValues[T any](ctx context.Context, keys []string, get func(context.Context, string) (*T, error)) (map[string]*T, error) {
+	out := make(map[string]*T, len(keys))
+	for _, id := range keys {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		value, err := get(ctx, id)
+		if errors.Is(err, core.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[id] = value
+	}
+	return out, nil
 }
