@@ -1461,18 +1461,13 @@ func cloneRuntimePlacementWorkspaceGitConfig(src *RuntimePlacementWorkspaceGitCo
 }
 
 func cloneHTTPSecuritySchemes(src map[string]*HTTPSecurityScheme) map[string]*HTTPSecurityScheme {
-	if src == nil {
-		return nil
-	}
-	cloned := make(map[string]*HTTPSecurityScheme, len(src))
-	for name, scheme := range src {
-		if scheme == nil {
-			cloned[name] = nil
-			continue
-		}
-		copyScheme := *scheme
-		copyScheme.Secret = cloneHTTPSecretRef(scheme.Secret)
-		cloned[name] = &copyScheme
+	cloned := maps.Clone(src)
+	for name, scheme := range cloned {
+		cloned[name] = withOptionalConfig(scheme, func(scheme *HTTPSecurityScheme) *HTTPSecurityScheme {
+			copyScheme := *scheme
+			copyScheme.Secret = cloneHTTPSecretRef(scheme.Secret)
+			return &copyScheme
+		})
 	}
 	return cloned
 }
@@ -1486,18 +1481,13 @@ func cloneHTTPSecretRef(src *providermanifestv1.HTTPSecretRef) *providermanifest
 }
 
 func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
-	if src == nil {
-		return nil
-	}
-	cloned := make(map[string]*HTTPBinding, len(src))
-	for name, binding := range src {
-		if binding == nil {
-			cloned[name] = nil
-			continue
-		}
-		copyBinding := *binding
-		copyBinding.RequestBody = cloneHTTPRequestBody(binding.RequestBody)
-		cloned[name] = &copyBinding
+	cloned := maps.Clone(src)
+	for name, binding := range cloned {
+		cloned[name] = withOptionalConfig(binding, func(binding *HTTPBinding) *HTTPBinding {
+			copyBinding := *binding
+			copyBinding.RequestBody = cloneHTTPRequestBody(binding.RequestBody)
+			return &copyBinding
+		})
 	}
 	return cloned
 }
@@ -1716,7 +1706,7 @@ func (e *ProviderEntry) HasResolvedManifest() bool {
 }
 
 func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
-	if e == nil || e.ResolvedManifest == nil {
+	if !e.HasResolvedManifest() {
 		return nil
 	}
 	return e.ResolvedManifest.Spec
@@ -1727,18 +1717,16 @@ func (e *ProviderEntry) EffectiveAllowedOperations() map[string]*OperationOverri
 		if e.AllowedOperations != nil {
 			return e.AllowedOperations
 		}
-		if spec := e.ManifestSpec(); spec != nil {
+		return withOptionalConfig(e.ManifestSpec(), func(spec *providermanifestv1.Spec) map[string]*OperationOverride {
 			return operationexposure.FromManifestAllowed(spec.AllowedOperations)
-		}
-		return nil
+		})
 	})
 }
 
 func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityScheme {
-	var merged map[string]*HTTPSecurityScheme
-	if spec := e.ManifestSpec(); spec != nil && spec.SecuritySchemes != nil {
-		merged = cloneHTTPSecuritySchemes(spec.SecuritySchemes)
-	}
+	merged := withOptionalConfig(e.ManifestSpec(), func(spec *providermanifestv1.Spec) map[string]*HTTPSecurityScheme {
+		return cloneHTTPSecuritySchemes(spec.SecuritySchemes)
+	})
 	if e == nil || e.SecuritySchemes == nil {
 		return merged
 	}
@@ -1756,10 +1744,9 @@ func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityS
 }
 
 func (e *ProviderEntry) EffectiveHTTPBindings() map[string]*HTTPBinding {
-	var merged map[string]*HTTPBinding
-	if spec := e.ManifestSpec(); spec != nil && spec.HTTP != nil {
-		merged = cloneHTTPBindings(spec.HTTP)
-	}
+	merged := withOptionalConfig(e.ManifestSpec(), func(spec *providermanifestv1.Spec) map[string]*HTTPBinding {
+		return cloneHTTPBindings(spec.HTTP)
+	})
 	if e == nil || e.HTTP == nil {
 		return merged
 	}
