@@ -15,33 +15,29 @@ import (
 )
 
 func ToWireTimestamp(value *time.Time) *timestamppb.Timestamp {
-	if value == nil {
-		return nil
-	}
-	return timestamppb.New(*value)
+	return convertMessage(value, func(value *time.Time) *timestamppb.Timestamp {
+		return timestamppb.New(*value)
+	})
 }
 
 func FromWireTimestamp(value *timestamppb.Timestamp) *time.Time {
-	if value == nil {
-		return nil
-	}
-	t := value.AsTime()
-	return &t
+	return convertMessage(value, func(value *timestamppb.Timestamp) *time.Time {
+		t := value.AsTime()
+		return &t
+	})
 }
 
 func ToWireDuration(value *time.Duration) *durationpb.Duration {
-	if value == nil {
-		return nil
-	}
-	return durationpb.New(*value)
+	return convertMessage(value, func(value *time.Duration) *durationpb.Duration {
+		return durationpb.New(*value)
+	})
 }
 
 func FromWireDuration(value *durationpb.Duration) *time.Duration {
-	if value == nil {
-		return nil
-	}
-	d := value.AsDuration()
-	return &d
+	return convertMessage(value, func(value *durationpb.Duration) *time.Duration {
+		d := value.AsDuration()
+		return &d
+	})
 }
 
 // toWireStruct converts a native JSON object to its wire form. A nil map
@@ -94,22 +90,17 @@ func ToWireValue(value any) *structpb.Value {
 // fromWireValue converts a wire Value to its native form. Absent and JSON
 // null conflate: both become nil.
 func FromWireValue(value *structpb.Value) any {
-	if value == nil {
-		return nil
-	}
 	return value.AsInterface()
 }
 
 func ToWireStatus(value *RpcStatus) *rpcstatus.Status {
-	if value == nil {
-		return nil
-	}
-	return &rpcstatus.Status{Code: int32(value.Code), Message: value.Message}
+	return convertMessage(value, func(value *RpcStatus) *rpcstatus.Status {
+		return &rpcstatus.Status{Code: int32(value.Code), Message: value.Message}
+	})
 }
 
 func FromWireStatus(value *rpcstatus.Status) *RpcStatus {
-	if value == nil {
-		return nil
-	}
-	return &RpcStatus{Code: GestaltErrorCode(value.GetCode()), Message: value.GetMessage()}
+	return convertMessage(value, func(value *rpcstatus.Status) *RpcStatus {
+		return &RpcStatus{Code: GestaltErrorCode(value.GetCode()), Message: value.GetMessage()}
+	})
 }
