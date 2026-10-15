@@ -87,7 +87,7 @@ func parsePhaseCommandFromYAML(node *yaml.Node, allowed map[string]struct{}, sub
 	return SourcePhaseCommand(raw), nil
 }
 
-func parsePhaseCommandListFromJSON(data []byte, allowed map[string]struct{}, subject string, scalarSeqOK bool) ([]SourcePhaseCommand, error) {
+func parsePhaseCommandListFromJSON(data []byte, allowed map[string]struct{}, subject string) ([]SourcePhaseCommand, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || trimmed[0] != '[' {
 		return nil, fmt.Errorf("%s must be a sequence", subject)
@@ -98,13 +98,6 @@ func parsePhaseCommandListFromJSON(data []byte, allowed map[string]struct{}, sub
 	}
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("%s must not be empty", subject)
-	}
-	if scalarSeqOK && allJSONScalars(nodes) {
-		var command []string
-		if err := json.Unmarshal(trimmed, &command); err != nil {
-			return nil, err
-		}
-		return []SourcePhaseCommand{{Command: command}}, nil
 	}
 	commands := make([]SourcePhaseCommand, 0, len(nodes))
 	for i, node := range nodes {
@@ -222,4 +215,59 @@ func phaseCommandsWire(commands []SourcePhaseCommand, wire phaseWireForm) any {
 		out = append(out, sourcePhaseCommandWire(cmd))
 	}
 	return out
+}
+
+func unmarshalSourcePhaseJSON[T any](target *T, data []byte, allowed map[string]struct{}, subject string, setCommands func([]SourcePhaseCommand, phaseWireForm)) error {
+	if target == nil {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		var zero T
+		*target = zero
+		return nil
+	}
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		commands, err := parsePhaseCommandListFromJSON(trimmed, allowed, subject)
+		if err != nil {
+			return err
+		}
+		setCommands(commands, phaseWireCommandList)
+		return nil
+	}
+	cmd, err := parsePhaseCommandFromJSON(trimmed, allowed, subject)
+	if err != nil {
+		return err
+	}
+	setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
+	return nil
+}
+
+func unmarshalSourcePhaseYAML[T any](target *T, value *yaml.Node, allowed map[string]struct{}, subject string, setCommands func([]SourcePhaseCommand, phaseWireForm)) error {
+	if target == nil {
+		return nil
+	}
+	if value == nil {
+		var zero T
+		*target = zero
+		return nil
+	}
+	switch value.Kind {
+	case yaml.SequenceNode:
+		commands, err := parsePhaseCommandListFromYAML(value, allowed, subject, false)
+		if err != nil {
+			return err
+		}
+		setCommands(commands, phaseWireCommandList)
+		return nil
+	case yaml.MappingNode:
+		cmd, err := parsePhaseCommandFromYAML(value, allowed, subject)
+		if err != nil {
+			return err
+		}
+		setCommands([]SourcePhaseCommand{cmd}, phaseWireLegacyObject)
+		return nil
+	default:
+		return fmt.Errorf("%s must be a sequence or mapping", subject)
+	}
 }
