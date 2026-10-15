@@ -25,15 +25,6 @@ func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 	}
 
 	switch value := v.(type) {
-	case time.Time:
-		return timestampToTypedValue(value)
-	case *time.Time:
-		if value == nil {
-			return &proto.TypedValue{
-				Kind: &proto.TypedValue_NullValue{NullValue: structpb.NullValue_NULL_VALUE},
-			}, nil
-		}
-		return timestampToTypedValue(*value)
 	case []byte:
 		return &proto.TypedValue{
 			Kind: &proto.TypedValue_BytesValue{BytesValue: append([]byte(nil), value...)},
@@ -50,22 +41,13 @@ func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 	}
 
 	rv := reflect.ValueOf(v)
-	for rv.IsValid() && rv.Kind() == reflect.Pointer {
+	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
 			return &proto.TypedValue{
 				Kind: &proto.TypedValue_NullValue{NullValue: structpb.NullValue_NULL_VALUE},
 			}, nil
 		}
-		if rv.Type() == reflect.TypeOf(&time.Time{}) {
-			ts := rv.Interface().(*time.Time)
-			return timestampToTypedValue(*ts)
-		}
 		rv = rv.Elem()
-	}
-	if !rv.IsValid() {
-		return &proto.TypedValue{
-			Kind: &proto.TypedValue_NullValue{NullValue: structpb.NullValue_NULL_VALUE},
-		}, nil
 	}
 	if rv.Type() == timeType {
 		return timestampToTypedValue(rv.Interface().(time.Time))
