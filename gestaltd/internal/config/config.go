@@ -347,11 +347,10 @@ func (s ProviderSource) ResolvedPackageMetadataURL() string {
 }
 func (s ProviderSource) ResolvedPackageVersion() string { return strings.TrimSpace(s.resolvedVersion) }
 func (s *ProviderSource) SetResolvedPackage(metadataURL, version string) {
-	if s == nil {
-		return
-	}
-	s.resolvedMetadataURL = strings.TrimSpace(metadataURL)
-	s.resolvedVersion = strings.TrimSpace(version)
+	updateOptionalConfig(s, func(s *ProviderSource) {
+		s.resolvedMetadataURL = strings.TrimSpace(metadataURL)
+		s.resolvedVersion = strings.TrimSpace(version)
+	})
 }
 func (s ProviderSource) GitHubReleaseSource() *GitHubReleaseSourceDef {
 	return cloneGitHubReleaseSourceDef(s.GitHubRelease)
@@ -1296,85 +1295,81 @@ func cloneProviderEntryHarnessInstallConfig(src *ProviderEntryHarnessInstallConf
 }
 
 func normalizeProviderEntryAliases(entry *ProviderEntry) {
-	if entry == nil {
-		return
-	}
-	if entry.Egress != nil {
-		entry.Egress.AllowedHosts = trimStringSlice(entry.Egress.AllowedHosts)
-	}
-	normalizeAgentProviderLifecycle(entry.Lifecycle)
-	entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
-	for name, harness := range entry.Harnesses {
-		trimmed := strings.TrimSpace(name)
-		if trimmed != name {
-			delete(entry.Harnesses, name)
-			if trimmed != "" {
-				entry.Harnesses[trimmed] = harness
-			}
+	updateOptionalConfig(entry, func(entry *ProviderEntry) {
+		if entry.Egress != nil {
+			entry.Egress.AllowedHosts = trimStringSlice(entry.Egress.AllowedHosts)
 		}
-		normalizeProviderEntryHarness(harness)
-	}
+		normalizeAgentProviderLifecycle(entry.Lifecycle)
+		entry.DefaultHarness = strings.TrimSpace(entry.DefaultHarness)
+		for name, harness := range entry.Harnesses {
+			trimmed := strings.TrimSpace(name)
+			if trimmed != name {
+				delete(entry.Harnesses, name)
+				if trimmed != "" {
+					entry.Harnesses[trimmed] = harness
+				}
+			}
+			normalizeProviderEntryHarness(harness)
+		}
+	})
 }
 
 func normalizeAgentProviderLifecycle(lifecycle *AgentProviderLifecycleConfig) {
-	if lifecycle == nil {
-		return
-	}
-	for i := range lifecycle.SessionStart {
-		hook := &lifecycle.SessionStart[i]
-		hook.ID = strings.TrimSpace(hook.ID)
-		hook.Type = strings.TrimSpace(hook.Type)
-		hook.CWD = strings.TrimSpace(hook.CWD)
-		hook.Timeout = strings.TrimSpace(hook.Timeout)
-		if len(hook.Command) > 0 {
-			hook.Command[0] = strings.TrimSpace(hook.Command[0])
-		}
-		if hook.Env != nil {
-			trimmed := make(map[string]string, len(hook.Env))
-			for key, value := range hook.Env {
-				trimmed[strings.TrimSpace(key)] = value
+	updateOptionalConfig(lifecycle, func(lifecycle *AgentProviderLifecycleConfig) {
+		for i := range lifecycle.SessionStart {
+			hook := &lifecycle.SessionStart[i]
+			hook.ID = strings.TrimSpace(hook.ID)
+			hook.Type = strings.TrimSpace(hook.Type)
+			hook.CWD = strings.TrimSpace(hook.CWD)
+			hook.Timeout = strings.TrimSpace(hook.Timeout)
+			if len(hook.Command) > 0 {
+				hook.Command[0] = strings.TrimSpace(hook.Command[0])
 			}
-			hook.Env = trimmed
+			if hook.Env != nil {
+				trimmed := make(map[string]string, len(hook.Env))
+				for key, value := range hook.Env {
+					trimmed[strings.TrimSpace(key)] = value
+				}
+				hook.Env = trimmed
+			}
 		}
-	}
+	})
 }
 
 func normalizeProviderEntryHarness(harness *ProviderEntryHarnessConfig) {
-	if harness == nil {
-		return
-	}
-	harness.Command = strings.TrimSpace(harness.Command)
-	harness.WorkingDirectory = strings.TrimSpace(harness.WorkingDirectory)
-	harness.RequiredCommands = trimStringSlice(harness.RequiredCommands)
-	normalizeProviderEntryHarnessInstall(harness.Install)
+	updateOptionalConfig(harness, func(harness *ProviderEntryHarnessConfig) {
+		harness.Command = strings.TrimSpace(harness.Command)
+		harness.WorkingDirectory = strings.TrimSpace(harness.WorkingDirectory)
+		harness.RequiredCommands = trimStringSlice(harness.RequiredCommands)
+		normalizeProviderEntryHarnessInstall(harness.Install)
+	})
 }
 
 func normalizeProviderEntryHarnessInstall(install *ProviderEntryHarnessInstallConfig) {
-	if install == nil {
-		return
-	}
-	install.Instructions = strings.TrimSpace(install.Instructions)
-	out := install.Commands[:0]
-	for _, command := range install.Commands {
-		command.Description = strings.TrimSpace(command.Description)
-		command.Command = strings.TrimSpace(command.Command)
-		command.Shell = strings.TrimSpace(command.Shell)
-		command.Args = trimStringSlice(command.Args)
-		if command.Env != nil {
-			env := make(map[string]string, len(command.Env))
-			for key, value := range command.Env {
-				key = strings.TrimSpace(key)
-				if key != "" {
-					env[key] = value
+	updateOptionalConfig(install, func(install *ProviderEntryHarnessInstallConfig) {
+		install.Instructions = strings.TrimSpace(install.Instructions)
+		out := install.Commands[:0]
+		for _, command := range install.Commands {
+			command.Description = strings.TrimSpace(command.Description)
+			command.Command = strings.TrimSpace(command.Command)
+			command.Shell = strings.TrimSpace(command.Shell)
+			command.Args = trimStringSlice(command.Args)
+			if command.Env != nil {
+				env := make(map[string]string, len(command.Env))
+				for key, value := range command.Env {
+					key = strings.TrimSpace(key)
+					if key != "" {
+						env[key] = value
+					}
 				}
+				command.Env = env
 			}
-			command.Env = env
+			if command.Command != "" || command.Shell != "" {
+				out = append(out, command)
+			}
 		}
-		if command.Command != "" || command.Shell != "" {
-			out = append(out, command)
-		}
-	}
-	install.Commands = out
+		install.Commands = out
+	})
 }
 
 func trimStringSlice(values []string) []string {
@@ -2290,66 +2285,65 @@ func ResolveConnectionAlias(name string) string {
 }
 
 func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
-	if dst == nil {
-		return
-	}
-	if src.Type != "" && dst.Type != "" && src.Type != dst.Type {
-		*dst = ConnectionAuthDef{}
-	}
-	setString := func(dst *string, src string) {
-		if src != "" {
-			*dst = src
+	updateOptionalConfig(dst, func(dst *ConnectionAuthDef) {
+		if src.Type != "" && dst.Type != "" && src.Type != dst.Type {
+			*dst = ConnectionAuthDef{}
 		}
-	}
-	if src.Type != "" {
-		dst.Type = src.Type
-	}
-	setString(&dst.Token, src.Token)
-	setString(&dst.GrantType, src.GrantType)
-	setString(&dst.RefreshToken, src.RefreshToken)
-	setString(&dst.AuthorizationURL, src.AuthorizationURL)
-	setString(&dst.TokenURL, src.TokenURL)
-	setString(&dst.ClientID, src.ClientID)
-	setString(&dst.ClientSecret, src.ClientSecret)
-	setString(&dst.RedirectURL, src.RedirectURL)
-	setString(&dst.ClientAuth, src.ClientAuth)
-	setString(&dst.TokenExchange, src.TokenExchange)
-	setString(&dst.TokenPrefix, src.TokenPrefix)
-	if src.Scopes != nil {
-		dst.Scopes = src.Scopes
-	}
-	setString(&dst.ScopeParam, src.ScopeParam)
-	setString(&dst.ScopeSeparator, src.ScopeSeparator)
-	if src.PKCE {
-		dst.PKCE = true
-	}
-	if src.AuthorizationParams != nil {
-		dst.AuthorizationParams = src.AuthorizationParams
-	}
-	if src.TokenParams != nil {
-		dst.TokenParams = src.TokenParams
-	}
-	if src.RefreshParams != nil {
-		dst.RefreshParams = src.RefreshParams
-	}
-	setString(&dst.AcceptHeader, src.AcceptHeader)
-	setString(&dst.AccessTokenPath, src.AccessTokenPath)
-	if src.TokenMetadata != nil {
-		dst.TokenMetadata = src.TokenMetadata
-	}
-	if src.TokenExchangeDrivers != nil {
-		dst.TokenExchangeDrivers = slices.Clone(src.TokenExchangeDrivers)
-	}
-	if src.Credentials != nil {
-		if len(src.Credentials) == 0 {
-			dst.Credentials = nil
-		} else {
-			dst.Credentials = mergeCredentialFields(dst.Credentials, src.Credentials)
+		setString := func(dst *string, src string) {
+			if src != "" {
+				*dst = src
+			}
 		}
-	}
-	if src.AuthMapping != nil {
-		dst.AuthMapping = src.AuthMapping
-	}
+		if src.Type != "" {
+			dst.Type = src.Type
+		}
+		setString(&dst.Token, src.Token)
+		setString(&dst.GrantType, src.GrantType)
+		setString(&dst.RefreshToken, src.RefreshToken)
+		setString(&dst.AuthorizationURL, src.AuthorizationURL)
+		setString(&dst.TokenURL, src.TokenURL)
+		setString(&dst.ClientID, src.ClientID)
+		setString(&dst.ClientSecret, src.ClientSecret)
+		setString(&dst.RedirectURL, src.RedirectURL)
+		setString(&dst.ClientAuth, src.ClientAuth)
+		setString(&dst.TokenExchange, src.TokenExchange)
+		setString(&dst.TokenPrefix, src.TokenPrefix)
+		if src.Scopes != nil {
+			dst.Scopes = src.Scopes
+		}
+		setString(&dst.ScopeParam, src.ScopeParam)
+		setString(&dst.ScopeSeparator, src.ScopeSeparator)
+		if src.PKCE {
+			dst.PKCE = true
+		}
+		if src.AuthorizationParams != nil {
+			dst.AuthorizationParams = src.AuthorizationParams
+		}
+		if src.TokenParams != nil {
+			dst.TokenParams = src.TokenParams
+		}
+		if src.RefreshParams != nil {
+			dst.RefreshParams = src.RefreshParams
+		}
+		setString(&dst.AcceptHeader, src.AcceptHeader)
+		setString(&dst.AccessTokenPath, src.AccessTokenPath)
+		if src.TokenMetadata != nil {
+			dst.TokenMetadata = src.TokenMetadata
+		}
+		if src.TokenExchangeDrivers != nil {
+			dst.TokenExchangeDrivers = slices.Clone(src.TokenExchangeDrivers)
+		}
+		if src.Credentials != nil {
+			if len(src.Credentials) == 0 {
+				dst.Credentials = nil
+			} else {
+				dst.Credentials = mergeCredentialFields(dst.Credentials, src.Credentials)
+			}
+		}
+		if src.AuthMapping != nil {
+			dst.AuthMapping = src.AuthMapping
+		}
+	})
 }
 
 func mergeCredentialFields(base, override []CredentialFieldDef) []CredentialFieldDef {
@@ -2619,57 +2613,55 @@ func normalizeConfigShapeForPartialLoad(cfg *Config) error {
 }
 
 func normalizeServerRuntimeConfig(cfg *Config) {
-	if cfg == nil {
-		return
-	}
-	cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
+	updateOptionalConfig(cfg, func(cfg *Config) {
+		cfg.Server.Runtime.DefaultProvider = strings.TrimSpace(cfg.Server.Runtime.DefaultProvider)
+	})
 }
 
 func normalizeProviderEntries(cfg *Config) {
-	if cfg == nil {
-		return
-	}
-	for _, entry := range cfg.Apps {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Identity {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Authorization {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.ExternalCredentials {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Secrets {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Telemetry {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Audit {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.IndexedDB {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Cache {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.S3 {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Workflow {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Providers.Agent {
-		normalizeProviderEntryAliases(entry)
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil {
-			normalizeProviderEntryAliases(&entry.ProviderEntry)
+	updateOptionalConfig(cfg, func(cfg *Config) {
+		for _, entry := range cfg.Apps {
+			normalizeProviderEntryAliases(entry)
 		}
-	}
+		for _, entry := range cfg.Providers.Identity {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Authorization {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.ExternalCredentials {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Secrets {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Telemetry {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Audit {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.IndexedDB {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Cache {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.S3 {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Workflow {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Providers.Agent {
+			normalizeProviderEntryAliases(entry)
+		}
+		for _, entry := range cfg.Runtime.Providers {
+			if entry != nil {
+				normalizeProviderEntryAliases(&entry.ProviderEntry)
+			}
+		}
+	})
 }
 
 func OverlayRemoteAppConfig(path string, cfg *Config) error {
@@ -3494,46 +3486,45 @@ func nonNilWorkflowDefinitionMap(in map[string]WorkflowDefinitionConfig) map[str
 }
 
 func normalizeProviderSourceShapes(cfg *Config) {
-	if cfg == nil {
-		return
-	}
-	cfg.APIVersion = strings.TrimSpace(cfg.APIVersion)
+	updateOptionalConfig(cfg, func(cfg *Config) {
+		cfg.APIVersion = strings.TrimSpace(cfg.APIVersion)
 
-	normalizeEntry := func(kind string, entry *ProviderEntry) {
-		if entry == nil {
-			return
+		normalizeEntry := func(kind string, entry *ProviderEntry) {
+			if entry == nil {
+				return
+			}
+			normalizeProviderSource(kind, &entry.Source)
 		}
-		normalizeProviderSource(kind, &entry.Source)
-	}
 
-	for _, entry := range cfg.Apps {
-		normalizeEntry(providermanifestv1.KindApp, entry)
-	}
-	for _, collection := range []struct {
-		kind    string
-		entries map[string]*ProviderEntry
-	}{
-		{providermanifestv1.KindIdentity, cfg.Providers.Identity},
-		{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
-		{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
-		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
-		{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
-		{string(HostProviderKindAudit), cfg.Providers.Audit},
-		{providermanifestv1.KindIndexedDB, cfg.Providers.IndexedDB},
-		{providermanifestv1.KindCache, cfg.Providers.Cache},
-		{providermanifestv1.KindS3, cfg.Providers.S3},
-		{string(HostProviderKindWorkflow), cfg.Providers.Workflow},
-		{string(HostProviderKindAgent), cfg.Providers.Agent},
-	} {
-		for _, entry := range collection.entries {
-			normalizeEntry(collection.kind, entry)
+		for _, entry := range cfg.Apps {
+			normalizeEntry(providermanifestv1.KindApp, entry)
 		}
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil {
-			normalizeEntry(providermanifestv1.KindRuntime, &entry.ProviderEntry)
+		for _, collection := range []struct {
+			kind    string
+			entries map[string]*ProviderEntry
+		}{
+			{providermanifestv1.KindIdentity, cfg.Providers.Identity},
+			{providermanifestv1.KindAuthorization, cfg.Providers.Authorization},
+			{providermanifestv1.KindExternalCredentials, cfg.Providers.ExternalCredentials},
+			{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
+			{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
+			{string(HostProviderKindAudit), cfg.Providers.Audit},
+			{providermanifestv1.KindIndexedDB, cfg.Providers.IndexedDB},
+			{providermanifestv1.KindCache, cfg.Providers.Cache},
+			{providermanifestv1.KindS3, cfg.Providers.S3},
+			{string(HostProviderKindWorkflow), cfg.Providers.Workflow},
+			{string(HostProviderKindAgent), cfg.Providers.Agent},
+		} {
+			for _, entry := range collection.entries {
+				normalizeEntry(collection.kind, entry)
+			}
 		}
-	}
+		for _, entry := range cfg.Runtime.Providers {
+			if entry != nil {
+				normalizeEntry(providermanifestv1.KindRuntime, &entry.ProviderEntry)
+			}
+		}
+	})
 }
 
 func normalizeProviderSource(kind string, source *ProviderSource) {
@@ -3555,9 +3546,7 @@ func normalizeProviderSource(kind string, source *ProviderSource) {
 		source.metadataPath = source.Path
 		source.Path = ""
 	}
-	if source.GitHubRelease != nil {
-		source.GitHubRelease = cloneGitHubReleaseSourceDef(source.GitHubRelease)
-	}
+	source.GitHubRelease = cloneGitHubReleaseSourceDef(source.GitHubRelease)
 	if source.Builtin != "" || source.Path != "" || source.metadataURL != "" || source.metadataPath != "" || source.packageName != "" || source.GitHubRelease != nil {
 		source.scalar = ""
 		return
@@ -4151,4 +4140,12 @@ func withOptionalConfig[Input, Output any](src *Input, use func(*Input) Output) 
 		return zero
 	}
 	return use(src)
+}
+
+// updateOptionalConfig leaves absent configuration unchanged.
+func updateOptionalConfig[T any](dst *T, update func(*T)) {
+	if dst == nil {
+		return
+	}
+	update(dst)
 }
