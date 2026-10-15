@@ -504,15 +504,7 @@ var connectAppConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectApp(ctx context.Context, name string, opts ...ClientOption) (*App, error) {
-	target, token, err := host.Target("app")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectAppConns.Conn(ctx, "app", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewApp(conn, opts...), nil
+	return connectService(ctx, "app", name, &connectAppConns, func(conn grpc.ClientConnInterface) *App { return NewApp(conn, opts...) })
 }
 
 // AppInvokeOptions carries the optional parameters of [App.Invoke].

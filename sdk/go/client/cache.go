@@ -140,15 +140,7 @@ var connectCacheConns host.ConnPool
 // the life of the process. The first dial blocks until the connection is
 // ready or ctx is done.
 func ConnectCache(ctx context.Context, name string) (*Cache, error) {
-	target, token, err := host.Target("cache")
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	conn, err := connectCacheConns.Conn(ctx, "cache", target, token, name)
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return NewCache(conn), nil
+	return connectService(ctx, "cache", name, &connectCacheConns, NewCache)
 }
 
 // Get is the ergonomic form of [Cache.GetRaw].
