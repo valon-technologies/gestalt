@@ -113,50 +113,48 @@ func agentSessionStateToProto(state coreagent.SessionState) proto.AgentSessionSt
 }
 
 func agentSessionFromProto(session *proto.AgentSession) (*coreagent.Session, error) {
-	if session == nil {
-		return nil, nil
-	}
-	state, err := agentSessionStateFromProto(session.GetState())
-	if err != nil {
-		return nil, err
-	}
-	return &coreagent.Session{
-		ID:                 session.GetId(),
-		ProviderName:       session.GetProviderName(),
-		Model:              session.GetModel(),
-		ClientRef:          session.GetClientRef(),
-		State:              state,
-		Metadata:           mapFromStruct(session.GetMetadata()),
-		CreatedBySubjectID: strings.TrimSpace(session.GetCreatedBySubjectId()),
-		CreatedAt:          timeFromProto(session.GetCreatedAt()),
-		UpdatedAt:          timeFromProto(session.GetUpdatedAt()),
-		LastTurnAt:         timeFromProto(session.GetLastTurnAt()),
-	}, nil
+	return protoutil.ConvertMessageErr(session, func(session *proto.AgentSession) (*coreagent.Session, error) {
+		state, err := agentSessionStateFromProto(session.GetState())
+		if err != nil {
+			return nil, err
+		}
+		return &coreagent.Session{
+			ID:                 session.GetId(),
+			ProviderName:       session.GetProviderName(),
+			Model:              session.GetModel(),
+			ClientRef:          session.GetClientRef(),
+			State:              state,
+			Metadata:           mapFromStruct(session.GetMetadata()),
+			CreatedBySubjectID: strings.TrimSpace(session.GetCreatedBySubjectId()),
+			CreatedAt:          timeFromProto(session.GetCreatedAt()),
+			UpdatedAt:          timeFromProto(session.GetUpdatedAt()),
+			LastTurnAt:         timeFromProto(session.GetLastTurnAt()),
+		}, nil
+	})
 }
 
 func agentTurnFromProto(turn *proto.AgentTurn) (*coreagent.Turn, error) {
-	if turn == nil {
-		return nil, nil
-	}
-	status, err := agentExecutionStatusFromProto(turn.GetStatus())
-	if err != nil {
-		return nil, err
-	}
-	return &coreagent.Turn{
-		ID:                 turn.GetId(),
-		SessionID:          turn.GetSessionId(),
-		ProviderName:       turn.GetProviderName(),
-		Model:              turn.GetModel(),
-		Status:             status,
-		Messages:           agentMessagesFromProto(turn.GetMessages()),
-		Output:             agentTurnOutputFromProto(turn),
-		StatusMessage:      turn.GetStatusMessage(),
-		CreatedBySubjectID: strings.TrimSpace(turn.GetCreatedBySubjectId()),
-		CreatedAt:          timeFromProto(turn.GetCreatedAt()),
-		StartedAt:          timeFromProto(turn.GetStartedAt()),
-		CompletedAt:        timeFromProto(turn.GetCompletedAt()),
-		ExecutionRef:       turn.GetExecutionRef(),
-	}, nil
+	return protoutil.ConvertMessageErr(turn, func(turn *proto.AgentTurn) (*coreagent.Turn, error) {
+		status, err := agentExecutionStatusFromProto(turn.GetStatus())
+		if err != nil {
+			return nil, err
+		}
+		return &coreagent.Turn{
+			ID:                 turn.GetId(),
+			SessionID:          turn.GetSessionId(),
+			ProviderName:       turn.GetProviderName(),
+			Model:              turn.GetModel(),
+			Status:             status,
+			Messages:           agentMessagesFromProto(turn.GetMessages()),
+			Output:             agentTurnOutputFromProto(turn),
+			StatusMessage:      turn.GetStatusMessage(),
+			CreatedBySubjectID: strings.TrimSpace(turn.GetCreatedBySubjectId()),
+			CreatedAt:          timeFromProto(turn.GetCreatedAt()),
+			StartedAt:          timeFromProto(turn.GetStartedAt()),
+			CompletedAt:        timeFromProto(turn.GetCompletedAt()),
+			ExecutionRef:       turn.GetExecutionRef(),
+		}, nil
+	})
 }
 
 func setAgentTurnOutputProto(turn *proto.AgentTurn, output coreagent.TurnOutput) error {
@@ -249,85 +247,82 @@ func agentTurnDisplayFromProto(display *proto.AgentTurnDisplay) *coreagent.TurnD
 }
 
 func agentTurnDisplayToProto(display *coreagent.TurnDisplay) (*proto.AgentTurnDisplay, error) {
-	if display == nil {
-		return nil, nil
-	}
-	input, err := protoValueFromAny(display.Input)
-	if err != nil {
-		return nil, fmt.Errorf("agent turn display input: %w", err)
-	}
-	output, err := protoValueFromAny(display.Output)
-	if err != nil {
-		return nil, fmt.Errorf("agent turn display output: %w", err)
-	}
-	displayErr, err := protoValueFromAny(display.Error)
-	if err != nil {
-		return nil, fmt.Errorf("agent turn display error: %w", err)
-	}
-	return &proto.AgentTurnDisplay{
-		Kind:      display.Kind,
-		Phase:     display.Phase,
-		Text:      display.Text,
-		Label:     display.Label,
-		Ref:       display.Ref,
-		ParentRef: display.ParentRef,
-		Input:     input,
-		Output:    output,
-		Error:     displayErr,
-		Action:    display.Action,
-		Format:    display.Format,
-		Language:  display.Language,
-	}, nil
+	return protoutil.ConvertMessageErr(display, func(display *coreagent.TurnDisplay) (*proto.AgentTurnDisplay, error) {
+		input, err := protoValueFromAny(display.Input)
+		if err != nil {
+			return nil, fmt.Errorf("agent turn display input: %w", err)
+		}
+		output, err := protoValueFromAny(display.Output)
+		if err != nil {
+			return nil, fmt.Errorf("agent turn display output: %w", err)
+		}
+		displayErr, err := protoValueFromAny(display.Error)
+		if err != nil {
+			return nil, fmt.Errorf("agent turn display error: %w", err)
+		}
+		return &proto.AgentTurnDisplay{
+			Kind:      display.Kind,
+			Phase:     display.Phase,
+			Text:      display.Text,
+			Label:     display.Label,
+			Ref:       display.Ref,
+			ParentRef: display.ParentRef,
+			Input:     input,
+			Output:    output,
+			Error:     displayErr,
+			Action:    display.Action,
+			Format:    display.Format,
+			Language:  display.Language,
+		}, nil
+	})
 }
 
 func agentSessionToProto(session *coreagent.Session) (*proto.AgentSession, error) {
-	if session == nil {
-		return nil, nil
-	}
-	metadata, err := structFromMap(session.Metadata)
-	if err != nil {
-		return nil, fmt.Errorf("agent session metadata: %w", err)
-	}
-	return &proto.AgentSession{
-		Id:                 session.ID,
-		ProviderName:       session.ProviderName,
-		Model:              session.Model,
-		ClientRef:          session.ClientRef,
-		State:              agentSessionStateToProto(session.State),
-		Metadata:           metadata,
-		CreatedBySubjectId: strings.TrimSpace(session.CreatedBySubjectID),
-		CreatedAt:          timeToProto(session.CreatedAt),
-		UpdatedAt:          timeToProto(session.UpdatedAt),
-		LastTurnAt:         timeToProto(session.LastTurnAt),
-	}, nil
+	return protoutil.ConvertMessageErr(session, func(session *coreagent.Session) (*proto.AgentSession, error) {
+		metadata, err := structFromMap(session.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("agent session metadata: %w", err)
+		}
+		return &proto.AgentSession{
+			Id:                 session.ID,
+			ProviderName:       session.ProviderName,
+			Model:              session.Model,
+			ClientRef:          session.ClientRef,
+			State:              agentSessionStateToProto(session.State),
+			Metadata:           metadata,
+			CreatedBySubjectId: strings.TrimSpace(session.CreatedBySubjectID),
+			CreatedAt:          timeToProto(session.CreatedAt),
+			UpdatedAt:          timeToProto(session.UpdatedAt),
+			LastTurnAt:         timeToProto(session.LastTurnAt),
+		}, nil
+	})
 }
 
 func agentTurnToProto(turn *coreagent.Turn) (*proto.AgentTurn, error) {
-	if turn == nil {
-		return nil, nil
-	}
-	messages, err := agentMessagesToProto(turn.Messages)
-	if err != nil {
-		return nil, fmt.Errorf("agent turn messages: %w", err)
-	}
-	out := &proto.AgentTurn{
-		Id:                 turn.ID,
-		SessionId:          turn.SessionID,
-		ProviderName:       turn.ProviderName,
-		Model:              turn.Model,
-		Status:             agentExecutionStatusToProto(turn.Status),
-		Messages:           messages,
-		StatusMessage:      turn.StatusMessage,
-		CreatedBySubjectId: strings.TrimSpace(turn.CreatedBySubjectID),
-		CreatedAt:          timeToProto(turn.CreatedAt),
-		StartedAt:          timeToProto(turn.StartedAt),
-		CompletedAt:        timeToProto(turn.CompletedAt),
-		ExecutionRef:       turn.ExecutionRef,
-	}
-	if err := setAgentTurnOutputProto(out, turn.Output); err != nil {
-		return nil, fmt.Errorf("agent turn output: %w", err)
-	}
-	return out, nil
+	return protoutil.ConvertMessageErr(turn, func(turn *coreagent.Turn) (*proto.AgentTurn, error) {
+		messages, err := agentMessagesToProto(turn.Messages)
+		if err != nil {
+			return nil, fmt.Errorf("agent turn messages: %w", err)
+		}
+		out := &proto.AgentTurn{
+			Id:                 turn.ID,
+			SessionId:          turn.SessionID,
+			ProviderName:       turn.ProviderName,
+			Model:              turn.Model,
+			Status:             agentExecutionStatusToProto(turn.Status),
+			Messages:           messages,
+			StatusMessage:      turn.StatusMessage,
+			CreatedBySubjectId: strings.TrimSpace(turn.CreatedBySubjectID),
+			CreatedAt:          timeToProto(turn.CreatedAt),
+			StartedAt:          timeToProto(turn.StartedAt),
+			CompletedAt:        timeToProto(turn.CompletedAt),
+			ExecutionRef:       turn.ExecutionRef,
+		}
+		if err := setAgentTurnOutputProto(out, turn.Output); err != nil {
+			return nil, fmt.Errorf("agent turn output: %w", err)
+		}
+		return out, nil
+	})
 }
 
 func turnEventsToProto(values []*coreagent.TurnEvent) []*proto.AgentTurnEvent {
@@ -442,30 +437,29 @@ func agentInteractionStateFromProto(value proto.AgentInteractionState) (coreagen
 }
 
 func agentInteractionFromProto(value *proto.AgentInteraction) (*coreagent.Interaction, error) {
-	if value == nil {
-		return nil, nil
-	}
-	interactionType, err := agentInteractionTypeFromProto(value.GetType())
-	if err != nil {
-		return nil, err
-	}
-	state, err := agentInteractionStateFromProto(value.GetState())
-	if err != nil {
-		return nil, err
-	}
-	return &coreagent.Interaction{
-		ID:         value.GetId(),
-		TurnID:     value.GetTurnId(),
-		SessionID:  value.GetSessionId(),
-		Type:       interactionType,
-		State:      state,
-		Title:      value.GetTitle(),
-		Prompt:     value.GetPrompt(),
-		Request:    mapFromStruct(value.GetRequest()),
-		Resolution: mapFromStruct(value.GetResolution()),
-		CreatedAt:  timeFromProto(value.GetCreatedAt()),
-		ResolvedAt: timeFromProto(value.GetResolvedAt()),
-	}, nil
+	return protoutil.ConvertMessageErr(value, func(value *proto.AgentInteraction) (*coreagent.Interaction, error) {
+		interactionType, err := agentInteractionTypeFromProto(value.GetType())
+		if err != nil {
+			return nil, err
+		}
+		state, err := agentInteractionStateFromProto(value.GetState())
+		if err != nil {
+			return nil, err
+		}
+		return &coreagent.Interaction{
+			ID:         value.GetId(),
+			TurnID:     value.GetTurnId(),
+			SessionID:  value.GetSessionId(),
+			Type:       interactionType,
+			State:      state,
+			Title:      value.GetTitle(),
+			Prompt:     value.GetPrompt(),
+			Request:    mapFromStruct(value.GetRequest()),
+			Resolution: mapFromStruct(value.GetResolution()),
+			CreatedAt:  timeFromProto(value.GetCreatedAt()),
+			ResolvedAt: timeFromProto(value.GetResolvedAt()),
+		}, nil
+	})
 }
 
 func agentInteractionsFromProto(values []*proto.AgentInteraction) ([]*coreagent.Interaction, error) {
@@ -484,30 +478,29 @@ func agentInteractionsFromProto(values []*proto.AgentInteraction) ([]*coreagent.
 }
 
 func agentInteractionToProto(value *coreagent.Interaction) (*proto.AgentInteraction, error) {
-	if value == nil {
-		return nil, nil
-	}
-	request, err := structFromMap(value.Request)
-	if err != nil {
-		return nil, fmt.Errorf("agent interaction request: %w", err)
-	}
-	resolution, err := structFromMap(value.Resolution)
-	if err != nil {
-		return nil, fmt.Errorf("agent interaction resolution: %w", err)
-	}
-	return &proto.AgentInteraction{
-		Id:         value.ID,
-		TurnId:     value.TurnID,
-		SessionId:  value.SessionID,
-		Type:       agentInteractionTypeToProto(value.Type),
-		State:      agentInteractionStateToProto(value.State),
-		Title:      value.Title,
-		Prompt:     value.Prompt,
-		Request:    request,
-		Resolution: resolution,
-		CreatedAt:  timeToProto(value.CreatedAt),
-		ResolvedAt: timeToProto(value.ResolvedAt),
-	}, nil
+	return protoutil.ConvertMessageErr(value, func(value *coreagent.Interaction) (*proto.AgentInteraction, error) {
+		request, err := structFromMap(value.Request)
+		if err != nil {
+			return nil, fmt.Errorf("agent interaction request: %w", err)
+		}
+		resolution, err := structFromMap(value.Resolution)
+		if err != nil {
+			return nil, fmt.Errorf("agent interaction resolution: %w", err)
+		}
+		return &proto.AgentInteraction{
+			Id:         value.ID,
+			TurnId:     value.TurnID,
+			SessionId:  value.SessionID,
+			Type:       agentInteractionTypeToProto(value.Type),
+			State:      agentInteractionStateToProto(value.State),
+			Title:      value.Title,
+			Prompt:     value.Prompt,
+			Request:    request,
+			Resolution: resolution,
+			CreatedAt:  timeToProto(value.CreatedAt),
+			ResolvedAt: timeToProto(value.ResolvedAt),
+		}, nil
+	})
 }
 
 func interactionsToProto(values []*coreagent.Interaction) []*proto.AgentInteraction {

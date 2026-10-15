@@ -13,61 +13,60 @@ import (
 )
 
 func catalogFromProto(src *proto.Catalog) (*catalog.Catalog, error) {
-	if src == nil {
-		return nil, nil
-	}
-	cat := &catalog.Catalog{
-		Name:        src.GetName(),
-		DisplayName: src.GetDisplayName(),
-		Description: src.GetDescription(),
-		IconSVG:     src.GetIconSvg(),
-		Operations:  make([]catalog.CatalogOperation, 0, len(src.GetOperations())),
-	}
-	for _, op := range src.GetOperations() {
-		api, err := apiExposureModeFromProto(op)
-		if err != nil {
+	return protoutil.ConvertMessageErr(src, func(src *proto.Catalog) (*catalog.Catalog, error) {
+		cat := &catalog.Catalog{
+			Name:        src.GetName(),
+			DisplayName: src.GetDisplayName(),
+			Description: src.GetDescription(),
+			IconSVG:     src.GetIconSvg(),
+			Operations:  make([]catalog.CatalogOperation, 0, len(src.GetOperations())),
+		}
+		for _, op := range src.GetOperations() {
+			api, err := apiExposureModeFromProto(op)
+			if err != nil {
+				return nil, err
+			}
+			catOp := catalog.CatalogOperation{
+				ID:             op.GetId(),
+				Method:         op.GetMethod(),
+				Title:          op.GetTitle(),
+				Description:    op.GetDescription(),
+				InputSchema:    jsonRawFromString(op.GetInputSchema()),
+				Response:       responseSpecFromProto(op.GetResponse()),
+				AllowedRoles:   op.GetAllowedRoles(),
+				OutputSchema:   legacyOutputSchemaFromResponse(op.GetResponse()),
+				RequiredScopes: op.GetRequiredScopes(),
+				Tags:           op.GetTags(),
+				ReadOnly:       op.GetReadOnly(),
+				Visible:        op.Visible,
+				API:            api,
+				MCP:            op.Mcp,
+				Transport:      op.GetTransport(),
+			}
+			if ann := op.GetAnnotations(); ann != nil {
+				catOp.Annotations = catalog.CapabilityAnnotations{
+					ReadOnlyHint:    ann.ReadOnlyHint,
+					IdempotentHint:  ann.IdempotentHint,
+					DestructiveHint: ann.DestructiveHint,
+					OpenWorldHint:   ann.OpenWorldHint,
+				}
+			}
+			for _, p := range op.GetParameters() {
+				catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
+					Name:        p.GetName(),
+					Type:        p.GetType(),
+					Description: p.GetDescription(),
+					Required:    p.GetRequired(),
+					Default:     protoutil.ValueToAny(p.GetDefault()),
+				})
+			}
+			cat.Operations = append(cat.Operations, catOp)
+		}
+		if err := cat.Validate(); err != nil {
 			return nil, err
 		}
-		catOp := catalog.CatalogOperation{
-			ID:             op.GetId(),
-			Method:         op.GetMethod(),
-			Title:          op.GetTitle(),
-			Description:    op.GetDescription(),
-			InputSchema:    jsonRawFromString(op.GetInputSchema()),
-			Response:       responseSpecFromProto(op.GetResponse()),
-			AllowedRoles:   op.GetAllowedRoles(),
-			OutputSchema:   legacyOutputSchemaFromResponse(op.GetResponse()),
-			RequiredScopes: op.GetRequiredScopes(),
-			Tags:           op.GetTags(),
-			ReadOnly:       op.GetReadOnly(),
-			Visible:        op.Visible,
-			API:            api,
-			MCP:            op.Mcp,
-			Transport:      op.GetTransport(),
-		}
-		if ann := op.GetAnnotations(); ann != nil {
-			catOp.Annotations = catalog.CapabilityAnnotations{
-				ReadOnlyHint:    ann.ReadOnlyHint,
-				IdempotentHint:  ann.IdempotentHint,
-				DestructiveHint: ann.DestructiveHint,
-				OpenWorldHint:   ann.OpenWorldHint,
-			}
-		}
-		for _, p := range op.GetParameters() {
-			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
-				Name:        p.GetName(),
-				Type:        p.GetType(),
-				Description: p.GetDescription(),
-				Required:    p.GetRequired(),
-				Default:     protoutil.ValueToAny(p.GetDefault()),
-			})
-		}
-		cat.Operations = append(cat.Operations, catOp)
-	}
-	if err := cat.Validate(); err != nil {
-		return nil, err
-	}
-	return cat, nil
+		return cat, nil
+	})
 }
 
 func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
@@ -129,24 +128,23 @@ func catalogToProto(cat *catalog.Catalog) *proto.Catalog {
 }
 
 func apiExposureModeFromProto(op *proto.CatalogOperation) (*catalog.APIExposureMode, error) {
-	if op == nil {
-		return nil, nil
-	}
-	if op.ApiMode != nil {
-		if *op.ApiMode != proto.APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION {
-			return nil, fmt.Errorf("unknown api exposure mode %d for operation %q", *op.ApiMode, op.GetId())
+	return protoutil.ConvertMessageErr(op, func(op *proto.CatalogOperation) (*catalog.APIExposureMode, error) {
+		if op.ApiMode != nil {
+			if *op.ApiMode != proto.APIExposureMode_API_EXPOSURE_MODE_BROWSER_SESSION {
+				return nil, fmt.Errorf("unknown api exposure mode %d for operation %q", *op.ApiMode, op.GetId())
+			}
+			mode := catalog.APIExposureBrowserSession
+			return &mode, nil
 		}
-		mode := catalog.APIExposureBrowserSession
+		if op.Api == nil {
+			return nil, nil
+		}
+		mode := catalog.APIExposurePrivate
+		if *op.Api {
+			mode = catalog.APIExposurePublic
+		}
 		return &mode, nil
-	}
-	if op.Api == nil {
-		return nil, nil
-	}
-	mode := catalog.APIExposurePrivate
-	if *op.Api {
-		mode = catalog.APIExposurePublic
-	}
-	return &mode, nil
+	})
 }
 
 func apiExposureModeToProto(mode *catalog.APIExposureMode) (*bool, *proto.APIExposureMode) {
