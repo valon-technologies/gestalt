@@ -210,9 +210,7 @@ func listRuntimeSessionsRequestFromProto(req *proto.ListRuntimeSessionsRequest) 
 	if pageSize == 0 {
 		pageSize = defaultListRuntimeSessionsPageSize
 	}
-	if pageSize > maxListRuntimeSessionsPageSize {
-		pageSize = maxListRuntimeSessionsPageSize
-	}
+	pageSize = min(pageSize, maxListRuntimeSessionsPageSize)
 	return ListRuntimeSessionsRequest{
 		PageSize:  pageSize,
 		PageToken: pageToken,
