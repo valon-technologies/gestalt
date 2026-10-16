@@ -283,7 +283,7 @@ func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req *proto.
 	if p.listSessionsErr != nil {
 		return nil, p.listSessionsErr
 	}
-	state, err := agentSessionStateFromProto(req.GetState())
+	state, err := agentwire.SessionStateFromProto(req.GetState())
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +323,7 @@ func (p *routeCountingAgentProvider) UpdateSession(_ context.Context, req *proto
 	if req.GetClientRef() != "" {
 		session.ClientRef = req.GetClientRef()
 	}
-	state, err := agentSessionStateFromProto(req.GetState())
+	state, err := agentwire.SessionStateFromProto(req.GetState())
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func (p *routeCountingAgentProvider) ListTurns(_ context.Context, req *proto.Lis
 	if p.listTurnsErr != nil {
 		return nil, p.listTurnsErr
 	}
-	statusFilter, err := agentExecutionStatusFromProto(req.GetStatus())
+	statusFilter, err := agentwire.ExecutionStatusFromProto(req.GetStatus())
 	if err != nil {
 		return nil, err
 	}
