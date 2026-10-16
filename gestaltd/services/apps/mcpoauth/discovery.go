@@ -148,14 +148,14 @@ func resolveMetadata(ctx context.Context, client *http.Client, mcpURL string, re
 	// RFC 9728 §2: the metadata's resource value is the canonical resource
 	// URI. Servers that embed endpoints directly omit it; the MCP URL is the
 	// canonical URI then.
-	if v, ok := resourceMeta["resource"].(string); ok && v != "" {
+	if v, _ := resourceMeta["resource"].(string); v != "" {
 		md.Resource = v
 	} else {
 		md.Resource = mcpURL
 	}
 
 	// Try RFC 9728 indirection: authorization_servers -> AS metadata
-	if servers, ok := resourceMeta["authorization_servers"].([]any); ok && len(servers) > 0 {
+	if servers, _ := resourceMeta["authorization_servers"].([]any); len(servers) > 0 {
 		serverURL, _ := servers[0].(string)
 		if serverURL != "" {
 			md.AuthServerURL = serverURL
@@ -163,26 +163,25 @@ func resolveMetadata(ctx context.Context, client *http.Client, mcpURL string, re
 			if err != nil {
 				return nil, fmt.Errorf("fetching AS metadata from %s: %w", serverURL, err)
 			}
-			populateFromASMetadata(md, asMeta)
+			md.AuthorizationEndpoint, _ = asMeta["authorization_endpoint"].(string)
+			md.TokenEndpoint, _ = asMeta["token_endpoint"].(string)
+			md.RegistrationEndpoint, _ = asMeta["registration_endpoint"].(string)
+			md.ScopesSupported = stringSlice(asMeta, "scopes_supported")
+			md.CodeChallengeMethodsSupported = stringSlice(asMeta, "code_challenge_methods_supported")
+			md.TokenEndpointAuthMethods = stringSlice(asMeta, "token_endpoint_auth_methods_supported")
 		}
 	}
 
 	// Fallback: resource metadata may embed endpoints directly when
 	// authorization_servers is absent.
 	if md.AuthorizationEndpoint == "" {
-		if v, ok := resourceMeta["authorization_endpoint"].(string); ok {
-			md.AuthorizationEndpoint = v
-		}
+		md.AuthorizationEndpoint, _ = resourceMeta["authorization_endpoint"].(string)
 	}
 	if md.TokenEndpoint == "" {
-		if v, ok := resourceMeta["token_endpoint"].(string); ok {
-			md.TokenEndpoint = v
-		}
+		md.TokenEndpoint, _ = resourceMeta["token_endpoint"].(string)
 	}
 	if md.RegistrationEndpoint == "" {
-		if v, ok := resourceMeta["registration_endpoint"].(string); ok {
-			md.RegistrationEndpoint = v
-		}
+		md.RegistrationEndpoint, _ = resourceMeta["registration_endpoint"].(string)
 	}
 	if len(md.ScopesSupported) == 0 {
 		md.ScopesSupported = stringSlice(resourceMeta, "scopes_supported")
@@ -221,21 +220,6 @@ func fetchASMetadata(ctx context.Context, client *http.Client, serverURL string)
 		Path:   "/.well-known/oauth-authorization-server" + u.Path,
 	}
 	return fetchJSON(ctx, client, wellKnown.String())
-}
-
-func populateFromASMetadata(md *DiscoveredMetadata, asMeta map[string]any) {
-	if v, ok := asMeta["authorization_endpoint"].(string); ok {
-		md.AuthorizationEndpoint = v
-	}
-	if v, ok := asMeta["token_endpoint"].(string); ok {
-		md.TokenEndpoint = v
-	}
-	if v, ok := asMeta["registration_endpoint"].(string); ok {
-		md.RegistrationEndpoint = v
-	}
-	md.ScopesSupported = stringSlice(asMeta, "scopes_supported")
-	md.CodeChallengeMethodsSupported = stringSlice(asMeta, "code_challenge_methods_supported")
-	md.TokenEndpointAuthMethods = stringSlice(asMeta, "token_endpoint_auth_methods_supported")
 }
 
 func fetchJSON(ctx context.Context, client *http.Client, rawURL string) (map[string]any, error) {
