@@ -1,6 +1,7 @@
 package egress
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"strings"
@@ -31,10 +32,7 @@ func WithOutboundHeaderOverrides(ctx context.Context, headers map[string]string)
 // OutboundHeaderOverridesFromContext returns outbound header overrides for the
 // current invocation, if any.
 func OutboundHeaderOverridesFromContext(ctx context.Context) map[string]string {
-	if ctx == nil {
-		return nil
-	}
-	overrides, _ := ctx.Value(outboundHeaderOverridesCtxKey{}).(map[string]string)
+	overrides, _ := cmp.Or(ctx, context.Background()).Value(outboundHeaderOverridesCtxKey{}).(map[string]string)
 	return overrides
 }
 

@@ -1,6 +1,7 @@
 package invocation
 
 import (
+	"cmp"
 	"context"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -24,10 +25,7 @@ func WithCatalogOperation(ctx context.Context, provider string, op catalog.Catal
 }
 
 func CatalogOperationFromContext(ctx context.Context, provider, operation string) (catalog.CatalogOperation, bool) {
-	if ctx == nil {
-		return catalog.CatalogOperation{}, false
-	}
-	value, ok := ctx.Value(catalogOperationContextKey{}).(catalogOperationContextValue)
+	value, ok := cmp.Or(ctx, context.Background()).Value(catalogOperationContextKey{}).(catalogOperationContextValue)
 	if !ok || value.Provider != provider || value.Operation.ID != operation {
 		return catalog.CatalogOperation{}, false
 	}

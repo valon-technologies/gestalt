@@ -1,6 +1,7 @@
 package invocation
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -40,10 +41,7 @@ func WithInvokeRequestHeaders(ctx context.Context, headers map[string]string) co
 // InvokeRequestHeadersFromContext returns outbound header overrides requested
 // for the current invocation, if any.
 func InvokeRequestHeadersFromContext(ctx context.Context) map[string]string {
-	if ctx == nil {
-		return nil
-	}
-	headers, _ := ctx.Value(invokeRequestHeadersCtxKey{}).(map[string]string)
+	headers, _ := cmp.Or(ctx, context.Background()).Value(invokeRequestHeadersCtxKey{}).(map[string]string)
 	return headers
 }
 
