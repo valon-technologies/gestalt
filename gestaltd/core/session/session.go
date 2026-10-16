@@ -33,7 +33,8 @@ func IssueToken(identity *core.UserIdentity, secret []byte, ttl time.Duration) (
 }
 
 func ValidateToken(tokenStr string, secret []byte) (*core.UserIdentity, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &claims{}, func(t *jwt.Token) (any, error) {
+	c := &claims{}
+	_, err := jwt.ParseWithClaims(tokenStr, c, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -44,11 +45,6 @@ func ValidateToken(tokenStr string, secret []byte) (*core.UserIdentity, error) {
 			return nil, ErrNotJWT
 		}
 		return nil, err
-	}
-
-	c, ok := token.Claims.(*claims)
-	if !ok {
-		return nil, errors.New("invalid token claims")
 	}
 
 	return &core.UserIdentity{
