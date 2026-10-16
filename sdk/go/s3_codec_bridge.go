@@ -13,20 +13,12 @@ func objectMetaToProto(meta ObjectMeta) *proto.S3ObjectMeta {
 	return s3.ObjectMetaToProto(meta)
 }
 
-func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
-	return s3.ObjectMetaFromProto(meta)
-}
-
 func readRequestFromProto(req *proto.ReadObjectRequest) ReadRequest {
 	return s3.ReadRequestFromProto(req)
 }
 
 func writeRequestFromProto(open *proto.WriteObjectOpen) WriteRequest {
 	return s3.WriteRequestFromProto(open)
-}
-
-func listPageFromProto(resp *proto.ListObjectsResponse) ListPage {
-	return s3.ListPageFromProto(resp)
 }
 
 func listPageToProto(page ListPage) *proto.ListObjectsResponse {
@@ -39,12 +31,4 @@ func presignRequestFromProto(req *proto.PresignObjectRequest) PresignRequest {
 
 func presignResultToProto(result PresignResult) *proto.PresignObjectResponse {
 	return s3.PresignResultToProto(result)
-}
-
-func presignResultFromProto(resp *proto.PresignObjectResponse, requested PresignMethod) PresignResult {
-	return s3.PresignResultFromProto(resp, requested)
-}
-
-func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, requested PresignMethod) PresignResult {
-	return s3.PresignResultFromObjectAccessURLProto(resp, requested)
 }

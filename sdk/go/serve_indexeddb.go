@@ -375,24 +375,6 @@ func objectStoreOptionsFromProto(schema *proto.ObjectStoreSchema) ObjectStoreOpt
 	return out
 }
 
-func objectStoreOptionsToProto(schema ObjectStoreOptions) *proto.ObjectStoreSchema {
-	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
-	for i, idx := range schema.Indexes {
-		indexes[i] = &proto.IndexSchema{Name: idx.Name, KeyPath: idx.KeyPath, Unique: idx.Unique}
-	}
-	columns := make([]*proto.ColumnDef, len(schema.Columns))
-	for i, col := range schema.Columns {
-		columns[i] = &proto.ColumnDef{
-			Name:       col.Name,
-			Type:       int32(col.Type),
-			PrimaryKey: col.PrimaryKey,
-			NotNull:    col.NotNull,
-			Unique:     col.Unique,
-		}
-	}
-	return &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns}
-}
-
 func objectStoreRequestFromProto(req *proto.ObjectStoreRequest) IndexedDBObjectStoreRequest {
 	return IndexedDBObjectStoreRequest{Store: req.GetStore(), ID: req.GetId()}
 }
