@@ -105,9 +105,6 @@ func DecodeFailedIndex(data []byte) (*FailedIndex, error) {
 }
 
 func validatePendingIndex(index *PendingIndex) error {
-	if index == nil {
-		return fmt.Errorf("pending index is required")
-	}
 	if index.SchemaVersion != PendingIndexSchemaVersion {
 		return fmt.Errorf("unsupported pending index schema version %d", index.SchemaVersion)
 	}
@@ -126,9 +123,6 @@ func validatePendingIndex(index *PendingIndex) error {
 }
 
 func validateFailedIndex(index *FailedIndex) error {
-	if index == nil {
-		return fmt.Errorf("failed index is required")
-	}
 	if index.SchemaVersion != FailedIndexSchemaVersion {
 		return fmt.Errorf("unsupported failed index schema version %d", index.SchemaVersion)
 	}
