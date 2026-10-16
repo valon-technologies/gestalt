@@ -62,12 +62,12 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		return set, nil
 	}
 
-	messages, enums := reachable(idx, services)
+	messages, enums := emit.Reachable(idx.messages, idx.enums, services)
 	idx.taken = takenNames(messages, enums)
 	if err := set.Add("rpc_support.py", []byte(providerSupportFile)); err != nil {
 		return nil, err
 	}
-	if hasJsonResult(services) {
+	if emit.HasJSONResult(services) {
 		if err := set.Add("invoke_support.py", []byte(invokeSupportFile)); err != nil {
 			return nil, err
 		}
@@ -108,19 +108,6 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	return set, nil
 }
 
-// hasJsonResult reports whether any method carries the json_result
-// annotation, which pulls in the envelope decode runtime.
-func hasJsonResult(services []*model.Service) bool {
-	for _, svc := range services {
-		for _, m := range svc.Methods {
-			if m.JsonResult != nil {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // takenNames collects every generated top-level type name, so oneof variant
 // classes can avoid colliding with them.
 func takenNames(messages []*model.Message, enums []*model.Enum) map[string]bool {
@@ -136,60 +123,6 @@ func takenNames(messages []*model.Message, enums []*model.Enum) map[string]bool 
 		taken[enumValuesClassName(e)] = true
 	}
 	return taken
-}
-
-// reachable collects every message and enum referenced transitively from the
-// selected services' method inputs and outputs.
-func reachable(idx *index, services []*model.Service) ([]*model.Message, []*model.Enum) {
-	seenMessages := map[string]bool{}
-	seenEnums := map[string]bool{}
-	var visit func(fullName string)
-	visitRef := func(ref *model.TypeRef) {
-		switch ref.Kind {
-		case model.KindMessage:
-			visit(ref.Message)
-		case model.KindEnum:
-			seenEnums[ref.Enum] = true
-		}
-	}
-	visit = func(fullName string) {
-		if seenMessages[fullName] {
-			return
-		}
-		seenMessages[fullName] = true
-		for _, f := range idx.messages[fullName].Fields {
-			switch f.Kind {
-			case model.KindRepeated:
-				visitRef(f.Elem)
-			case model.KindMap:
-				visitRef(f.MapValue)
-			default:
-				visitRef(fieldRef(f))
-			}
-		}
-	}
-	for _, svc := range services {
-		for _, method := range svc.Methods {
-			if method.Input != nil {
-				visit(method.Input.FullName)
-			}
-			if method.Output != nil {
-				visit(method.Output.FullName)
-			}
-		}
-	}
-
-	var messages []*model.Message
-	for fullName := range seenMessages {
-		messages = append(messages, idx.messages[fullName])
-	}
-	sort.Slice(messages, func(i, j int) bool { return messages[i].FullName < messages[j].FullName })
-	var enums []*model.Enum
-	for fullName := range seenEnums {
-		enums = append(enums, idx.enums[fullName])
-	}
-	sort.Slice(enums, func(i, j int) bool { return enums[i].FullName < enums[j].FullName })
-	return messages, enums
 }
 
 // groupFiles assigns services, messages, and enums to generated files by

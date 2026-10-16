@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
@@ -136,7 +137,7 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("generated/rpc_support.rs", []byte(publicRPCSupportReexport)); err != nil {
 		return nil, err
 	}
-	if hasPublicJsonResult(plan.Filtered.Services) {
+	if emit.HasJSONResult(plan.Filtered.Services) {
 		if err := set.Add("generated/invoke_support.rs", []byte(publicInvokeSupportReexport)); err != nil {
 			return nil, err
 		}
@@ -203,7 +204,7 @@ func EmitPublic(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 
 	modules := []string{"metadata", "rpc_support", "unary_transport", "app_client"}
-	if hasPublicJsonResult(plan.Filtered.Services) {
+	if emit.HasJSONResult(plan.Filtered.Services) {
 		modules = append(modules, "invoke_support")
 	}
 	for _, g := range groupFiles(plan.Filtered.Services, reachableMessages, enums) {
@@ -249,17 +250,6 @@ func renderPublicCodecIndex(modules []string) string {
 		fmt.Fprintf(&b, "pub(crate) mod %s;\n", m)
 	}
 	return b.String()
-}
-
-func hasPublicJsonResult(services []*model.Service) bool {
-	for _, svc := range services {
-		for _, m := range svc.Methods {
-			if m.JsonResult != nil {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func markConversionNeeds(idx *index, services []*model.Service) {

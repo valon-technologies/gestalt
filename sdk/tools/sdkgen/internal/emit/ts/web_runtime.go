@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/fileset"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
@@ -27,7 +28,7 @@ func EmitWebRuntime(plan *publicsurface.EmitPlan) (*fileset.FileSet, error) {
 	if err := set.Add("rpc_support.ts", []byte(supportFile)); err != nil {
 		return nil, err
 	}
-	if hasJsonResult(plan.Filtered.Services) {
+	if emit.HasJSONResult(plan.Filtered.Services) {
 		if err := set.Add("invoke_support.ts", []byte(invokeSupportFile)); err != nil {
 			return nil, err
 		}
