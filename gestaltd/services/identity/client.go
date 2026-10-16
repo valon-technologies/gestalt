@@ -7,6 +7,7 @@ import (
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -250,121 +251,111 @@ func (p *remoteIdentityProvider) outgoingIdentityCallContext(ctx context.Context
 }
 
 func authorizeRequestToProto(req *core.AuthorizeRequest) *proto.AuthorizeRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.AuthorizeRequest{
-		ResponseType: req.ResponseType,
-		ClientId:     req.ClientID,
-		RedirectUri:  req.RedirectURI,
-		Scope:        req.Scope,
-		State:        req.State,
-	}
+	return protoutil.ConvertMessage(req, func(req *core.AuthorizeRequest) *proto.AuthorizeRequest {
+		return &proto.AuthorizeRequest{
+			ResponseType: req.ResponseType,
+			ClientId:     req.ClientID,
+			RedirectUri:  req.RedirectURI,
+			Scope:        req.Scope,
+			State:        req.State,
+		}
+	})
 }
 
 func authorizeResponseFromProto(resp *proto.AuthorizeResponse) *core.AuthorizeResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.AuthorizeResponse{RedirectURI: resp.GetRedirectUri()}
+	return protoutil.ConvertMessage(resp, func(resp *proto.AuthorizeResponse) *core.AuthorizeResponse {
+		return &core.AuthorizeResponse{RedirectURI: resp.GetRedirectUri()}
+	})
 }
 
 func tokenRequestToProto(req *core.TokenRequest) *proto.TokenRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.TokenRequest{
-		GrantType:        req.GrantType,
-		Code:             req.Code,
-		RedirectUri:      req.RedirectURI,
-		ClientId:         req.ClientID,
-		State:            req.State,
-		Scope:            req.Scope,
-		SubjectToken:     req.SubjectToken,
-		SubjectTokenType: req.SubjectTokenType,
-		ExpiresIn:        req.ExpiresIn,
-		Name:             req.Name,
-		GrantSubject:     req.GrantSubject,
-	}
+	return protoutil.ConvertMessage(req, func(req *core.TokenRequest) *proto.TokenRequest {
+		return &proto.TokenRequest{
+			GrantType:        req.GrantType,
+			Code:             req.Code,
+			RedirectUri:      req.RedirectURI,
+			ClientId:         req.ClientID,
+			State:            req.State,
+			Scope:            req.Scope,
+			SubjectToken:     req.SubjectToken,
+			SubjectTokenType: req.SubjectTokenType,
+			ExpiresIn:        req.ExpiresIn,
+			Name:             req.Name,
+			GrantSubject:     req.GrantSubject,
+		}
+	})
 }
 
 func tokenResponseFromProto(resp *proto.TokenResponse) *core.TokenResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.TokenResponse{
-		AccessToken:  resp.GetAccessToken(),
-		TokenType:    resp.GetTokenType(),
-		ExpiresIn:    int(resp.GetExpiresIn()),
-		RefreshToken: resp.GetRefreshToken(),
-		Scope:        resp.GetScope(),
-		GrantID:      resp.GetGrantId(),
-	}
+	return protoutil.ConvertMessage(resp, func(resp *proto.TokenResponse) *core.TokenResponse {
+		return &core.TokenResponse{
+			AccessToken:  resp.GetAccessToken(),
+			TokenType:    resp.GetTokenType(),
+			ExpiresIn:    int(resp.GetExpiresIn()),
+			RefreshToken: resp.GetRefreshToken(),
+			Scope:        resp.GetScope(),
+			GrantID:      resp.GetGrantId(),
+		}
+	})
 }
 
 func introspectRequestToProto(req *core.IntrospectRequest) *proto.IntrospectRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.IntrospectRequest{
-		Token:         req.Token,
-		TokenTypeHint: req.TokenTypeHint,
-	}
+	return protoutil.ConvertMessage(req, func(req *core.IntrospectRequest) *proto.IntrospectRequest {
+		return &proto.IntrospectRequest{
+			Token:         req.Token,
+			TokenTypeHint: req.TokenTypeHint,
+		}
+	})
 }
 
 func introspectResponseFromProto(resp *proto.IntrospectResponse) *core.IntrospectResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.IntrospectResponse{
-		Active:   resp.GetActive(),
-		Subject:  resp.GetSubject(),
-		Scope:    resp.GetScope(),
-		ClientID: resp.GetClientId(),
-		Audience: append([]string(nil), resp.GetAudience()...),
-	}
+	return protoutil.ConvertMessage(resp, func(resp *proto.IntrospectResponse) *core.IntrospectResponse {
+		return &core.IntrospectResponse{
+			Active:   resp.GetActive(),
+			Subject:  resp.GetSubject(),
+			Scope:    resp.GetScope(),
+			ClientID: resp.GetClientId(),
+			Audience: append([]string(nil), resp.GetAudience()...),
+		}
+	})
 }
 
 func listGrantsResponseFromProto(resp *proto.ListGrantsResponse) *core.ListGrantsResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.ListGrantsResponse{GrantIDs: append([]string(nil), resp.GetGrantIds()...)}
+	return protoutil.ConvertMessage(resp, func(resp *proto.ListGrantsResponse) *core.ListGrantsResponse {
+		return &core.ListGrantsResponse{GrantIDs: append([]string(nil), resp.GetGrantIds()...)}
+	})
 }
 
 func getGrantRequestToProto(req *core.GetGrantRequest) *proto.GetGrantRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.GetGrantRequest{GrantId: req.GrantID}
+	return protoutil.ConvertMessage(req, func(req *core.GetGrantRequest) *proto.GetGrantRequest {
+		return &proto.GetGrantRequest{GrantId: req.GrantID}
+	})
 }
 
 func getGrantResponseFromProto(resp *proto.GetGrantResponse) *core.GetGrantResponse {
-	if resp == nil {
-		return nil
-	}
-	out := &core.GetGrantResponse{
-		CreatedAt: resp.GetCreatedAt(),
-		ExpiresAt: resp.GetExpiresAt(),
-		Name:      resp.GetName(),
-	}
-	for _, scope := range resp.GetScopes() {
-		if scope == nil {
-			continue
+	return protoutil.ConvertMessage(resp, func(resp *proto.GetGrantResponse) *core.GetGrantResponse {
+		out := &core.GetGrantResponse{
+			CreatedAt: resp.GetCreatedAt(),
+			ExpiresAt: resp.GetExpiresAt(),
+			Name:      resp.GetName(),
 		}
-		out.Scopes = append(out.Scopes, core.GrantScope{
-			Scope:    scope.GetScope(),
-			Resource: append([]string(nil), scope.GetResource()...),
-		})
-	}
-	return out
+		for _, scope := range resp.GetScopes() {
+			if scope == nil {
+				continue
+			}
+			out.Scopes = append(out.Scopes, core.GrantScope{
+				Scope:    scope.GetScope(),
+				Resource: append([]string(nil), scope.GetResource()...),
+			})
+		}
+		return out
+	})
 }
 
 func revokeGrantRequestToProto(req *core.RevokeGrantRequest) *proto.RevokeGrantRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.RevokeGrantRequest{GrantId: req.GrantID}
+	return protoutil.ConvertMessage(req, func(req *core.RevokeGrantRequest) *proto.RevokeGrantRequest {
+		return &proto.RevokeGrantRequest{GrantId: req.GrantID}
+	})
 }
 
 func userInfoRequestToProto(req *core.UserInfoRequest) *proto.UserInfoRequest {
@@ -372,14 +363,13 @@ func userInfoRequestToProto(req *core.UserInfoRequest) *proto.UserInfoRequest {
 }
 
 func userInfoResponseFromProto(resp *proto.UserInfoResponse) *core.UserInfoResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.UserInfoResponse{
-		SubjectID: resp.GetSubjectId(),
-		Email:     resp.GetEmail(),
-		Name:      resp.GetName(),
-	}
+	return protoutil.ConvertMessage(resp, func(resp *proto.UserInfoResponse) *core.UserInfoResponse {
+		return &core.UserInfoResponse{
+			SubjectID: resp.GetSubjectId(),
+			Email:     resp.GetEmail(),
+			Name:      resp.GetName(),
+		}
+	})
 }
 
 // WithCallerBearerToken attaches the caller bearer token for caller-relative RPCs

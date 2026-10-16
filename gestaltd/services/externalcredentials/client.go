@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -267,152 +268,144 @@ func (r *remoteExternalCredentialProvider) listCredentials(ctx context.Context, 
 }
 
 func externalCredentialToProto(credential *core.ExternalCredential) *proto.ExternalCredential {
-	if credential == nil {
-		return nil
-	}
-	out := &proto.ExternalCredential{
-		Id:           credential.ID,
-		Subject:      strings.TrimSpace(credential.Subject),
-		Audience:     strings.TrimSpace(credential.Audience),
-		Qualifier:    strings.TrimSpace(credential.Qualifier),
-		AccountKey:   strings.TrimSpace(credential.AccountKey),
-		MetadataJson: credential.MetadataJSON,
-		CreatedAt:    timeToProto(nonZeroTimePtr(credential.CreatedAt)),
-		UpdatedAt:    timeToProto(nonZeroTimePtr(credential.UpdatedAt)),
-	}
-	switch {
-	case credential.Grant != nil:
-		out.Credential = &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{
-			AccessToken:       credential.Grant.AccessToken,
-			RefreshToken:      credential.Grant.RefreshToken,
-			Scope:             credential.Grant.Scope,
-			ExpiresAt:         timeToProto(credential.Grant.ExpiresAt),
-			LastRefreshedAt:   timeToProto(credential.Grant.LastRefreshedAt),
-			RefreshErrorCount: int32(credential.Grant.RefreshErrorCount),
-		}}
-	case credential.Client != nil:
-		out.Credential = &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
-			ClientId:              credential.Client.ClientID,
-			ClientSecret:          credential.Client.ClientSecret,
-			ClientSecretExpiresAt: timeToProto(credential.Client.ClientSecretExpiresAt),
-		}}
-	case credential.Opaque != nil:
-		out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
-			Fields: cloneStringMap(credential.Opaque.Fields),
-		}}
-	}
-	return out
+	return protoutil.ConvertMessage(credential, func(credential *core.ExternalCredential) *proto.ExternalCredential {
+		out := &proto.ExternalCredential{
+			Id:           credential.ID,
+			Subject:      strings.TrimSpace(credential.Subject),
+			Audience:     strings.TrimSpace(credential.Audience),
+			Qualifier:    strings.TrimSpace(credential.Qualifier),
+			AccountKey:   strings.TrimSpace(credential.AccountKey),
+			MetadataJson: credential.MetadataJSON,
+			CreatedAt:    timeToProto(nonZeroTimePtr(credential.CreatedAt)),
+			UpdatedAt:    timeToProto(nonZeroTimePtr(credential.UpdatedAt)),
+		}
+		switch {
+		case credential.Grant != nil:
+			out.Credential = &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{
+				AccessToken:       credential.Grant.AccessToken,
+				RefreshToken:      credential.Grant.RefreshToken,
+				Scope:             credential.Grant.Scope,
+				ExpiresAt:         timeToProto(credential.Grant.ExpiresAt),
+				LastRefreshedAt:   timeToProto(credential.Grant.LastRefreshedAt),
+				RefreshErrorCount: int32(credential.Grant.RefreshErrorCount),
+			}}
+		case credential.Client != nil:
+			out.Credential = &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
+				ClientId:              credential.Client.ClientID,
+				ClientSecret:          credential.Client.ClientSecret,
+				ClientSecretExpiresAt: timeToProto(credential.Client.ClientSecretExpiresAt),
+			}}
+		case credential.Opaque != nil:
+			out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
+				Fields: cloneStringMap(credential.Opaque.Fields),
+			}}
+		}
+		return out
+	})
 }
 
 func validateCredentialConfigToProto(req *core.ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.ValidateExternalCredentialConfigRequest{
-		Provider:         strings.TrimSpace(req.Provider),
-		Connection:       strings.TrimSpace(req.Connection),
-		ConnectionId:     strings.TrimSpace(req.ConnectionID),
-		Mode:             string(core.NormalizeConnectionMode(req.Mode)),
-		Auth:             externalCredentialAuthConfigToProto(req.Auth),
-		ConnectionParams: cloneStringMap(req.ConnectionParams),
-	}
+	return protoutil.ConvertMessage(req, func(req *core.ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
+		return &proto.ValidateExternalCredentialConfigRequest{
+			Provider:         strings.TrimSpace(req.Provider),
+			Connection:       strings.TrimSpace(req.Connection),
+			ConnectionId:     strings.TrimSpace(req.ConnectionID),
+			Mode:             string(core.NormalizeConnectionMode(req.Mode)),
+			Auth:             externalCredentialAuthConfigToProto(req.Auth),
+			ConnectionParams: cloneStringMap(req.ConnectionParams),
+		}
+	})
 }
 
 func resolveCredentialRequestToProto(req *core.ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.ResolveExternalCredentialRequest{
-		Provider:            strings.TrimSpace(req.Provider),
-		Connection:          strings.TrimSpace(req.Connection),
-		ConnectionId:        strings.TrimSpace(req.ConnectionID),
-		Mode:                string(core.NormalizeConnectionMode(req.Mode)),
-		CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
-		ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
-		Instance:            strings.TrimSpace(req.Instance),
-		Auth:                externalCredentialAuthConfigToProto(req.Auth),
-		ConnectionParams:    cloneStringMap(req.ConnectionParams),
-	}
+	return protoutil.ConvertMessage(req, func(req *core.ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
+		return &proto.ResolveExternalCredentialRequest{
+			Provider:            strings.TrimSpace(req.Provider),
+			Connection:          strings.TrimSpace(req.Connection),
+			ConnectionId:        strings.TrimSpace(req.ConnectionID),
+			Mode:                string(core.NormalizeConnectionMode(req.Mode)),
+			CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
+			ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
+			Instance:            strings.TrimSpace(req.Instance),
+			Auth:                externalCredentialAuthConfigToProto(req.Auth),
+			ConnectionParams:    cloneStringMap(req.ConnectionParams),
+		}
+	})
 }
 
 func resolveCredentialResponseFromProto(resp *proto.ResolveExternalCredentialResponse) *core.ResolveExternalCredentialResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.ResolveExternalCredentialResponse{
-		Token:        resp.GetToken(),
-		ExpiresAt:    timeFromProto(resp.GetExpiresAt()),
-		MetadataJSON: resp.GetMetadataJson(),
-		Params:       cloneStringMap(resp.GetParams()),
-		Credential:   externalCredentialFromProto(resp.GetCredential()),
-	}
+	return protoutil.ConvertMessage(resp, func(resp *proto.ResolveExternalCredentialResponse) *core.ResolveExternalCredentialResponse {
+		return &core.ResolveExternalCredentialResponse{
+			Token:        resp.GetToken(),
+			ExpiresAt:    timeFromProto(resp.GetExpiresAt()),
+			MetadataJSON: resp.GetMetadataJson(),
+			Params:       cloneStringMap(resp.GetParams()),
+			Credential:   externalCredentialFromProto(resp.GetCredential()),
+		}
+	})
 }
 
 func exchangeCredentialRequestToProto(req *core.ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
-	if req == nil {
-		return nil
-	}
-	return &proto.ExchangeExternalCredentialRequest{
-		Provider:            strings.TrimSpace(req.Provider),
-		Connection:          strings.TrimSpace(req.Connection),
-		ConnectionId:        strings.TrimSpace(req.ConnectionID),
-		CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
-		ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
-		Instance:            strings.TrimSpace(req.Instance),
-		Auth:                externalCredentialAuthConfigToProto(req.Auth),
-		CredentialJson:      req.CredentialJSON,
-		ConnectionParams:    cloneStringMap(req.ConnectionParams),
-	}
+	return protoutil.ConvertMessage(req, func(req *core.ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
+		return &proto.ExchangeExternalCredentialRequest{
+			Provider:            strings.TrimSpace(req.Provider),
+			Connection:          strings.TrimSpace(req.Connection),
+			ConnectionId:        strings.TrimSpace(req.ConnectionID),
+			CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
+			ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
+			Instance:            strings.TrimSpace(req.Instance),
+			Auth:                externalCredentialAuthConfigToProto(req.Auth),
+			CredentialJson:      req.CredentialJSON,
+			ConnectionParams:    cloneStringMap(req.ConnectionParams),
+		}
+	})
 }
 
 func exchangeCredentialResponseFromProto(resp *proto.ExchangeExternalCredentialResponse) *core.ExchangeExternalCredentialResponse {
-	if resp == nil {
-		return nil
-	}
-	return &core.ExchangeExternalCredentialResponse{
-		TokenResponse: externalCredentialTokenResponseFromProto(resp.GetTokenResponse()),
-	}
+	return protoutil.ConvertMessage(resp, func(resp *proto.ExchangeExternalCredentialResponse) *core.ExchangeExternalCredentialResponse {
+		return &core.ExchangeExternalCredentialResponse{
+			TokenResponse: externalCredentialTokenResponseFromProto(resp.GetTokenResponse()),
+		}
+	})
 }
 
 func externalCredentialTokenResponseToProto(resp *core.ExternalCredentialTokenResponse) *proto.ExternalCredentialTokenResponse {
-	if resp == nil {
-		return nil
-	}
-	extraJSON := ""
-	if resp.Extra != nil {
-		if data, err := json.Marshal(resp.Extra); err == nil {
-			extraJSON = string(data)
+	return protoutil.ConvertMessage(resp, func(resp *core.ExternalCredentialTokenResponse) *proto.ExternalCredentialTokenResponse {
+		extraJSON := ""
+		if resp.Extra != nil {
+			if data, err := json.Marshal(resp.Extra); err == nil {
+				extraJSON = string(data)
+			}
 		}
-	}
-	return &proto.ExternalCredentialTokenResponse{
-		AccessToken:   resp.AccessToken,
-		RefreshToken:  resp.RefreshToken,
-		RefreshSource: resp.RefreshSource,
-		ExpiresIn:     int32(resp.ExpiresIn),
-		TokenType:     resp.TokenType,
-		ExtraJson:     extraJSON,
-	}
+		return &proto.ExternalCredentialTokenResponse{
+			AccessToken:   resp.AccessToken,
+			RefreshToken:  resp.RefreshToken,
+			RefreshSource: resp.RefreshSource,
+			ExpiresIn:     int32(resp.ExpiresIn),
+			TokenType:     resp.TokenType,
+			ExtraJson:     extraJSON,
+		}
+	})
 }
 
 func externalCredentialTokenResponseFromProto(resp *proto.ExternalCredentialTokenResponse) *core.ExternalCredentialTokenResponse {
-	if resp == nil {
-		return nil
-	}
-	extra := map[string]any(nil)
-	if resp.GetExtraJson() != "" {
-		var decoded map[string]any
-		if err := json.Unmarshal([]byte(resp.GetExtraJson()), &decoded); err == nil {
-			extra = decoded
+	return protoutil.ConvertMessage(resp, func(resp *proto.ExternalCredentialTokenResponse) *core.ExternalCredentialTokenResponse {
+		extra := map[string]any(nil)
+		if resp.GetExtraJson() != "" {
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(resp.GetExtraJson()), &decoded); err == nil {
+				extra = decoded
+			}
 		}
-	}
-	return &core.ExternalCredentialTokenResponse{
-		AccessToken:   resp.GetAccessToken(),
-		RefreshToken:  resp.GetRefreshToken(),
-		RefreshSource: resp.GetRefreshSource(),
-		ExpiresIn:     int(resp.GetExpiresIn()),
-		TokenType:     resp.GetTokenType(),
-		Extra:         extra,
-	}
+		return &core.ExternalCredentialTokenResponse{
+			AccessToken:   resp.GetAccessToken(),
+			RefreshToken:  resp.GetRefreshToken(),
+			RefreshSource: resp.GetRefreshSource(),
+			ExpiresIn:     int(resp.GetExpiresIn()),
+			TokenType:     resp.GetTokenType(),
+			Extra:         extra,
+		}
+	})
 }
 
 func externalCredentialAuthConfigToProto(auth core.ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
@@ -501,41 +494,40 @@ func cloneStringMap(in map[string]string) map[string]string {
 }
 
 func externalCredentialFromProto(credential *proto.ExternalCredential) *core.ExternalCredential {
-	if credential == nil {
-		return nil
-	}
-	out := &core.ExternalCredential{
-		ID:           strings.TrimSpace(credential.GetId()),
-		Subject:      strings.TrimSpace(credential.GetSubject()),
-		Audience:     strings.TrimSpace(credential.GetAudience()),
-		Qualifier:    strings.TrimSpace(credential.GetQualifier()),
-		AccountKey:   strings.TrimSpace(credential.GetAccountKey()),
-		MetadataJSON: credential.GetMetadataJson(),
-		CreatedAt:    derefTime(timeFromProto(credential.GetCreatedAt())),
-		UpdatedAt:    derefTime(timeFromProto(credential.GetUpdatedAt())),
-	}
-	switch value := credential.GetCredential().(type) {
-	case *proto.ExternalCredential_Grant:
-		out.Grant = &core.ExternalCredentialGrant{
-			AccessToken:       value.Grant.GetAccessToken(),
-			RefreshToken:      value.Grant.GetRefreshToken(),
-			Scope:             value.Grant.GetScope(),
-			ExpiresAt:         timeFromProto(value.Grant.GetExpiresAt()),
-			LastRefreshedAt:   timeFromProto(value.Grant.GetLastRefreshedAt()),
-			RefreshErrorCount: int(value.Grant.GetRefreshErrorCount()),
+	return protoutil.ConvertMessage(credential, func(credential *proto.ExternalCredential) *core.ExternalCredential {
+		out := &core.ExternalCredential{
+			ID:           strings.TrimSpace(credential.GetId()),
+			Subject:      strings.TrimSpace(credential.GetSubject()),
+			Audience:     strings.TrimSpace(credential.GetAudience()),
+			Qualifier:    strings.TrimSpace(credential.GetQualifier()),
+			AccountKey:   strings.TrimSpace(credential.GetAccountKey()),
+			MetadataJSON: credential.GetMetadataJson(),
+			CreatedAt:    derefTime(timeFromProto(credential.GetCreatedAt())),
+			UpdatedAt:    derefTime(timeFromProto(credential.GetUpdatedAt())),
 		}
-	case *proto.ExternalCredential_Client:
-		out.Client = &core.ExternalCredentialClientInfo{
-			ClientID:              value.Client.GetClientId(),
-			ClientSecret:          value.Client.GetClientSecret(),
-			ClientSecretExpiresAt: timeFromProto(value.Client.GetClientSecretExpiresAt()),
+		switch value := credential.GetCredential().(type) {
+		case *proto.ExternalCredential_Grant:
+			out.Grant = &core.ExternalCredentialGrant{
+				AccessToken:       value.Grant.GetAccessToken(),
+				RefreshToken:      value.Grant.GetRefreshToken(),
+				Scope:             value.Grant.GetScope(),
+				ExpiresAt:         timeFromProto(value.Grant.GetExpiresAt()),
+				LastRefreshedAt:   timeFromProto(value.Grant.GetLastRefreshedAt()),
+				RefreshErrorCount: int(value.Grant.GetRefreshErrorCount()),
+			}
+		case *proto.ExternalCredential_Client:
+			out.Client = &core.ExternalCredentialClientInfo{
+				ClientID:              value.Client.GetClientId(),
+				ClientSecret:          value.Client.GetClientSecret(),
+				ClientSecretExpiresAt: timeFromProto(value.Client.GetClientSecretExpiresAt()),
+			}
+		case *proto.ExternalCredential_Opaque:
+			out.Opaque = &core.ExternalCredentialOpaque{
+				Fields: cloneStringMap(value.Opaque.GetFields()),
+			}
 		}
-	case *proto.ExternalCredential_Opaque:
-		out.Opaque = &core.ExternalCredentialOpaque{
-			Fields: cloneStringMap(value.Opaque.GetFields()),
-		}
-	}
-	return out
+		return out
+	})
 }
 
 func externalCredentialRPCError(operation string, err error) error {
