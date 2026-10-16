@@ -458,8 +458,6 @@ def _clean_attrs(attrs: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def _valid_attr(value: Any) -> bool:
-    if value is None:
-        return False
     if isinstance(value, str):
         return bool(value.strip())
     if isinstance(value, (bool, int, float)):
@@ -490,7 +488,7 @@ def _first_attr(value: Any, *names: str) -> Any:
 
 
 def _int_or_none(value: Any) -> int | None:
-    if isinstance(value, bool) or value is None:
+    if isinstance(value, bool):
         return None
     try:
         integer = int(value)
