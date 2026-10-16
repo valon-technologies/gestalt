@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
@@ -110,7 +111,7 @@ type StepInputSource struct {
 
 func CloneValue(value Value) Value {
 	out := value
-	out.Literal = cloneLiteral(value.Literal)
+	out.Literal = jsonvalue.Clone(value.Literal)
 	if value.Object != nil {
 		out.Object = make(map[string]Value, len(value.Object))
 		for key := range value.Object {
@@ -136,25 +137,6 @@ func CloneValue(value Value) Value {
 		out.StepInput = &source
 	}
 	return out
-}
-
-func cloneLiteral(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			out[key] = cloneLiteral(item)
-		}
-		return out
-	case []any:
-		out := make([]any, len(typed))
-		for i := range typed {
-			out[i] = cloneLiteral(typed[i])
-		}
-		return out
-	default:
-		return value
-	}
 }
 
 type Event struct {
@@ -411,7 +393,7 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 				if len(structured.Schema) == 0 {
 					structured.Schema = nil
 				} else {
-					structured.Schema = cloneLiteral(structured.Schema).(map[string]any)
+					structured.Schema = jsonvalue.Clone(structured.Schema).(map[string]any)
 				}
 				agent.Output.Structured = &structured
 			}

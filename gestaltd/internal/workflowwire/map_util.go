@@ -3,6 +3,8 @@ package workflowwire
 import (
 	"fmt"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 )
 
 func asMap(value any) (map[string]any, bool) {
@@ -93,31 +95,12 @@ func objectArg(args map[string]any, key, path string) (map[string]any, error) {
 // CloneJSON recursively clones JSON-shaped values without normalizing empty
 // maps or slices to nil.
 func CloneJSON(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			out[key] = CloneJSON(item)
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, CloneJSON(item))
-		}
-		return out
-	default:
-		return typed
-	}
+	return jsonvalue.Clone(value)
 }
 
 func mapDeepClone(values map[string]any) map[string]any {
 	if values == nil {
 		return nil
 	}
-	out := make(map[string]any, len(values))
-	for key, value := range values {
-		out[key] = CloneJSON(value)
-	}
-	return out
+	return CloneJSON(values).(map[string]any)
 }
