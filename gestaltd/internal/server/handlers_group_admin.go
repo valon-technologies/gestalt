@@ -125,10 +125,7 @@ func (s *Server) hasExplicitGroupAdmin(ctx context.Context, subjectID, groupID s
 		Resource:     s.groupResource(groupID),
 		AllowedRoles: []string{groupAdminRelation},
 	})
-	if err != nil {
-		return false, err
-	}
-	return decision.Allowed && decision.Role == groupAdminRelation, nil
+	return decision.Allowed && decision.Role == groupAdminRelation, err
 }
 
 func (s *Server) hasAuthorizationViewer(ctx context.Context, subjectID string) (bool, error) {

@@ -37,6 +37,7 @@ func configuredAuthorizationResource(policy string) *proto.Resource {
 // already produced for this exact question is reused. The cached answer comes
 // from the same projection this function applies to a single response, so a
 // batched listing and a single decision cannot disagree.
+// Both fresh and cached errors always carry a decision with Allowed false.
 func (s *Server) checkResourceAccess(
 	ctx context.Context,
 	req invocation.ResourceAccessRequest,

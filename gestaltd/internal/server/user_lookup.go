@@ -87,15 +87,12 @@ func (s *Server) userLookupAllowed(ctx context.Context) bool {
 	if subjectID = strings.TrimSpace(subjectID); subjectID == "" {
 		return false
 	}
-	decision, err := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
+	decision, _ := s.checkResourceAccess(ctx, invocation.ResourceAccessRequest{
 		SubjectID:    subjectID,
 		Action:       policy,
 		Resource:     invocation.DedicatedAuthorizationResource(policy),
 		AllowedRoles: s.userLookupRoute.AllowedRoles,
 	})
-	if err != nil {
-		return false
-	}
 	return decision.Allowed
 }
 

@@ -36,10 +36,7 @@ func (s *Server) integrationSettingsAccessibleContext(ctx context.Context, p *pr
 		Action:    provider,
 		Resource:  s.authorizationResource(provider),
 	})
-	if err != nil {
-		return false, err
-	}
-	return decision.Allowed, nil
+	return decision.Allowed, err
 }
 
 // prefetchIntegrationListingDecisions answers every authorization question the
