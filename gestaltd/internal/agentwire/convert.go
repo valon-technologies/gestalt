@@ -150,17 +150,6 @@ func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourc
 	}
 }
 
-func ToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
-	switch mode {
-	case coreagent.ToolSourceModeCatalog:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG
-	case coreagent.ToolSourceModeNone:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE
-	default:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-	}
-}
-
 func MessagePartTypeFromProto(partType proto.AgentMessagePartType) (coreagent.MessagePartType, error) {
 	switch partType {
 	case proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:

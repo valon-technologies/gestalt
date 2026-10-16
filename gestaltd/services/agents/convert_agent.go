@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -38,13 +37,6 @@ func agentMessagesToProto(messages []coreagent.Message) ([]*proto.AgentMessage, 
 
 func agentMessagesFromProto(messages []*proto.AgentMessage) []coreagent.Message {
 	return agentwire.MessagesFromProto(messages)
-}
-
-func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
-	if subject == (core.RunAsSubject{}) {
-		return nil
-	}
-	return agentwire.RunAsSubjectToProto(&subject)
 }
 
 func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {

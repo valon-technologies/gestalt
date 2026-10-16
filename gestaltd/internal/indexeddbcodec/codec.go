@@ -8,7 +8,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -131,18 +130,6 @@ func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	}
 }
 
-func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
-	out := make([]any, len(values))
-	for i, value := range values {
-		goValue, err := AnyFromTypedValue(value)
-		if err != nil {
-			return nil, fmt.Errorf("unmarshal value %d: %w", i, err)
-		}
-		out[i] = goValue
-	}
-	return out, nil
-}
-
 func RecordToProto(record Record) (*proto.Record, error) {
 	fields := make(map[string]*proto.TypedValue, len(record))
 	for key, value := range record {
@@ -239,38 +226,6 @@ func AnyToKeyValue(v any) (*proto.KeyValue, error) {
 
 func CursorKeyToProto(key any) (*proto.KeyValue, error) {
 	return AnyToKeyValue(key)
-}
-
-func EncodeKey(value any) ([]byte, error) {
-	kv, err := AnyToKeyValue(value)
-	if err != nil {
-		return nil, err
-	}
-	return gproto.Marshal(kv)
-}
-
-func DecodeKey(data []byte) (any, error) {
-	kv := &proto.KeyValue{}
-	if err := gproto.Unmarshal(data, kv); err != nil {
-		return nil, err
-	}
-	return KeyValueToAny(kv)
-}
-
-func EncodeRecord(record Record) ([]byte, error) {
-	pbRecord, err := RecordToProto(record)
-	if err != nil {
-		return nil, err
-	}
-	return gproto.Marshal(pbRecord)
-}
-
-func DecodeRecord(data []byte) (Record, error) {
-	pbRecord := &proto.Record{}
-	if err := gproto.Unmarshal(data, pbRecord); err != nil {
-		return nil, err
-	}
-	return RecordFromProto(pbRecord)
 }
 
 func KeyValueArrayParts(v any) ([]any, bool) {

@@ -531,14 +531,6 @@ func validateProviderConnectionMode(provider string, mode core.ConnectionMode) e
 	}
 }
 
-func BuildStartupProviderSpec(name string, entry *config.ProviderEntry) (appservice.StaticProviderSpec, map[string]string, error) {
-	spec, routing, err := buildStartupProviderSpec(name, entry)
-	if err == nil {
-		spec.Catalog, err = applyAllowedOperationsCatalog(name, entry.EffectiveAllowedOperations(), spec.Catalog)
-	}
-	return spec, routing.connections, err
-}
-
 type startupOperationRouting struct {
 	connections    map[string]string
 	resolver       core.OperationConnectionResolver

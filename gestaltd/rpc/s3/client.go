@@ -250,31 +250,6 @@ func objectRefToProto(ref s3.ObjectRef) *proto.S3ObjectRef {
 	}
 }
 
-func objectRefFromProto(ref *proto.S3ObjectRef) s3.ObjectRef {
-	if ref == nil {
-		return s3.ObjectRef{}
-	}
-	return s3.ObjectRef{
-		Key:       ref.GetKey(),
-		VersionID: ref.GetVersionId(),
-	}
-}
-
-func objectMetaToProto(meta s3.ObjectMeta) *proto.S3ObjectMeta {
-	out := &proto.S3ObjectMeta{
-		Ref:          objectRefToProto(meta.Ref),
-		Etag:         meta.ETag,
-		Size:         meta.Size,
-		ContentType:  meta.ContentType,
-		Metadata:     s3.CloneStringMap(meta.Metadata),
-		StorageClass: meta.StorageClass,
-	}
-	if !meta.LastModified.IsZero() {
-		out.LastModified = timestamppb.New(meta.LastModified)
-	}
-	return out
-}
-
 func objectMetaFromProto(meta *proto.S3ObjectMeta) s3.ObjectMeta {
 	if meta == nil {
 		return s3.ObjectMeta{}
@@ -317,43 +292,6 @@ func byteRangeToProto(r *s3.ByteRange) *proto.ByteRange {
 	return out
 }
 
-func byteRangeFromProto(r *proto.ByteRange) *s3.ByteRange {
-	if r == nil {
-		return nil
-	}
-	out := &s3.ByteRange{}
-	if r.Start != nil {
-		start := r.GetStart()
-		out.Start = &start
-	}
-	if r.End != nil {
-		end := r.GetEnd()
-		out.End = &end
-	}
-	return out
-}
-
-func readRequestFromProto(req *proto.ReadObjectRequest) s3.ReadRequest {
-	if req == nil {
-		return s3.ReadRequest{}
-	}
-	out := s3.ReadRequest{
-		Ref:         objectRefFromProto(req.GetRef()),
-		Range:       byteRangeFromProto(req.GetRange()),
-		IfMatch:     req.GetIfMatch(),
-		IfNoneMatch: req.GetIfNoneMatch(),
-	}
-	if ts := req.GetIfModifiedSince(); ts != nil {
-		t := ts.AsTime()
-		out.IfModifiedSince = &t
-	}
-	if ts := req.GetIfUnmodifiedSince(); ts != nil {
-		t := ts.AsTime()
-		out.IfUnmodifiedSince = &t
-	}
-	return out
-}
-
 func readRequestToProto(req s3.ReadRequest) *proto.ReadObjectRequest {
 	out := &proto.ReadObjectRequest{
 		Ref:         objectRefToProto(req.Ref),
@@ -368,23 +306,6 @@ func readRequestToProto(req s3.ReadRequest) *proto.ReadObjectRequest {
 		out.IfUnmodifiedSince = timestamppb.New(*req.IfUnmodifiedSince)
 	}
 	return out
-}
-
-func writeRequestFromProto(open *proto.WriteObjectOpen) s3.WriteRequest {
-	if open == nil {
-		return s3.WriteRequest{}
-	}
-	return s3.WriteRequest{
-		Ref:                objectRefFromProto(open.GetRef()),
-		ContentType:        open.GetContentType(),
-		CacheControl:       open.GetCacheControl(),
-		ContentDisposition: open.GetContentDisposition(),
-		ContentEncoding:    open.GetContentEncoding(),
-		ContentLanguage:    open.GetContentLanguage(),
-		Metadata:           s3.CloneStringMap(open.GetMetadata()),
-		IfMatch:            open.GetIfMatch(),
-		IfNoneMatch:        open.GetIfNoneMatch(),
-	}
 }
 
 func writeRequestToProtoOpen(req s3.WriteRequest) *proto.WriteObjectOpen {
@@ -414,19 +335,6 @@ func listPageFromProto(resp *proto.ListObjectsResponse) s3.ListPage {
 	return out
 }
 
-func listPageToProto(page s3.ListPage) *proto.ListObjectsResponse {
-	resp := &proto.ListObjectsResponse{
-		CommonPrefixes:        append([]string(nil), page.CommonPrefixes...),
-		NextContinuationToken: page.NextContinuationToken,
-		HasMore:               page.HasMore,
-		Objects:               make([]*proto.S3ObjectMeta, 0, len(page.Objects)),
-	}
-	for _, obj := range page.Objects {
-		resp.Objects = append(resp.Objects, objectMetaToProto(obj))
-	}
-	return resp
-}
-
 func presignMethodToProto(method s3.PresignMethod) proto.PresignMethod {
 	switch method {
 	case s3.PresignMethodGet:
@@ -439,20 +347,6 @@ func presignMethodToProto(method s3.PresignMethod) proto.PresignMethod {
 		return proto.PresignMethod_PRESIGN_METHOD_HEAD
 	default:
 		return proto.PresignMethod_PRESIGN_METHOD_UNSPECIFIED
-	}
-}
-
-func presignRequestFromProto(req *proto.PresignObjectRequest) s3.PresignRequest {
-	if req == nil {
-		return s3.PresignRequest{}
-	}
-	return s3.PresignRequest{
-		Ref:                objectRefFromProto(req.GetRef()),
-		Method:             presignMethodFromProto(req.GetMethod()),
-		Expires:            time.Duration(req.GetExpiresSeconds()) * time.Second,
-		ContentType:        req.GetContentType(),
-		ContentDisposition: req.GetContentDisposition(),
-		Headers:            s3.CloneStringMap(req.GetHeaders()),
 	}
 }
 
@@ -493,18 +387,6 @@ func presignMethodFromProto(method proto.PresignMethod) s3.PresignMethod {
 	}
 }
 
-func presignResultToProto(result s3.PresignResult) *proto.PresignObjectResponse {
-	resp := &proto.PresignObjectResponse{
-		Url:     result.URL,
-		Method:  presignMethodToProto(result.Method),
-		Headers: s3.CloneStringMap(result.Headers),
-	}
-	if !result.ExpiresAt.IsZero() {
-		resp.ExpiresAt = timestamppb.New(result.ExpiresAt)
-	}
-	return resp
-}
-
 func presignResultFromProto(resp *proto.PresignObjectResponse, requested s3.PresignMethod) s3.PresignResult {
 	if resp == nil {
 		return s3.PresignResult{}
@@ -541,11 +423,4 @@ func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, request
 		out.ExpiresAt = ts.AsTime()
 	}
 	return out
-}
-
-func firstS3Name(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
 }

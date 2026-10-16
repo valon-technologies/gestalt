@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
@@ -705,10 +704,6 @@ func AppIndexPath(appName string) string {
 	return path.Join("apps", appName, IndexFileName)
 }
 
-func GlobalIndexPath() string {
-	return IndexFileName
-}
-
 func PublicURL(publicRoot, rel string) string {
 	return strings.TrimRight(strings.TrimSpace(publicRoot), "/") + "/" + strings.TrimLeft(rel, "/")
 }
@@ -775,23 +770,4 @@ func cloneTimePtr(value *time.Time) *time.Time {
 	}
 	cloned := value.UTC()
 	return &cloned
-}
-
-func CatalogOperationContracts(cat *catalog.Catalog) map[string]OperationContract {
-	if cat == nil {
-		return nil
-	}
-	out := make(map[string]OperationContract, len(cat.Operations))
-	for i := range cat.Operations {
-		op := cat.Operations[i]
-		id := strings.TrimSpace(op.ID)
-		if id == "" {
-			continue
-		}
-		out[id] = OperationContract{
-			InputSchema:  cloneRawJSON(op.InputSchema),
-			OutputSchema: cloneRawJSON(op.OutputSchema),
-		}
-	}
-	return out
 }

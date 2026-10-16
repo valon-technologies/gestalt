@@ -2576,19 +2576,6 @@ func LoadPartialPreserveMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsMode(paths, os.LookupEnv, envMissingPreserve, "", false, false, false)
 }
 
-func ValidateNoMissingEnvRefs(cfg *Config) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("marshaling config YAML: %w", err)
-	}
-	if _, firstMissing, err := expandEnvVariables(string(data), os.LookupEnv, true); err != nil {
-		return err
-	} else if firstMissing != "" {
-		return fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
-	}
-	return nil
-}
-
 // ValidateSelectedAgentHarnessEnvPaths fails if the selected agent harness
 // references missing environment variables.
 func ValidateSelectedAgentHarnessEnvPaths(paths []string, providerName string, harnessName string) error {
@@ -2721,10 +2708,6 @@ func normalizeProviderEntries(cfg *Config) {
 
 func OverlayRemoteAppConfig(path string, cfg *Config) error {
 	return OverlayRemoteAppConfigPaths([]string{path}, cfg)
-}
-
-func OverlayRemotePluginConfig(path string, cfg *Config) error {
-	return OverlayRemoteAppConfig(path, cfg)
 }
 
 func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
