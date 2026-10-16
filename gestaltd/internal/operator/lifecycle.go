@@ -1293,7 +1293,7 @@ func recordSyncCacheEntry(paths lifecyclePaths, event syncCacheMetricsEvent) {
 }
 
 func syncArtifactArchiveSourceKind(paths lifecyclePaths, entry LockEntry) string {
-	if isRemoteReleaseMetadataLocation(entry.Source) {
+	if config.IsRemoteMetadataLocation(entry.Source) {
 		return syncArtifactSourceRemoteArchive
 	}
 	return syncArtifactSourceLocalArchive
@@ -2571,7 +2571,7 @@ func providerHasReadOnlyLocalSource(provider *config.ProviderEntry) bool {
 }
 
 func resolveLockedArchiveLocation(configDir, sourceLocation, archiveRef string) (string, error) {
-	if isRemoteReleaseMetadataLocation(sourceLocation) {
+	if config.IsRemoteMetadataLocation(sourceLocation) {
 		return resolveArchiveSourceLocation(sourceLocation, archiveRef, nil)
 	}
 	metadataPath := resolveLockPath(configDir, sourceLocation)
@@ -4459,7 +4459,7 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 		return err
 	}
 	archiveSourceKind := syncArtifactSourceLocalArchive
-	if isRemoteReleaseMetadataLocation(archiveLocation) {
+	if config.IsRemoteMetadataLocation(archiveLocation) {
 		archiveSourceKind = syncArtifactSourceRemoteArchive
 	}
 
@@ -4549,14 +4549,14 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 		return lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
 	}
 	archiveFetchSourceKind := syncArchiveSourceLocal
-	if isRemoteReleaseMetadataLocation(archiveLocation) {
+	if config.IsRemoteMetadataLocation(archiveLocation) {
 		archiveFetchSourceKind = syncArchiveSourceRemoteReleaseMetadata
 	}
 	recordSyncArchiveDownload(paths, syncArchiveMetricsEvent{
 		Subject:          subject,
 		SourceKind:       archiveFetchSourceKind,
 		SHA256:           expectedSHA,
-		Downloaded:       isRemoteReleaseMetadataLocation(archiveLocation),
+		Downloaded:       config.IsRemoteMetadataLocation(archiveLocation),
 		Bytes:            archiveFileSize(download.LocalPath),
 		Duration:         time.Since(downloadStart),
 		DownloadDuration: time.Since(downloadStart),

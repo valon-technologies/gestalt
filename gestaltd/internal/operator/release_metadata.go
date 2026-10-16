@@ -83,7 +83,7 @@ func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metada
 		return providerReleaseValidationBundle{}, "", nil, err
 	}
 	var data []byte
-	if !isRemoteReleaseMetadataLocation(resolvedMetadataLocation) {
+	if !config.IsRemoteMetadataLocation(resolvedMetadataLocation) {
 		data, err = providerrelease.ReadLocalFile(resolvedMetadataLocation)
 		if err != nil {
 			return providerReleaseValidationBundle{}, "", nil, err
@@ -210,7 +210,7 @@ func fetchProviderReleaseSidecar(ctx context.Context, client *http.Client, metad
 		return nil, err
 	}
 	var data []byte
-	if !isRemoteReleaseMetadataLocation(sidecarLocation) {
+	if !config.IsRemoteMetadataLocation(sidecarLocation) {
 		data, err = providerrelease.ReadLocalFile(sidecarLocation)
 		if err != nil {
 			return nil, err
@@ -433,7 +433,7 @@ func lockEntryRuntime(entry LockEntry, fallbackKind string) string {
 }
 
 func downloadArchiveForSource(ctx context.Context, client *http.Client, token, archiveURL string) (*providerpkg.DownloadResult, error) {
-	if !isRemoteReleaseMetadataLocation(archiveURL) {
+	if !config.IsRemoteMetadataLocation(archiveURL) {
 		return copyLocalArchiveForSource(archiveURL)
 	}
 	if client == nil {
@@ -446,25 +446,12 @@ func downloadArchiveForSource(ctx context.Context, client *http.Client, token, a
 	return providerpkg.DownloadRequest(client, req)
 }
 
-func isRemoteReleaseMetadataLocation(location string) bool {
-	parsed, err := url.ParseRequestURI(strings.TrimSpace(location))
-	if err != nil {
-		return false
-	}
-	switch parsed.Scheme {
-	case "http", "https":
-		return parsed.Host != ""
-	default:
-		return false
-	}
-}
-
 func archiveReferenceForLock(metadataLocation, artifactPath string, gitHubReleaseAssets map[string]string) (string, error) {
 	resolved, err := resolveArchiveSourceLocation(metadataLocation, artifactPath, gitHubReleaseAssets)
 	if err != nil {
 		return "", err
 	}
-	if isRemoteReleaseMetadataLocation(metadataLocation) || isRemoteReleaseMetadataLocation(resolved) {
+	if config.IsRemoteMetadataLocation(metadataLocation) || config.IsRemoteMetadataLocation(resolved) {
 		return resolved, nil
 	}
 	baseDir := filepath.Dir(metadataLocation)
@@ -483,12 +470,12 @@ func resolveArchiveSourceLocation(metadataLocation, archiveRef string, gitHubRel
 	if resolved := strings.TrimSpace(gitHubReleaseAssets[archiveRef]); resolved != "" {
 		return resolved, nil
 	}
-	if !isRemoteReleaseMetadataLocation(archiveRef) {
+	if !config.IsRemoteMetadataLocation(archiveRef) {
 		if resolved := strings.TrimSpace(gitHubReleaseAssets[path.Base(filepath.ToSlash(archiveRef))]); resolved != "" {
 			return resolved, nil
 		}
 	}
-	if isRemoteReleaseMetadataLocation(metadataLocation) {
+	if config.IsRemoteMetadataLocation(metadataLocation) {
 		baseURL, err := url.Parse(metadataLocation)
 		if err != nil {
 			return "", fmt.Errorf("parse provider release metadata URL: %w", err)
@@ -503,7 +490,7 @@ func resolveArchiveSourceLocation(metadataLocation, archiveRef string, gitHubRel
 		}
 		return resolved.String(), nil
 	}
-	if isRemoteReleaseMetadataLocation(archiveRef) {
+	if config.IsRemoteMetadataLocation(archiveRef) {
 		return archiveRef, nil
 	}
 	baseDir := filepath.Dir(metadataLocation)

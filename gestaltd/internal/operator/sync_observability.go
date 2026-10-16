@@ -163,7 +163,7 @@ func (l *Lifecycle) materializedCacheRequestForLockedEntry(paths lifecyclePaths,
 		return materializedCacheRequest{}, false
 	}
 	sourceKind := syncArtifactSourceLocalArchive
-	if isRemoteReleaseMetadataLocation(archiveLocation) {
+	if config.IsRemoteMetadataLocation(archiveLocation) {
 		sourceKind = syncArtifactSourceRemoteArchive
 	}
 	return materializedCacheRequest{
