@@ -154,10 +154,6 @@ func grpcTarget(rawURL string, tlsConfig *tls.Config) (target string, creds cred
 
 func bearerTokenInterceptors(token, metadataKey string) (grpc.UnaryClientInterceptor, grpc.StreamClientInterceptor) {
 	withBearer := func(ctx context.Context) context.Context {
-		token = strings.TrimSpace(token)
-		if token == "" {
-			return ctx
-		}
 		return metadata.AppendToOutgoingContext(ctx, metadataKey, "Bearer "+token)
 	}
 	unary := func(
@@ -246,14 +242,8 @@ func NewClientSets(ctx context.Context, configs map[string]Config) (ClientSets, 
 
 // Close releases every underlying gRPC connection.
 func (sets ClientSets) Close() error {
-	if len(sets) == 0 {
-		return nil
-	}
 	var first error
 	for name, clients := range sets {
-		if clients == nil {
-			continue
-		}
 		if err := clients.Close(); err != nil && first == nil {
 			first = fmt.Errorf("remote %q: %w", name, err)
 		}
@@ -263,8 +253,5 @@ func (sets ClientSets) Close() error {
 
 // Get returns the client set for a named remote.
 func (sets ClientSets) Get(name string) *ClientSet {
-	if len(sets) == 0 {
-		return nil
-	}
 	return sets[strings.TrimSpace(name)]
 }

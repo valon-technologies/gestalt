@@ -1,7 +1,6 @@
 package protoutil
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"time"
@@ -16,11 +15,7 @@ func StructFromMap(values map[string]any) (*structpb.Struct, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	normalized, err := normalizeStructMap(values)
-	if err != nil {
-		return nil, err
-	}
-	return structpb.NewStruct(normalized)
+	return structpb.NewStruct(normalizeStructMap(values))
 }
 
 func MapFromStruct(s *structpb.Struct) map[string]any {
@@ -55,9 +50,6 @@ func StringListsFromProto[V ~map[string]*proto.StringList](values V) map[string]
 }
 
 func ValueToAny(v *structpb.Value) any {
-	if v == nil {
-		return nil
-	}
 	return v.AsInterface()
 }
 
@@ -65,11 +57,7 @@ func ValueFromAny(value any) (*structpb.Value, error) {
 	if value == nil {
 		return nil, nil
 	}
-	normalized, err := normalizeStructValue(value)
-	if err != nil {
-		return nil, err
-	}
-	return structpb.NewValue(normalized)
+	return structpb.NewValue(normalizeStructValue(value))
 }
 
 // SetProviderNameIfEmpty sets a provider field on a protobuf request when
@@ -93,70 +81,55 @@ func SetProviderNameIfEmpty(req gproto.Message, name string) {
 	}
 }
 
-func normalizeStructMap(values map[string]any) (map[string]any, error) {
+func normalizeStructMap(values map[string]any) map[string]any {
 	normalized := make(map[string]any, len(values))
 	for key, value := range values {
-		out, err := normalizeStructValue(value)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", key, err)
-		}
-		normalized[key] = out
+		normalized[key] = normalizeStructValue(value)
 	}
-	return normalized, nil
+	return normalized
 }
 
-func normalizeStructValue(value any) (any, error) {
+func normalizeStructValue(value any) any {
 	switch v := value.(type) {
 	case nil:
-		return nil, nil
+		return nil
 	case time.Time:
-		return v.UTC().Format(time.RFC3339Nano), nil
+		return v.UTC().Format(time.RFC3339Nano)
 	case *time.Time:
 		if v == nil {
-			return nil, nil
+			return nil
 		}
-		return v.UTC().Format(time.RFC3339Nano), nil
+		return v.UTC().Format(time.RFC3339Nano)
 	case map[string]any:
 		return normalizeStructMap(v)
 	}
 
 	rv := reflect.ValueOf(value)
-	if !rv.IsValid() {
-		return nil, nil
-	}
 
 	switch rv.Kind() {
 	case reflect.Map:
 		if rv.IsNil() {
-			return nil, nil
+			return nil
 		}
 		if rv.Type().Key().Kind() != reflect.String {
-			return value, nil
+			return value
 		}
 		normalized := make(map[string]any, rv.Len())
 		iter := rv.MapRange()
 		for iter.Next() {
-			out, err := normalizeStructValue(iter.Value().Interface())
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", iter.Key().String(), err)
-			}
-			normalized[iter.Key().String()] = out
+			normalized[iter.Key().String()] = normalizeStructValue(iter.Value().Interface())
 		}
-		return normalized, nil
+		return normalized
 	case reflect.Slice, reflect.Array:
 		if rv.Kind() == reflect.Slice && rv.IsNil() {
-			return nil, nil
+			return nil
 		}
 		normalized := make([]any, rv.Len())
 		for i := 0; i < rv.Len(); i++ {
-			out, err := normalizeStructValue(rv.Index(i).Interface())
-			if err != nil {
-				return nil, fmt.Errorf("[%d]: %w", i, err)
-			}
-			normalized[i] = out
+			normalized[i] = normalizeStructValue(rv.Index(i).Interface())
 		}
-		return normalized, nil
+		return normalized
 	default:
-		return value, nil
+		return value
 	}
 }

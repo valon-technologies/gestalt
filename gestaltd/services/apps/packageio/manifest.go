@@ -642,11 +642,9 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 			return fmt.Errorf("provider.defaultConnection %q references undefined provider.connections entry", provider.DefaultConnection)
 		}
 	}
-	if len(provider.Connections) > 0 {
-		for name := range provider.Connections {
-			if strings.TrimSpace(name) == "" {
-				return fmt.Errorf("provider.connections keys must be non-empty")
-			}
+	for name := range provider.Connections {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("provider.connections keys must be non-empty")
 		}
 	}
 	checks := []struct {

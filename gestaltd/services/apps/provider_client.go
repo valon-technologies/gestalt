@@ -679,15 +679,10 @@ func principalRelayClaimsFromPrincipal(p *principal.Principal) *runtimehost.Prin
 	if subjectID == "" {
 		return nil
 	}
-	claims := &runtimehost.PrincipalClaims{
+	return &runtimehost.PrincipalClaims{
 		SubjectID: subjectID,
 		ClientID:  strings.TrimSpace(p.ClientID),
+		Scopes:    append([]string(nil), p.Scopes...),
+		Audience:  append([]string(nil), p.Audience...),
 	}
-	if len(p.Scopes) > 0 {
-		claims.Scopes = append([]string(nil), p.Scopes...)
-	}
-	if len(p.Audience) > 0 {
-		claims.Audience = append([]string(nil), p.Audience...)
-	}
-	return claims
 }

@@ -421,15 +421,13 @@ func streamCatalogOperationFor[In any](op StreamOperation[In]) (*CatalogOperatio
 		Parameters:   params,
 		Tags:         append([]string(nil), op.Tags...),
 		ReadOnly:     op.ReadOnly,
+		Visible:      op.Visible,
 		Response: &OperationResponseSpec{
 			Stream: &StreamResponseSpec{
 				MediaType:  strings.TrimSpace(op.MediaType),
 				ItemSchema: strings.TrimSpace(op.ItemSchema),
 			},
 		},
-	}
-	if op.Visible != nil {
-		catOp.Visible = op.Visible
 	}
 	return catOp, nil
 }
@@ -668,9 +666,7 @@ func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*CatalogOperat
 		Parameters:   params,
 		Tags:         append([]string(nil), op.Tags...),
 		ReadOnly:     op.ReadOnly,
-	}
-	if op.Visible != nil {
-		catOp.Visible = op.Visible
+		Visible:      op.Visible,
 	}
 	return catOp, nil
 }

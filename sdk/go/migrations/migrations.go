@@ -289,13 +289,7 @@ func applySchema(ctx context.Context, db indexeddb.Database, schema SchemaDeclar
 }
 
 func createStoreIfAbsent(ctx context.Context, db indexeddb.Database, store StoreDeclaration) error {
-	opts := indexeddb.ObjectStoreOptions{}
-	if store.Columns != nil {
-		opts.Columns = store.Columns
-	}
-	if store.Indexes != nil {
-		opts.Indexes = store.Indexes
-	}
+	opts := indexeddb.ObjectStoreOptions{Columns: store.Columns, Indexes: store.Indexes}
 	_, err := db.CreateObjectStore(ctx, store.Name, opts)
 	if err != nil && !errors.Is(err, indexeddb.ErrAlreadyExists) {
 		return err

@@ -678,17 +678,6 @@ func removeProjectProviderRepository(path, name string) error {
 	return writeConfigDocument(path, root)
 }
 
-func updateProviderVersionConstraint(path, kind, name, version string) error {
-	root, doc, err := readConfigDocument(path)
-	if err != nil {
-		return err
-	}
-	if _, err := applyProviderVersionConstraint(doc, kind, name, version); err != nil {
-		return err
-	}
-	return writeConfigDocument(path, root)
-}
-
 func applyProviderVersionConstraint(doc *yaml.Node, kind, name, version string) (string, error) {
 	if strings.TrimSpace(kind) != "" {
 		if _, err := requireProviderLifecycleKind(kind); err != nil {

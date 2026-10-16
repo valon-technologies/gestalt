@@ -255,9 +255,6 @@ func providerServiceName(providerName string) string {
 }
 
 func encodeOTELKeyValueEnv(values map[string]string) string {
-	if len(values) == 0 {
-		return ""
-	}
 	keys := make([]string, 0, len(values))
 	for key, value := range values {
 		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
