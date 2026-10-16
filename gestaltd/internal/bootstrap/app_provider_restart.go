@@ -210,9 +210,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 	result, err := buildProvider(buildCtx, app, entry, r.deps)
 	if errors.Is(err, providerdev.ErrFrontendOnlyDevApp) {
 		r.storeConnectionAuth(app, &ProviderBuildResult{})
-		if r.deps.AppWorkflowDeclarations != nil {
-			r.deps.AppWorkflowDeclarations.Set(app, entry, nil)
-		}
+		r.deps.AppWorkflowDeclarations.Set(app, entry, nil)
 		r.releaseLifecycleLease(app)
 		return nil
 	}
@@ -238,9 +236,7 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		}
 	}
 	r.storeConnectionAuth(app, result)
-	if r.deps.AppWorkflowDeclarations != nil {
-		r.deps.AppWorkflowDeclarations.Set(app, entry, result.WorkflowDeclarations)
-	}
+	r.deps.AppWorkflowDeclarations.Set(app, entry, result.WorkflowDeclarations)
 	r.releaseLifecycleLease(app)
 	return nil
 }
@@ -538,7 +534,5 @@ func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderB
 
 func (r *AppProviderRestarter) clearRuntimeBindings(app string) {
 	r.storeConnectionAuth(app, &ProviderBuildResult{})
-	if r.deps.AppWorkflowDeclarations != nil {
-		r.deps.AppWorkflowDeclarations.Set(app, nil, nil)
-	}
+	r.deps.AppWorkflowDeclarations.Set(app, nil, nil)
 }
