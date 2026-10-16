@@ -234,7 +234,7 @@ func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
 }
 
 func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
-	p.createSessionReqs = append(p.createSessionReqs, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
+	p.createSessionReqs = append(p.createSessionReqs, protoutil.CloneOrDefault(req, &proto.CreateAgentProviderSessionRequest{}))
 	key := ""
 	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
 		subjectID := appaccessservice.SubjectIDFromRequestContext(req.GetContext())
@@ -279,7 +279,7 @@ func (p *routeCountingAgentProvider) GetSession(_ context.Context, req *proto.Ge
 }
 
 func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
-	p.listSessionReqs = append(p.listSessionReqs, cloneAgentRequest(req, &proto.ListAgentProviderSessionsRequest{}))
+	p.listSessionReqs = append(p.listSessionReqs, protoutil.CloneOrDefault(req, &proto.ListAgentProviderSessionsRequest{}))
 	if p.listSessionsErr != nil {
 		return nil, p.listSessionsErr
 	}
@@ -337,7 +337,7 @@ func (p *routeCountingAgentProvider) UpdateSession(_ context.Context, req *proto
 }
 
 func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-	p.createTurnReqs = append(p.createTurnReqs, cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{}))
+	p.createTurnReqs = append(p.createTurnReqs, protoutil.CloneOrDefault(req, &proto.CreateAgentProviderTurnRequest{}))
 	turnID := req.GetTurnId()
 	if strings.TrimSpace(p.turnIDOverride) != "" {
 		turnID = p.turnIDOverride
@@ -374,7 +374,7 @@ func (p *routeCountingAgentProvider) GetTurn(_ context.Context, req *proto.GetAg
 }
 
 func (p *routeCountingAgentProvider) ListTurns(_ context.Context, req *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error) {
-	p.listTurnReqs = append(p.listTurnReqs, cloneAgentRequest(req, &proto.ListAgentProviderTurnsRequest{}))
+	p.listTurnReqs = append(p.listTurnReqs, protoutil.CloneOrDefault(req, &proto.ListAgentProviderTurnsRequest{}))
 	if p.listTurnsErr != nil {
 		return nil, p.listTurnsErr
 	}
@@ -1657,7 +1657,7 @@ func TestAuthorizeAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 		t.Fatalf("provider-owned turn binding alias %q was not stored", turn.ID)
 	}
 	providerReqCtx := alpha.createTurnReqs[0].GetContext()
-	executionRefReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
+	executionRefReqCtx := protoutil.CloneOrDefault(providerReqCtx, &proto.RequestContext{})
 	executionRefReqCtx.Agent.TurnId = turn.ExecutionRef
 
 	authorized, err := manager.AuthorizeAppInvocation(context.Background(), invocation.AgentAppAuthorizationRequest{
@@ -1681,7 +1681,7 @@ func TestAuthorizeAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
 	}
 
-	providerOwnedReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
+	providerOwnedReqCtx := protoutil.CloneOrDefault(providerReqCtx, &proto.RequestContext{})
 	providerOwnedReqCtx.Agent.TurnId = turn.ID
 
 	authorized, err = manager.AuthorizeAppInvocation(context.Background(), invocation.AgentAppAuthorizationRequest{

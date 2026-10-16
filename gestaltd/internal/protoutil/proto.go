@@ -12,6 +12,18 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// CloneOrDefault clones a nonzero message, or returns fallback unchanged for a zero message.
+func CloneOrDefault[T interface {
+	gproto.Message
+	comparable
+}](req T, fallback T) T {
+	var zero T
+	if req == zero {
+		return fallback
+	}
+	return gproto.Clone(req).(T)
+}
+
 func StructFromMap(values map[string]any) (*structpb.Struct, error) {
 	if len(values) == 0 {
 		return nil, nil
