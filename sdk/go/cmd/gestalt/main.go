@@ -96,10 +96,7 @@ func buildCommand() error {
 		return err
 	}
 	goos := envOr("GESTALT_TARGET_OS", envOr("GOOS", runtime.GOOS))
-	outputPath, err := sourceBuildOutputPath(manifest.Source, goos)
-	if err != nil {
-		return err
-	}
+	outputPath := sourceBuildOutputPath(manifest.Source, goos)
 	absOutput := filepath.Join(root, filepath.FromSlash(outputPath))
 	if err := os.MkdirAll(filepath.Dir(absOutput), 0o755); err != nil {
 		return fmt.Errorf("create build output directory: %w", err)
@@ -168,48 +165,37 @@ func readManifest(root string) (manifest, error) {
 	return manifest{}, fmt.Errorf("no manifest file found in %s", root)
 }
 
-func sourceBuildOutputPath(source, goos string) (string, error) {
+func sourceBuildOutputPath(source, goos string) string {
 	name := sourceAppName(source)
 	base := filepath.ToSlash(filepath.Join(".gestaltd", "bin", name))
 	if goos == "windows" {
-		return base + ".exe", nil
+		return base + ".exe"
 	}
-	return base, nil
+	return base
 }
 
 func sourceAppName(source string) string {
 	parts := strings.Split(strings.TrimSpace(source), "/")
-	if len(parts) == 0 {
-		return "provider"
-	}
 	return parts[len(parts)-1]
 }
 
 func goProviderServeCall(kind string) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "identity":
-		return "gestalt.ServeIdentityProvider(ctx, providerpkg.New())", nil
-	case "authorization":
-		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())", nil
-	case "externalcredentials":
-		return "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())", nil
-	case "indexeddb":
-		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())", nil
-	case "cache":
-		return "gestalt.ServeCacheProvider(ctx, providerpkg.New())", nil
-	case "s3":
-		return "gestalt.ServeS3Provider(ctx, providerpkg.New())", nil
-	case "workflow":
-		return "gestalt.ServeWorkflowProvider(ctx, providerpkg.New())", nil
-	case "agent":
-		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())", nil
-	case "secrets":
-		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())", nil
-	case "runtime":
-		return "gestalt.ServeRuntimeProvider(ctx, providerpkg.New())", nil
-	default:
+	entrypoint := map[string]string{
+		"identity":            "ServeIdentityProvider",
+		"authorization":       "ServeAuthorizationProvider",
+		"externalcredentials": "ServeExternalCredentialProvider",
+		"indexeddb":           "ServeIndexedDBProvider",
+		"cache":               "ServeCacheProvider",
+		"s3":                  "ServeS3Provider",
+		"workflow":            "ServeWorkflowProvider",
+		"agent":               "ServeAgentProvider",
+		"secrets":             "ServeSecretsProvider",
+		"runtime":             "ServeRuntimeProvider",
+	}[strings.ToLower(strings.TrimSpace(kind))]
+	if entrypoint == "" {
 		return "", fmt.Errorf("unsupported Go provider kind %q", kind)
 	}
+	return "gestalt." + entrypoint + "(ctx, providerpkg.New())", nil
 }
 
 func detectGoProviderImportPath(root, goos, goarch string) (string, error) {
