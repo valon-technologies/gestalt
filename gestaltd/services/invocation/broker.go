@@ -92,6 +92,13 @@ type StreamFinalizer interface {
 	FinalizeStream(error)
 }
 
+// FinalizeStream reports consumption completion to readers that support it.
+func FinalizeStream(reader core.StreamReader, err error) {
+	if finalizer, ok := reader.(StreamFinalizer); ok {
+		finalizer.FinalizeStream(err)
+	}
+}
+
 // MaybeStreamingInvoker is implemented by invokers that resolve unary-vs-stream
 // in a single catalog lookup.
 type MaybeStreamingInvoker interface {

@@ -57,7 +57,7 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		finalizeStreamReader(reader, errors.New("streaming is not supported"))
+		invocation.FinalizeStream(reader, errors.New("streaming is not supported"))
 		writeError(w, http.StatusInternalServerError, "streaming is not supported")
 		return
 	}
@@ -89,13 +89,13 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 	for {
 		select {
 		case <-ctx.Done():
-			finalizeStreamReader(reader, ctx.Err())
+			invocation.FinalizeStream(reader, ctx.Err())
 			return
 		default:
 		}
 		frame, err := reader.Recv()
 		if err != nil {
-			finalizeStreamReader(reader, err)
+			invocation.FinalizeStream(reader, err)
 			if errors.Is(err, io.EOF) {
 				if !headersWritten {
 					writeError(w, http.StatusInternalServerError, "internal error")
@@ -108,7 +108,7 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 			return
 		}
 		if frame == nil {
-			finalizeStreamReader(reader, nil)
+			invocation.FinalizeStream(reader, nil)
 			if !headersWritten {
 				writeError(w, http.StatusInternalServerError, "internal error")
 			}
@@ -117,17 +117,12 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 		if frame.Metadata != nil {
 			if !headersWritten {
 				writeHeaders(frame.Metadata)
-				if len(frame.Data) > 0 {
-					_, _ = w.Write(frame.Data)
-					flusher.Flush()
-				}
 			} else {
-				if len(frame.Data) > 0 {
-					_, _ = w.Write(frame.Data)
-					flusher.Flush()
-				}
 				terminalMetadataSeen = true
-				continue
+			}
+			if len(frame.Data) > 0 {
+				_, _ = w.Write(frame.Data)
+				flusher.Flush()
 			}
 			continue
 		}
@@ -139,15 +134,9 @@ func writeStreamingOperationResult(w http.ResponseWriter, r *http.Request, reade
 			flusher.Flush()
 		}
 		if terminalMetadataSeen {
-			finalizeStreamReader(reader, nil)
+			invocation.FinalizeStream(reader, nil)
 			return
 		}
-	}
-}
-
-func finalizeStreamReader(reader core.StreamReader, err error) {
-	if finalizer, ok := reader.(invocation.StreamFinalizer); ok {
-		finalizer.FinalizeStream(err)
 	}
 }
 
@@ -159,11 +148,8 @@ func writeInvocationStreamError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
-	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
-		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, invocation.ErrInvalidInvocation):
-		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, invocation.ErrStreamingUnsupported):
+	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired),
+		errors.Is(err, invocation.ErrInvalidInvocation), errors.Is(err, invocation.ErrStreamingUnsupported):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, invocation.ErrAmbiguousInstance):
 		writeError(w, http.StatusConflict, err.Error())
