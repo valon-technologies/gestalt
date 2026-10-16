@@ -153,16 +153,12 @@ func parseRESTRule(m *model.Method, rule *model.HTTPRule, omitted map[string]boo
 			rule.Body,
 		)
 	}
-	queryFields, err := computeQueryFields(m.Input, pathFields, body, omitted)
-	if err != nil {
-		return nil, err
-	}
 	return &RESTRule{
 		Verb:         rule.Verb,
 		PathTemplate: rule.Path,
 		PathFields:   pathFields,
 		Body:         body,
-		QueryFields:  queryFields,
+		QueryFields:  computeQueryFields(m.Input, pathFields, body, omitted),
 	}, nil
 }
 
@@ -171,9 +167,9 @@ func computeQueryFields(
 	pathFields []PublicField,
 	body BodyBinding,
 	omitted map[string]bool,
-) ([]PublicField, error) {
+) []PublicField {
 	if input == nil || body == BodyStar {
-		return nil, nil
+		return nil
 	}
 	pathNames := map[string]bool{}
 	for _, pf := range pathFields {
@@ -186,7 +182,7 @@ func computeQueryFields(
 		}
 		out = append(out, PublicField{Name: f.Name, JSONName: f.JSONName})
 	}
-	return out, nil
+	return out
 }
 
 func parsePathTemplate(fullMethod string, input *model.Message, path string, omitted map[string]bool) ([]PublicField, error) {
