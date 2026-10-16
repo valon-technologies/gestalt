@@ -225,9 +225,6 @@ func (s workflowProviderServer) DeliverEvent(ctx context.Context, req *proto.Del
 }
 
 func applyWorkflowProviderDefinitionRequestFromProto(req *proto.ApplyWorkflowProviderDefinitionRequest) (*ApplyWorkflowProviderDefinitionRequest, error) {
-	if req == nil {
-		return &ApplyWorkflowProviderDefinitionRequest{}, nil
-	}
 	var spec *WorkflowDefinitionSpec
 	if req.GetSpec() != nil {
 		input, err := workflowDefinitionSpecFromProto(req.GetSpec())
@@ -243,9 +240,6 @@ func applyWorkflowProviderDefinitionRequestFromProto(req *proto.ApplyWorkflowPro
 }
 
 func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRunRequest) *StartWorkflowProviderRunRequest {
-	if req == nil {
-		return &StartWorkflowProviderRunRequest{}
-	}
 	return &StartWorkflowProviderRunRequest{
 		DefinitionID:                 req.GetDefinitionId(),
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
@@ -256,9 +250,6 @@ func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRu
 }
 
 func signalWorkflowProviderRunRequestFromProto(req *proto.SignalWorkflowProviderRunRequest) *SignalWorkflowProviderRunRequest {
-	if req == nil {
-		return &SignalWorkflowProviderRunRequest{}
-	}
 	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
 		input := workflowSignalFromProto(req.GetSignal())
@@ -271,9 +262,6 @@ func signalWorkflowProviderRunRequestFromProto(req *proto.SignalWorkflowProvider
 }
 
 func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWorkflowProviderRunRequest) *SignalOrStartWorkflowProviderRunRequest {
-	if req == nil {
-		return &SignalOrStartWorkflowProviderRunRequest{}
-	}
 	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
 		input := workflowSignalFromProto(req.GetSignal())
@@ -290,9 +278,6 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 }
 
 func deliverWorkflowProviderEventRequestFromProto(req *proto.DeliverWorkflowProviderEventRequest) *DeliverWorkflowProviderEventRequest {
-	if req == nil {
-		return &DeliverWorkflowProviderEventRequest{}
-	}
 	var event *WorkflowEvent
 	if req.GetEvent() != nil {
 		input := workflowEventFromProto(req.GetEvent())

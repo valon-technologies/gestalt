@@ -106,9 +106,6 @@ func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflow
 // boundWorkflowTargetFromProto converts an existing protocol target into
 // builder input.
 func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflowTarget {
-	if value == nil {
-		return BoundWorkflowTarget{}
-	}
 	return BoundWorkflowTarget{Steps: workflowStepsFromProto(value.GetSteps())}
 }
 
@@ -321,9 +318,6 @@ func workflowTextToProto(input WorkflowText) *proto.WorkflowText {
 }
 
 func workflowTextFromProto(value *proto.WorkflowText) WorkflowText {
-	if value == nil {
-		return WorkflowText{}
-	}
 	return WorkflowText{Template: value.GetTemplate()}
 }
 
