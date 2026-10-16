@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"maps"
 	"net/http"
 	"strings"
 
@@ -68,7 +69,7 @@ func httpBindingContextValue(binding MountedHTTPBinding, r *http.Request, verifi
 func (s *Server) httpBindingInvocation(ctx context.Context, binding MountedHTTPBinding, r *http.Request, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) (*invocation.InvokeOutcome, error) {
 	params := map[string]any{}
 	if parsed != nil && parsed.Params != nil {
-		params = cloneAnyMap(parsed.Params)
+		params = maps.Clone(parsed.Params)
 	}
 	if p == nil {
 		p = s.httpBindingPrincipal(binding, verified)
@@ -93,17 +94,6 @@ func (s *Server) httpBindingInvocation(ctx context.Context, binding MountedHTTPB
 		return nil, invocation.ErrStreamingUnsupported
 	}
 	return maybeInvoker.InvokeMaybeStream(ctx, p, binding.AppName, "", binding.Target, params)
-}
-
-func cloneAnyMap(src map[string]any) map[string]any {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]any, len(src))
-	for key, value := range src {
-		dst[key] = value
-	}
-	return dst
 }
 
 func requestHeaderValues(r *http.Request) map[string]any {

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -109,7 +110,7 @@ func parsedParams(parsed *parsedHTTPBindingRequest) map[string]any {
 	if parsed == nil {
 		return nil
 	}
-	return cloneAnyMap(parsed.Params)
+	return maps.Clone(parsed.Params)
 }
 
 func parsedRawBody(parsed *parsedHTTPBindingRequest) []byte {

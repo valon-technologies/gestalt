@@ -2,6 +2,7 @@ package principal
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"strings"
 
@@ -195,9 +196,9 @@ func IntersectPermissions(a, b PermissionSet) PermissionSet {
 		case aOps == nil && bOps == nil:
 			out[plugin] = nil
 		case aOps == nil:
-			out[plugin] = clonePermissionOps(bOps)
+			out[plugin] = maps.Clone(bOps)
 		case bOps == nil:
-			out[plugin] = clonePermissionOps(aOps)
+			out[plugin] = maps.Clone(aOps)
 		default:
 			ops := make(map[string]struct{})
 			for op := range aOps {
@@ -306,17 +307,6 @@ func appPermissionScopes(scopes []string) []string {
 		}
 	}
 	return filtered
-}
-
-func clonePermissionOps(src map[string]struct{}) map[string]struct{} {
-	if src == nil {
-		return nil
-	}
-	dst := make(map[string]struct{}, len(src))
-	for key := range src {
-		dst[key] = struct{}{}
-	}
-	return dst
 }
 
 // PermissionSetFromScopes converts OAuth scope strings into a permission set.
