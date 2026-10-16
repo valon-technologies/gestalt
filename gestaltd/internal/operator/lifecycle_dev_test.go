@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 func TestLoadConfigForLifecycleMarksDevActiveLocalSourceApp(t *testing.T) {
@@ -143,22 +141,6 @@ apps:
 	_, err := NewLifecycle().WithDevServeEligible(true).loadConfigForLifecycle([]string{cfgPath}, false)
 	if err == nil || !strings.Contains(err.Error(), `local-source apps must declare run`) {
 		t.Fatalf("loadConfigForLifecycle error = %v, want must declare run error", err)
-	}
-}
-
-func TestConfigHasLocalProviderSourcesIgnoresDevActiveApp(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"demo": {
-				Source:    config.ProviderSource{Path: "/tmp/app"},
-				DevActive: true,
-			},
-		},
-	}
-	if configHasLocalProviderSources(cfg) {
-		t.Fatal("dev-active app should not trigger local provider auto-prepare")
 	}
 }
 

@@ -1865,37 +1865,6 @@ func configRequiresCommittedLock(cfg *config.Config) bool {
 	return configHasMatchingProviderEntry(cfg, providerRequiresCommittedLock)
 }
 
-func configHasLocalProviderSources(cfg *config.Config) bool {
-	for _, entry := range cfg.Apps {
-		if entry != nil && !entry.DevActive && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
-			return true
-		}
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for _, entry := range collection.entries {
-			if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
-				return true
-			}
-		}
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && (def.HasLocalSource() || def.HasLocalReleaseSource()) {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.S3 {
-		if def != nil && (def.HasLocalSource() || def.HasLocalReleaseSource()) {
-			return true
-		}
-	}
-	return false
-}
-
 func (l *Lifecycle) autoRelockAtPathsIfNeeded(configPaths []string, lockfilePath, artifactsDir string, cfg *config.Config, paths lifecyclePaths, lock *Lockfile, locked bool, err error) (*Lockfile, error) {
 	if locked || (err == nil && lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{})) {
 		return lock, err
