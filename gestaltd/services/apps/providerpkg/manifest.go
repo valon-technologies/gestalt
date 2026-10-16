@@ -1,6 +1,8 @@
 package providerpkg
 
 import (
+	"fmt"
+
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
@@ -92,4 +94,12 @@ func SourceUIBuildOutput(manifest *providermanifestv1.Manifest) string {
 
 func cloneManifest(manifest *providermanifestv1.Manifest) (*providermanifestv1.Manifest, error) {
 	return packageio.CloneManifest(manifest)
+}
+
+// EntrypointArgs copies an entrypoint's arguments or reports the missing kind.
+func EntrypointArgs(entry *providermanifestv1.Entrypoint, kind string) ([]string, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("manifest does not define a %s entrypoint", kind)
+	}
+	return append([]string(nil), entry.Args...), nil
 }

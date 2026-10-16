@@ -3216,7 +3216,7 @@ func bindResolvedInstall(paths lifecyclePaths, kind, name, subject, destDir stri
 		if _, err := os.Stat(install.ExecutablePath); err != nil {
 			return preparedArtifactStaleError(paths, "prepared executable for provider %q not found at %s", name, install.ExecutablePath)
 		}
-		args, err := providerEntrypointArgs(install.Manifest)
+		args, err := providerpkg.EntrypointArgs(install.Manifest.Entrypoint, "provider")
 		if err != nil {
 			return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
 		}
@@ -3233,7 +3233,7 @@ func bindResolvedInstall(paths lifecyclePaths, kind, name, subject, destDir stri
 		if _, err := os.Stat(install.ExecutablePath); err != nil {
 			return preparedArtifactStaleError(paths, "prepared executable for %s %q not found at %s", kind, name, install.ExecutablePath)
 		}
-		args, err := componentEntrypointArgs(install.Manifest, kind)
+		args, err := providerpkg.EntrypointArgs(providerpkg.EntrypointForKind(install.Manifest, kind), kind)
 		if err != nil {
 			return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
 		}
@@ -4115,7 +4115,7 @@ func bindPreparedProviderInstall(paths lifecyclePaths, name string, app *config.
 	if _, err := os.Stat(install.executablePath); err != nil {
 		return preparedArtifactStaleError(paths, "prepared executable for provider %q not found at %s", name, install.executablePath)
 	}
-	args, err := providerEntrypointArgs(install.manifest)
+	args, err := providerpkg.EntrypointArgs(install.manifest.Entrypoint, "provider")
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
 	}
@@ -4134,7 +4134,7 @@ func bindPreparedComponentInstall(paths lifecyclePaths, kind, name string, app *
 	if _, err := os.Stat(install.executablePath); err != nil {
 		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found at %s", kind, name, install.executablePath)
 	}
-	args, err := componentEntrypointArgs(install.manifest, kind)
+	args, err := providerpkg.EntrypointArgs(providerpkg.EntrypointForKind(install.manifest, kind), kind)
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
 	}
@@ -4704,22 +4704,6 @@ func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath str
 		return
 	}
 	app.ResolvedIconFile = iconPath
-}
-
-func providerEntrypointArgs(manifest *providermanifestv1.Manifest) ([]string, error) {
-	entry := manifest.Entrypoint
-	if entry == nil {
-		return nil, fmt.Errorf("manifest does not define a provider entrypoint")
-	}
-	return append([]string(nil), entry.Args...), nil
-}
-
-func componentEntrypointArgs(manifest *providermanifestv1.Manifest, kind string) ([]string, error) {
-	entry := providerpkg.EntrypointForKind(manifest, kind)
-	if entry == nil {
-		return nil, fmt.Errorf("manifest does not define a %s entrypoint", kind)
-	}
-	return append([]string(nil), entry.Args...), nil
 }
 
 func validateInstalledManifestKind(kind, name string, manifest *providermanifestv1.Manifest) error {
