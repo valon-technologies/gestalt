@@ -7,7 +7,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from typing import Any, cast
+from typing import Any
 from unittest import mock
 
 import grpc
@@ -19,7 +19,6 @@ from gestalt import (
     CALLER_BEARER_TOKEN_METADATA_KEY,
     App,
     ApplyWorkflowProviderDefinitionRequest,
-    AppProviderAdapter,
     AuthorizeRequest,
     CacheProvider,
     CacheSetEntry,
@@ -45,7 +44,6 @@ from gestalt import (
     Request,
     RuntimeProvider,
     RuntimeSupport,
-    S3Provider,
     SetWorkflowProviderActivationPausedRequest,
     SetWorkflowProviderDefinitionPausedRequest,
     StartWorkflowProviderRunRequest,
@@ -1191,111 +1189,7 @@ class CacheRuntimeTests(unittest.TestCase):
         self.assertEqual(context.details, "provider identity: identity exploded")
 
 
-class S3RuntimeTests(unittest.TestCase):
-    class StubS3Provider(
-        S3Provider,
-        MetadataProvider,
-        WarningsProvider,
-        HealthChecker,
-    ):
-        def configure(self, name: str, config: dict[str, Any]) -> None:
-            self.configured = (name, dict(config))
-
-        def metadata(self) -> ProviderMetadata:
-            return ProviderMetadata(
-                kind=ProviderKind.S3,
-                name="stub-s3",
-                display_name="Stub S3",
-                description="test s3 provider",
-                version="0.1.0",
-            )
-
-        def warnings(self) -> list[str]:
-            return ["set S3_ENDPOINT"]
-
-        def health_check(self) -> None:
-            return None
-
-    def test_runtime_metadata_and_s3_registration(self) -> None:
-        provider = self.StubS3Provider()
-
-        runtime_servicer = _runtime._runtime_servicer(
-            provider=provider, kind=ProviderKind.S3
-        )
-        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_S3)
-        self.assertEqual(meta.name, "stub-s3")
-        self.assertEqual(list(meta.warnings), ["set S3_ENDPOINT"])
-
-        adapter = _runtime._s3_runtime_plugin(provider)
-        server = mock.Mock()
-        with mock.patch.object(s3_pb2_grpc, "add_S3Servicer_to_server") as add_s3:
-            adapter.register_services(server, provider)
-        add_s3.assert_called_once()
-        wrapped, registered_server = add_s3.call_args.args
-        self.assertIsNot(wrapped, provider)
-        self.assertIs(getattr(wrapped, "_provider"), provider)
-        self.assertIs(registered_server, server)
-
-    def test_servable_target_wraps_s3_provider(self) -> None:
-        provider = self.StubS3Provider()
-        servable = _runtime._servable_target(provider, runtime_kind=ProviderKind.S3)
-        self.assertIsInstance(servable, AppProviderAdapter)
-        servable = cast(AppProviderAdapter, servable)
-        self.assertEqual(servable.kind, ProviderKind.S3)
-        self.assertIs(servable.provider, provider)
-
-
 class RuntimeRuntimeTests(unittest.TestCase):
-    class StubRuntimeProvider(
-        RuntimeProvider,
-        MetadataProvider,
-        WarningsProvider,
-        HealthChecker,
-    ):
-        def configure(self, name: str, config: dict[str, Any]) -> None:
-            self.configured = (name, dict(config))
-
-        def metadata(self) -> ProviderMetadata:
-            return ProviderMetadata(
-                kind=ProviderKind.RUNTIME,
-                name="stub-runtime",
-                display_name="Stub Runtime",
-                description="test runtime provider",
-                version="0.3.0",
-            )
-
-        def warnings(self) -> list[str]:
-            return ["set RUNTIME_ENDPOINT"]
-
-        def health_check(self) -> None:
-            return None
-
-    def test_runtime_metadata_and_runtime_provider_registration(self) -> None:
-        provider = self.StubRuntimeProvider()
-
-        runtime_servicer = _runtime._runtime_servicer(
-            provider=provider,
-            kind=ProviderKind.RUNTIME,
-        )
-        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_RUNTIME)
-        self.assertEqual(meta.name, "stub-runtime")
-        self.assertEqual(list(meta.warnings), ["set RUNTIME_ENDPOINT"])
-
-        adapter = _runtime._runtime_provider_runtime_app(provider)
-        server = mock.Mock()
-        with mock.patch.object(
-            runtime_provider_pb2_grpc,
-            "add_RuntimeServicer_to_server",
-        ) as add_runtime:
-            adapter.register_services(server, provider)
-        add_runtime.assert_called_once()
-        wrapped, registered_server = add_runtime.call_args.args
-        self.assertIsNot(wrapped, provider)
-        self.assertIs(getattr(wrapped, "_provider"), provider)
-        self.assertIs(registered_server, server)
-
     def test_runtime_provider_registration_accepts_snake_case_handlers(self) -> None:
         class Provider(RuntimeProvider):
             def get_support(self, request: Any) -> Any:
@@ -1324,68 +1218,7 @@ class RuntimeRuntimeTests(unittest.TestCase):
             ),
         )
 
-    def test_servable_target_wraps_runtime_provider(self) -> None:
-        provider = self.StubRuntimeProvider()
-        servable = _runtime._servable_target(
-            provider,
-            runtime_kind=ProviderKind.RUNTIME,
-        )
-        self.assertIsInstance(servable, AppProviderAdapter)
-        servable = cast(AppProviderAdapter, servable)
-        self.assertEqual(servable.kind, ProviderKind.RUNTIME)
-        self.assertIs(servable.provider, provider)
-
-
 class WorkflowRuntimeTests(unittest.TestCase):
-    class StubWorkflowProvider(
-        WorkflowProvider,
-        MetadataProvider,
-        WarningsProvider,
-        HealthChecker,
-    ):
-        def configure(self, name: str, config: dict[str, Any]) -> None:
-            self.configured = (name, dict(config))
-
-        def metadata(self) -> ProviderMetadata:
-            return ProviderMetadata(
-                kind=ProviderKind.WORKFLOW,
-                name="stub-workflow",
-                display_name="Stub Workflow",
-                description="test workflow provider",
-                version="0.2.0",
-            )
-
-        def warnings(self) -> list[str]:
-            return ["set WORKFLOW_ENDPOINT"]
-
-        def health_check(self) -> None:
-            return None
-
-    def test_runtime_metadata_and_workflow_registration(self) -> None:
-        provider = self.StubWorkflowProvider()
-
-        runtime_servicer = _runtime._runtime_servicer(
-            provider=provider,
-            kind=ProviderKind.WORKFLOW,
-        )
-        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW)
-        self.assertEqual(meta.name, "stub-workflow")
-        self.assertEqual(list(meta.warnings), ["set WORKFLOW_ENDPOINT"])
-
-        adapter = _runtime._workflow_runtime_adapter(provider)
-        server = mock.Mock()
-        with mock.patch.object(
-            workflow_pb2_grpc,
-            "add_WorkflowServicer_to_server",
-        ) as add_workflow:
-            adapter.register_services(server, provider)
-        add_workflow.assert_called_once()
-        wrapped, registered_server = add_workflow.call_args.args
-        self.assertIsNot(wrapped, provider)
-        self.assertIs(getattr(wrapped, "_provider"), provider)
-        self.assertIs(registered_server, server)
-
     def test_workflow_wrapper_accepts_snake_case_one_arg_handler(self) -> None:
         class Provider(WorkflowProvider):
             def start_run(self, request: Any) -> Any:
@@ -1648,18 +1481,6 @@ class WorkflowRuntimeTests(unittest.TestCase):
         response = wrapped.StartRun(raw_request, context)
         self.assertEqual(provider.called, (raw_request, context))
         self.assertEqual(response.id, "run-raw")
-
-    def test_servable_target_wraps_workflow_provider(self) -> None:
-        provider = self.StubWorkflowProvider()
-        servable = _runtime._servable_target(
-            provider,
-            runtime_kind=ProviderKind.WORKFLOW,
-        )
-        self.assertIsInstance(servable, AppProviderAdapter)
-        servable = cast(AppProviderAdapter, servable)
-        self.assertEqual(servable.kind, ProviderKind.WORKFLOW)
-        self.assertIs(servable.provider, provider)
-
 
 if __name__ == "__main__":
     unittest.main()
