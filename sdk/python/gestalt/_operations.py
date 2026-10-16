@@ -248,11 +248,7 @@ def _decode_int(value: Any) -> int:
 
 
 def _decode_float(value: Any) -> float:
-    if isinstance(value, bool):
-        return float(int(value))
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
+    if isinstance(value, (int, float, str)):
         return float(value)
     raise TypeError(f"expected float, got {type(value).__name__}")
 
