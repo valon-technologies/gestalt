@@ -410,9 +410,6 @@ func workflowValueToProto(value coreworkflow.Value) (*proto.WorkflowValue, error
 }
 
 func workflowValueFromProto(value *proto.WorkflowValue) coreworkflow.Value {
-	if value == nil {
-		return coreworkflow.Value{}
-	}
 	switch typed := value.GetKind().(type) {
 	case *proto.WorkflowValue_Literal:
 		return coreworkflow.Value{Literal: protoutil.ValueToAny(typed.Literal), LiteralSet: true}

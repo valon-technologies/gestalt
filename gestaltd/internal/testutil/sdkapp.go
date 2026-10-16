@@ -801,7 +801,7 @@ func (p *Provider) GetCredential(ctx context.Context, req *gestalt.GetExternalCr
 		}
 		return externalCredentialFromClient(resp), nil
 	}
-	if req == nil || req.GetSubject() == "" {
+	if req.GetSubject() == "" {
 		return nil, fmt.Errorf("subject is required")
 	}
 
@@ -864,7 +864,7 @@ func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExte
 	} else if ok {
 		return hostClient.DeleteCredentialRaw(ctx, &sdkclient.DeleteExternalCredentialRequest{Id: req.GetId()})
 	}
-	if req == nil || req.GetId() == "" {
+	if req.GetId() == "" {
 		return fmt.Errorf("credential id is required")
 	}
 
