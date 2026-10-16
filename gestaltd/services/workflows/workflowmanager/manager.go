@@ -1,6 +1,7 @@
 package workflowmanager
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -655,13 +656,7 @@ func effectiveWorkflowRunListPageSize(pageSize int) (int, error) {
 	if pageSize < 0 {
 		return 0, fmt.Errorf("%w: page_size must be non-negative", invocation.ErrInvalidInvocation)
 	}
-	if pageSize == 0 {
-		return workflowRunListDefaultPageSize, nil
-	}
-	if pageSize > workflowRunListMaxPageSize {
-		return workflowRunListMaxPageSize, nil
-	}
-	return pageSize, nil
+	return min(cmp.Or(pageSize, workflowRunListDefaultPageSize), workflowRunListMaxPageSize), nil
 }
 
 const workflowRunListPageTokenVersion = 1

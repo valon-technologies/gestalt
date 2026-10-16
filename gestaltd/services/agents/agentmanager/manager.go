@@ -1,6 +1,7 @@
 package agentmanager
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -3101,13 +3102,7 @@ func effectiveAgentToolListPageSize(pageSize int) (int, error) {
 	if pageSize < 0 {
 		return 0, fmt.Errorf("%w: page_size must be non-negative", invocation.ErrInvalidInvocation)
 	}
-	if pageSize == 0 {
-		return agentToolListDefaultPageSize, nil
-	}
-	if pageSize > agentToolListMaxPageSize {
-		return agentToolListMaxPageSize, nil
-	}
-	return pageSize, nil
+	return min(cmp.Or(pageSize, agentToolListDefaultPageSize), agentToolListMaxPageSize), nil
 }
 
 func agentToolListPageOffset(pageToken string) (int, error) {
@@ -4238,10 +4233,7 @@ func normalizeAgentListLimit(limit int, summaryOnly bool) (int, error) {
 	if summaryOnly && limit == 0 {
 		return AgentListSummaryDefaultLimit, nil
 	}
-	if limit > AgentListMaxLimit {
-		return AgentListMaxLimit, nil
-	}
-	return limit, nil
+	return min(limit, AgentListMaxLimit), nil
 }
 
 func summarizeAgentSession(session *coreagent.Session) *coreagent.Session {
