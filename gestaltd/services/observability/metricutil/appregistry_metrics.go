@@ -1,6 +1,7 @@
 package metricutil
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -102,9 +103,7 @@ func RecordAppRolloutRecovery(ctx context.Context, app string, failedAt, recover
 }
 
 func recordAppRegistryCounterMetrics(ctx context.Context, metrics counterMetrics, duration time.Duration, failed bool, attrs ...attribute.KeyValue) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	opts := metric.WithAttributes(attrs...)
 	metrics.count.Add(ctx, 1, opts)
 	metrics.duration.Record(ctx, duration.Seconds(), opts)

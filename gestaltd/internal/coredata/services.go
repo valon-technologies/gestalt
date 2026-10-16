@@ -1,6 +1,7 @@
 package coredata
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
@@ -47,9 +48,7 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 }
 
 func NewWithOptions(ctx context.Context, ds indexeddb.IndexedDB, opts NewOptions) (*Services, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	if !opts.SkipSchemaBootstrap {
 		if _, err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
 			return nil, fmt.Errorf("create users store: %w", err)

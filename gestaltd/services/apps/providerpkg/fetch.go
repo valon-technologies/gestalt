@@ -1,6 +1,7 @@
 package providerpkg
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -99,9 +100,7 @@ func downloadRequestOnce(client *http.Client, req *http.Request) (*DownloadResul
 }
 
 func waitPackageFetchRetry(ctx context.Context, delay time.Duration) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	if err := ctx.Err(); err != nil {
 		return err
 	}

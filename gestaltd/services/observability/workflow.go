@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"strings"
@@ -102,9 +103,7 @@ func RecordWorkflowRunStarted(ctx context.Context, dims WorkflowMetricDims) {
 }
 
 func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, dims WorkflowMetricDims) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics := workflowRunCompletedMetrics.Load(ctx, tracerName, func(meter metric.Meter) workflowRunCompletedMetricSet {
 		return workflowRunCompletedMetricSet{
 			count: metricutil.NewInt64Counter(
@@ -133,9 +132,7 @@ func RecordWorkflowEventMatchedActivations(ctx context.Context, count int64, dim
 	if count <= 0 {
 		return
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	metrics := workflowEventMatchedActivationsMetrics.Load(ctx, tracerName, func(meter metric.Meter) workflowMatchedActivationsMetricSet {
 		return workflowMatchedActivationsMetricSet{
 			count: metricutil.NewInt64Counter(

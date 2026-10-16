@@ -1,6 +1,7 @@
 package appaccess
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -507,9 +508,7 @@ func prepareInvocationSelectors(ctx context.Context, callCtx requestInvocationCo
 }
 
 func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocationContext, connectionOverride string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	ctx = invocation.WithEntry(ctx, invocation.EntryGRPC)
 	if callCtx.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(callCtx.principal))
