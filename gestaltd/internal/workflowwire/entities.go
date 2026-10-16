@@ -81,80 +81,62 @@ func EventMatchFromProto(match *proto.WorkflowEventMatch) coreworkflow.EventMatc
 	}
 }
 
+var runStatusesToProto = map[coreworkflow.RunStatus]proto.WorkflowRunStatus{
+	coreworkflow.RunStatusPending:   proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+	coreworkflow.RunStatusRunning:   proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING,
+	coreworkflow.RunStatusSucceeded: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED,
+	coreworkflow.RunStatusFailed:    proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED,
+	coreworkflow.RunStatusCanceled:  proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED,
+}
+
 func RunStatusToProto(status coreworkflow.RunStatus) proto.WorkflowRunStatus {
-	switch status {
-	case coreworkflow.RunStatusPending:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING
-	case coreworkflow.RunStatusRunning:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING
-	case coreworkflow.RunStatusSucceeded:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED
-	case coreworkflow.RunStatusFailed:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED
-	case coreworkflow.RunStatusCanceled:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED
-	default:
-		return proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
-	}
+	return runStatusesToProto[status]
+}
+
+var runStatusesFromProto = map[proto.WorkflowRunStatus]coreworkflow.RunStatus{
+	proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED: "",
+	proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING:     coreworkflow.RunStatusPending,
+	proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING:     coreworkflow.RunStatusRunning,
+	proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED:   coreworkflow.RunStatusSucceeded,
+	proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED:      coreworkflow.RunStatusFailed,
+	proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED:    coreworkflow.RunStatusCanceled,
 }
 
 func RunStatusFromProto(status proto.WorkflowRunStatus) (coreworkflow.RunStatus, error) {
-	switch status {
-	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED:
-		return "", nil
-	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING:
-		return coreworkflow.RunStatusPending, nil
-	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING:
-		return coreworkflow.RunStatusRunning, nil
-	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED:
-		return coreworkflow.RunStatusSucceeded, nil
-	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED:
-		return coreworkflow.RunStatusFailed, nil
-	case proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED:
-		return coreworkflow.RunStatusCanceled, nil
-	default:
-		return "", fmt.Errorf("unknown workflow run status %v", status)
+	if value, ok := runStatusesFromProto[status]; ok {
+		return value, nil
 	}
+	return "", fmt.Errorf("unknown workflow run status %v", status)
+}
+
+var stepStatusesToProto = map[coreworkflow.StepStatus]proto.WorkflowStepStatus{
+	coreworkflow.StepStatusPending:   proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_PENDING,
+	coreworkflow.StepStatusRunning:   proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_RUNNING,
+	coreworkflow.StepStatusSkipped:   proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SKIPPED,
+	coreworkflow.StepStatusSucceeded: proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SUCCEEDED,
+	coreworkflow.StepStatusFailed:    proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_FAILED,
+	coreworkflow.StepStatusUnknown:   proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNKNOWN,
 }
 
 func StepStatusToProto(status coreworkflow.StepStatus) proto.WorkflowStepStatus {
-	switch status {
-	case coreworkflow.StepStatusPending:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_PENDING
-	case coreworkflow.StepStatusRunning:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_RUNNING
-	case coreworkflow.StepStatusSkipped:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SKIPPED
-	case coreworkflow.StepStatusSucceeded:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SUCCEEDED
-	case coreworkflow.StepStatusFailed:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_FAILED
-	case coreworkflow.StepStatusUnknown:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNKNOWN
-	default:
-		return proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNSPECIFIED
-	}
+	return stepStatusesToProto[status]
+}
+
+var stepStatusesFromProto = map[proto.WorkflowStepStatus]coreworkflow.StepStatus{
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNSPECIFIED: "",
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_PENDING:     coreworkflow.StepStatusPending,
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_RUNNING:     coreworkflow.StepStatusRunning,
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SKIPPED:     coreworkflow.StepStatusSkipped,
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SUCCEEDED:   coreworkflow.StepStatusSucceeded,
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_FAILED:      coreworkflow.StepStatusFailed,
+	proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNKNOWN:     coreworkflow.StepStatusUnknown,
 }
 
 func StepStatusFromProto(status proto.WorkflowStepStatus) (coreworkflow.StepStatus, error) {
-	switch status {
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNSPECIFIED:
-		return "", nil
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_PENDING:
-		return coreworkflow.StepStatusPending, nil
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_RUNNING:
-		return coreworkflow.StepStatusRunning, nil
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SKIPPED:
-		return coreworkflow.StepStatusSkipped, nil
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_SUCCEEDED:
-		return coreworkflow.StepStatusSucceeded, nil
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_FAILED:
-		return coreworkflow.StepStatusFailed, nil
-	case proto.WorkflowStepStatus_WORKFLOW_STEP_STATUS_UNKNOWN:
-		return coreworkflow.StepStatusUnknown, nil
-	default:
-		return "", fmt.Errorf("unknown workflow step status %v", status)
+	if value, ok := stepStatusesFromProto[status]; ok {
+		return value, nil
 	}
+	return "", fmt.Errorf("unknown workflow step status %v", status)
 }
 
 func RunFromProto(run *proto.WorkflowRun) (*coreworkflow.Run, error) {
