@@ -25,8 +25,6 @@ import (
 	protobuf "google.golang.org/protobuf/proto"
 )
 
-const hostedAgentRuntimeLifecycleSafetyMargin = 5 * time.Second
-
 type hostedAgentPoolClock interface {
 	Now() time.Time
 	After(time.Duration) <-chan time.Time
@@ -1589,7 +1587,7 @@ func (p *hostedAgentProviderPool) healthLoop() {
 				p.replaceBackend(backend)
 				continue
 			}
-			if reason := p.runtimeSessionRetirementReason(session, drainAt, p.nowUTC()); reason != "" {
+			if reason := runtimeSessionRetirementReason(session, drainAt, p.nowUTC()); reason != "" {
 				slog.Info("retiring hosted agent runtime instance", "provider", p.name, "instance", backend.id, "reason", reason)
 				p.replaceBackend(backend)
 				continue
@@ -1627,7 +1625,7 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSession(backend *hostedAg
 	if err != nil {
 		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
 	}
-	drainAt := p.runtimeSessionDrainAt(session, p.nowUTC())
+	drainAt := runtimeSessionDrainAt(session, p.nowUTC(), p.policy)
 	p.mu.Lock()
 	if p.backendAvailableLocked(backend, true) {
 		if backend.runtimeDrainAt != nil && (drainAt == nil || backend.runtimeDrainAt.Before(*drainAt)) {
@@ -1660,7 +1658,7 @@ func (p *hostedAgentProviderPool) ensureBackendFreshForNewWork(ctx context.Conte
 		p.replaceBackendAllowNever(backend, err.Error(), true)
 		return p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance refresh failed: %w", p.name, err))
 	}
-	if reason := p.runtimeSessionRetirementReason(session, drainAt, p.nowUTC()); reason != "" {
+	if reason := runtimeSessionRetirementReason(session, drainAt, p.nowUTC()); reason != "" {
 		p.replaceBackendAllowNever(backend, reason, true)
 		return p.unavailableError(fmt.Errorf("hosted agent provider %q runtime instance is retiring: %s", p.name, reason))
 	}
@@ -1687,7 +1685,7 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx co
 	if err != nil {
 		return nil, nil, fmt.Errorf("get runtime session %q: %w", sessionID, err)
 	}
-	drainAt := p.runtimeSessionDrainAt(session, p.nowUTC())
+	drainAt := runtimeSessionDrainAt(session, p.nowUTC(), p.policy)
 	p.mu.Lock()
 	if p.backendAvailableLocked(backend, true) {
 		if backend.runtimeDrainAt != nil && (drainAt == nil || backend.runtimeDrainAt.Before(*drainAt)) {
@@ -1699,26 +1697,6 @@ func (p *hostedAgentProviderPool) refreshBackendRuntimeSessionWithContext(ctx co
 	}
 	p.mu.Unlock()
 	return session, drainAt, nil
-}
-
-func (p *hostedAgentProviderPool) runtimeSessionRetirementReason(session *proto.RuntimeSession, drainAt *time.Time, now time.Time) string {
-	if session == nil {
-		return ""
-	}
-	switch session.GetState() {
-	case runtimeprovider.SessionStateFailed, runtimeprovider.SessionStateStopped:
-		return fmt.Sprintf("runtime session entered %q state", session.GetState())
-	}
-	if reason := hostedRuntimeSessionCompatibilityReason(session); reason != "" {
-		return reason
-	}
-	if drainAt == nil || now.Before(*drainAt) {
-		return ""
-	}
-	if expiresAt := runtimeSessionExpiresAt(session); expiresAt != nil && !now.Before(*expiresAt) {
-		return fmt.Sprintf("runtime session expired at %s", expiresAt.Format(time.RFC3339Nano))
-	}
-	return fmt.Sprintf("runtime session reached drain deadline %s", drainAt.Format(time.RFC3339Nano))
 }
 
 func (p *hostedAgentProviderPool) runtimeSessionProactiveReplacementReason(backend *hostedAgentPoolBackend, session *proto.RuntimeSession, drainAt *time.Time, now time.Time) string {
@@ -1761,53 +1739,6 @@ func (p *hostedAgentProviderPool) runtimeSessionReplacementLeadTime() time.Durat
 		return time.Second
 	}
 	return lead
-}
-
-func (p *hostedAgentProviderPool) runtimeSessionDrainAt(session *proto.RuntimeSession, now time.Time) *time.Time {
-	lifecycle := session.GetLifecycle()
-	if lifecycle == nil {
-		return nil
-	}
-	var drainAt *time.Time
-	if lifecycle.GetRecommendedDrainAt() != nil {
-		recommended := lifecycle.GetRecommendedDrainAt().AsTime().UTC()
-		drainAt = &recommended
-	}
-	if lifecycle.GetExpiresAt() != nil {
-		expiryDrain := p.runtimeSessionExpiryDrainAt(lifecycle, now)
-		if drainAt == nil || expiryDrain.Before(*drainAt) {
-			drainAt = &expiryDrain
-		}
-	}
-	return drainAt
-}
-
-func (p *hostedAgentProviderPool) runtimeSessionExpiryDrainAt(lifecycle *proto.RuntimeSessionLifecycle, now time.Time) time.Time {
-	expiresAt := lifecycle.GetExpiresAt().AsTime().UTC()
-	reserve := p.policy.StartupTimeout + p.policy.DrainTimeout + p.policy.HealthCheckInterval + hostedAgentRuntimeLifecycleSafetyMargin
-	drainAt := expiresAt.Add(-reserve).UTC()
-	if lifecycle.GetStartedAt() != nil {
-		startedAt := lifecycle.GetStartedAt().AsTime().UTC()
-		lifetime := expiresAt.Sub(startedAt)
-		if lifetime > 0 {
-			minDrainAt := startedAt.Add(lifetime / 2).UTC()
-			if drainAt.Before(minDrainAt) {
-				return minDrainAt
-			}
-		}
-	}
-	if !now.IsZero() && expiresAt.After(now) && drainAt.Before(now) {
-		return now.Add(expiresAt.Sub(now) / 2).UTC()
-	}
-	return drainAt
-}
-
-func runtimeSessionExpiresAt(session *proto.RuntimeSession) *time.Time {
-	if session.GetLifecycle().GetExpiresAt() == nil {
-		return nil
-	}
-	expiresAt := session.GetLifecycle().GetExpiresAt().AsTime().UTC()
-	return &expiresAt
 }
 
 func cloneTime(src *time.Time) *time.Time {
@@ -1991,7 +1922,7 @@ func (p *hostedAgentProviderPool) startBackend(ctx context.Context) (*hostedAgen
 		runtimeSessionID: instance.runtimeSessionID,
 		runtimeSession:   instance.runtimeSession,
 		startedAt:        now,
-		runtimeDrainAt:   p.runtimeSessionDrainAt(instance.runtimeSession, now),
+		runtimeDrainAt:   runtimeSessionDrainAt(instance.runtimeSession, now, p.policy),
 		forceCloseAt:     runtimeSessionExpiresAt(instance.runtimeSession),
 		liveTurns:        map[string]struct{}{},
 	}
