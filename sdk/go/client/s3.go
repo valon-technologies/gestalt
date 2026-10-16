@@ -293,19 +293,13 @@ func ConnectS3(ctx context.Context, name string) (*S3, error) {
 func (c *S3) HeadObject(ctx context.Context, ref *S3ObjectRef) (*HeadObjectResponse, error) {
 	request := &HeadObjectRequest{Ref: ref}
 	response, err := c.client.HeadObject(ctx, ToWireHeadObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireHeadObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireHeadObjectResponse)
 }
 
 // HeadObjectRaw is the faithful form of [S3.HeadObject].
 func (c *S3) HeadObjectRaw(ctx context.Context, request *HeadObjectRequest) (*HeadObjectResponse, error) {
 	response, err := c.client.HeadObject(ctx, ToWireHeadObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireHeadObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireHeadObjectResponse)
 }
 
 // ReadObject is the ergonomic form of [S3.ReadObjectRaw]: it consumes the
@@ -400,38 +394,26 @@ func (c *S3) DeleteObjectRaw(ctx context.Context, request *DeleteObjectRequest) 
 func (c *S3) ListObjects(ctx context.Context, prefix string, delimiter string, continuationToken string, startAfter string, maxKeys int32) (*ListObjectsResponse, error) {
 	request := &ListObjectsRequest{Prefix: prefix, Delimiter: delimiter, ContinuationToken: continuationToken, StartAfter: startAfter, MaxKeys: maxKeys}
 	response, err := c.client.ListObjects(ctx, ToWireListObjectsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListObjectsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListObjectsResponse)
 }
 
 // ListObjectsRaw is the faithful form of [S3.ListObjects].
 func (c *S3) ListObjectsRaw(ctx context.Context, request *ListObjectsRequest) (*ListObjectsResponse, error) {
 	response, err := c.client.ListObjects(ctx, ToWireListObjectsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListObjectsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListObjectsResponse)
 }
 
 // CopyObject is the ergonomic form of [S3.CopyObjectRaw].
 func (c *S3) CopyObject(ctx context.Context, ifMatch string, ifNoneMatch string, source *S3ObjectRef, destination *S3ObjectRef) (*CopyObjectResponse, error) {
 	request := &CopyObjectRequest{IfMatch: ifMatch, IfNoneMatch: ifNoneMatch, Source: source, Destination: destination}
 	response, err := c.client.CopyObject(ctx, ToWireCopyObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCopyObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCopyObjectResponse)
 }
 
 // CopyObjectRaw is the faithful form of [S3.CopyObject].
 func (c *S3) CopyObjectRaw(ctx context.Context, request *CopyObjectRequest) (*CopyObjectResponse, error) {
 	response, err := c.client.CopyObject(ctx, ToWireCopyObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCopyObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCopyObjectResponse)
 }
 
 // S3PresignObjectOptions carries the optional parameters of [S3.PresignObject].
@@ -448,19 +430,13 @@ func (c *S3) PresignObject(ctx context.Context, method PresignMethod, expiresSec
 	}
 	request := &PresignObjectRequest{Method: method, ExpiresSeconds: expiresSeconds, Ref: ref, ContentType: opts.ContentType, ContentDisposition: opts.ContentDisposition}
 	response, err := c.client.PresignObject(ctx, ToWirePresignObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWirePresignObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWirePresignObjectResponse)
 }
 
 // PresignObjectRaw is the faithful form of [S3.PresignObject].
 func (c *S3) PresignObjectRaw(ctx context.Context, request *PresignObjectRequest) (*PresignObjectResponse, error) {
 	response, err := c.client.PresignObject(ctx, ToWirePresignObjectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWirePresignObjectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWirePresignObjectResponse)
 }
 
 // The first response frame carries object metadata. All subsequent frames
@@ -590,17 +566,11 @@ func (c *S3ObjectAccess) CreateObjectAccessURL(ctx context.Context, method Presi
 	}
 	request := &CreateObjectAccessURLRequest{Method: method, ExpiresSeconds: expiresSeconds, Ref: ref, ContentType: opts.ContentType, ContentDisposition: opts.ContentDisposition}
 	response, err := c.client.CreateObjectAccessURL(ctx, ToWireCreateObjectAccessURLRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCreateObjectAccessURLResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCreateObjectAccessURLResponse)
 }
 
 // CreateObjectAccessURLRaw is the faithful form of [S3ObjectAccess.CreateObjectAccessURL].
 func (c *S3ObjectAccess) CreateObjectAccessURLRaw(ctx context.Context, request *CreateObjectAccessURLRequest) (*CreateObjectAccessURLResponse, error) {
 	response, err := c.client.CreateObjectAccessURL(ctx, ToWireCreateObjectAccessURLRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCreateObjectAccessURLResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCreateObjectAccessURLResponse)
 }

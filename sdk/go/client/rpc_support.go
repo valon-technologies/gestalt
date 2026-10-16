@@ -73,6 +73,14 @@ func toGestaltError(err error) *GestaltError {
 	return &GestaltError{Code: GestaltErrorCodeUnknown, Message: err.Error(), cause: err}
 }
 
+// decodeUnaryResponse applies native conversion only after a successful RPC.
+func decodeUnaryResponse[Wire, Native any](response *Wire, err error, convert func(*Wire) *Native) (*Native, error) {
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return convert(response), nil
+}
+
 // ToGestaltError converts any transport error to a *GestaltError.
 func ToGestaltError(err error) *GestaltError {
 	return toGestaltError(err)

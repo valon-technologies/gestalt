@@ -1004,8 +1004,7 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 			r.body.WriteString(line)
 		}
 		fmt.Fprintf(&r.body, "\tresponse, err := c.client.%s(ctx, %s)\n", m.Name, arg)
-		r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-		fmt.Fprintf(&r.body, "\treturn %s(response), nil\n}\n\n", fromWireFunc(responseType))
+		fmt.Fprintf(&r.body, "\treturn decodeUnaryResponse(response, err, %s)\n}\n\n", fromWireFunc(responseType))
 	}
 }
 
@@ -1168,8 +1167,7 @@ func (r *renderer) renderFaithfulMethod(svcName string, m *model.Method, rawSuff
 				r.body.WriteString(line + "\n")
 			}
 			fmt.Fprintf(&r.body, "\tresponse, err := c.client.%s(ctx, %s)\n", m.Name, arg)
-			r.body.WriteString("\tif err != nil {\n\t\treturn nil, toGestaltError(err)\n\t}\n")
-			fmt.Fprintf(&r.body, "\treturn %s(response), nil\n}\n\n", fromWireFunc(responseType))
+			fmt.Fprintf(&r.body, "\treturn decodeUnaryResponse(response, err, %s)\n}\n\n", fromWireFunc(responseType))
 		}
 	}
 }

@@ -913,10 +913,7 @@ func (c *IndexedDB) DeleteIndexRaw(ctx context.Context, request *DeleteIndexRequ
 func (c *IndexedDB) Get(ctx context.Context, store string, id string) (*RecordResponse, error) {
 	request := &ObjectStoreRequest{Store: store, Id: id}
 	response, err := c.client.Get(ctx, ToWireObjectStoreRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordResponse)
 }
 
 // GetRaw is the faithful form of [IndexedDB.Get].
@@ -924,29 +921,20 @@ func (c *IndexedDB) Get(ctx context.Context, store string, id string) (*RecordRe
 // Primary key CRUD
 func (c *IndexedDB) GetRaw(ctx context.Context, request *ObjectStoreRequest) (*RecordResponse, error) {
 	response, err := c.client.Get(ctx, ToWireObjectStoreRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordResponse)
 }
 
 // GetKey is the ergonomic form of [IndexedDB.GetKeyRaw].
 func (c *IndexedDB) GetKey(ctx context.Context, store string, id string) (*KeyResponse, error) {
 	request := &ObjectStoreRequest{Store: store, Id: id}
 	response, err := c.client.GetKey(ctx, ToWireObjectStoreRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeyResponse)
 }
 
 // GetKeyRaw is the faithful form of [IndexedDB.GetKey].
 func (c *IndexedDB) GetKeyRaw(ctx context.Context, request *ObjectStoreRequest) (*KeyResponse, error) {
 	response, err := c.client.GetKey(ctx, ToWireObjectStoreRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeyResponse)
 }
 
 // Add is the ergonomic form of [IndexedDB.AddRaw].
@@ -1034,19 +1022,13 @@ func (c *IndexedDB) GetAll(ctx context.Context, store string, query *IndexedDBQu
 	}
 	request := &ObjectStoreRangeRequest{Store: store, Query: query, Count: opts.Count}
 	response, err := c.client.GetAll(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordsResponse)
 }
 
 // GetAllRaw is the faithful form of [IndexedDB.GetAll].
 func (c *IndexedDB) GetAllRaw(ctx context.Context, request *ObjectStoreRangeRequest) (*RecordsResponse, error) {
 	response, err := c.client.GetAll(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordsResponse)
 }
 
 // IndexedDBGetAllKeysOptions carries the optional parameters of [IndexedDB.GetAllKeys].
@@ -1062,19 +1044,13 @@ func (c *IndexedDB) GetAllKeys(ctx context.Context, store string, query *Indexed
 	}
 	request := &ObjectStoreRangeRequest{Store: store, Query: query, Count: opts.Count}
 	response, err := c.client.GetAllKeys(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeysResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeysResponse)
 }
 
 // GetAllKeysRaw is the faithful form of [IndexedDB.GetAllKeys].
 func (c *IndexedDB) GetAllKeysRaw(ctx context.Context, request *ObjectStoreRangeRequest) (*KeysResponse, error) {
 	response, err := c.client.GetAllKeys(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeysResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeysResponse)
 }
 
 // Count is the ergonomic form of [IndexedDB.CountRaw].
@@ -1091,29 +1067,20 @@ func (c *IndexedDB) Count(ctx context.Context, store string, query *IndexedDBQue
 // CountRaw is the faithful form of [IndexedDB.Count].
 func (c *IndexedDB) CountRaw(ctx context.Context, request *ObjectStoreRangeRequest) (*CountResponse, error) {
 	response, err := c.client.Count(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCountResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCountResponse)
 }
 
 // DeleteRange is the ergonomic form of [IndexedDB.DeleteRangeRaw].
 func (c *IndexedDB) DeleteRange(ctx context.Context, store string, query *IndexedDBQuery) (*DeleteResponse, error) {
 	request := &ObjectStoreRangeRequest{Store: store, Query: query}
 	response, err := c.client.DeleteRange(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireDeleteResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireDeleteResponse)
 }
 
 // DeleteRangeRaw is the faithful form of [IndexedDB.DeleteRange].
 func (c *IndexedDB) DeleteRangeRaw(ctx context.Context, request *ObjectStoreRangeRequest) (*DeleteResponse, error) {
 	response, err := c.client.DeleteRange(ctx, ToWireObjectStoreRangeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireDeleteResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireDeleteResponse)
 }
 
 // IndexGet is the ergonomic form of [IndexedDB.IndexGetRaw].
@@ -1122,10 +1089,7 @@ func (c *IndexedDB) DeleteRangeRaw(ctx context.Context, request *ObjectStoreRang
 func (c *IndexedDB) IndexGet(ctx context.Context, store string, index string, query *IndexedDBQuery) (*RecordResponse, error) {
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query}
 	response, err := c.client.IndexGet(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordResponse)
 }
 
 // IndexGetRaw is the faithful form of [IndexedDB.IndexGet].
@@ -1133,29 +1097,20 @@ func (c *IndexedDB) IndexGet(ctx context.Context, store string, index string, qu
 // Index queries
 func (c *IndexedDB) IndexGetRaw(ctx context.Context, request *IndexQueryRequest) (*RecordResponse, error) {
 	response, err := c.client.IndexGet(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordResponse)
 }
 
 // IndexGetKey is the ergonomic form of [IndexedDB.IndexGetKeyRaw].
 func (c *IndexedDB) IndexGetKey(ctx context.Context, store string, index string, query *IndexedDBQuery) (*KeyResponse, error) {
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query}
 	response, err := c.client.IndexGetKey(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeyResponse)
 }
 
 // IndexGetKeyRaw is the faithful form of [IndexedDB.IndexGetKey].
 func (c *IndexedDB) IndexGetKeyRaw(ctx context.Context, request *IndexQueryRequest) (*KeyResponse, error) {
 	response, err := c.client.IndexGetKey(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeyResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeyResponse)
 }
 
 // IndexedDBIndexGetAllOptions carries the optional parameters of [IndexedDB.IndexGetAll].
@@ -1171,19 +1126,13 @@ func (c *IndexedDB) IndexGetAll(ctx context.Context, store string, index string,
 	}
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query, Count: opts.Count}
 	response, err := c.client.IndexGetAll(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordsResponse)
 }
 
 // IndexGetAllRaw is the faithful form of [IndexedDB.IndexGetAll].
 func (c *IndexedDB) IndexGetAllRaw(ctx context.Context, request *IndexQueryRequest) (*RecordsResponse, error) {
 	response, err := c.client.IndexGetAll(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRecordsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRecordsResponse)
 }
 
 // IndexedDBIndexGetAllKeysOptions carries the optional parameters of [IndexedDB.IndexGetAllKeys].
@@ -1199,19 +1148,13 @@ func (c *IndexedDB) IndexGetAllKeys(ctx context.Context, store string, index str
 	}
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query, Count: opts.Count}
 	response, err := c.client.IndexGetAllKeys(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeysResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeysResponse)
 }
 
 // IndexGetAllKeysRaw is the faithful form of [IndexedDB.IndexGetAllKeys].
 func (c *IndexedDB) IndexGetAllKeysRaw(ctx context.Context, request *IndexQueryRequest) (*KeysResponse, error) {
 	response, err := c.client.IndexGetAllKeys(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireKeysResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireKeysResponse)
 }
 
 // IndexCount is the ergonomic form of [IndexedDB.IndexCountRaw].
@@ -1228,29 +1171,20 @@ func (c *IndexedDB) IndexCount(ctx context.Context, store string, index string, 
 // IndexCountRaw is the faithful form of [IndexedDB.IndexCount].
 func (c *IndexedDB) IndexCountRaw(ctx context.Context, request *IndexQueryRequest) (*CountResponse, error) {
 	response, err := c.client.IndexCount(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireCountResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireCountResponse)
 }
 
 // IndexDelete is the ergonomic form of [IndexedDB.IndexDeleteRaw].
 func (c *IndexedDB) IndexDelete(ctx context.Context, store string, index string, query *IndexedDBQuery) (*DeleteResponse, error) {
 	request := &IndexQueryRequest{Store: store, Index: index, Query: query}
 	response, err := c.client.IndexDelete(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireDeleteResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireDeleteResponse)
 }
 
 // IndexDeleteRaw is the faithful form of [IndexedDB.IndexDelete].
 func (c *IndexedDB) IndexDeleteRaw(ctx context.Context, request *IndexQueryRequest) (*DeleteResponse, error) {
 	response, err := c.client.IndexDelete(ctx, ToWireIndexQueryRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireDeleteResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireDeleteResponse)
 }
 
 // OpenCursor calls the OpenCursor RPC of IndexedDB.

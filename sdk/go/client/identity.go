@@ -204,19 +204,13 @@ func ConnectIdentity(ctx context.Context, name string) (*Identity, error) {
 func (c *Identity) Authorize(ctx context.Context, responseType string, clientId string, redirectUri string, scope string, state string) (*AuthorizeResponse, error) {
 	request := &AuthorizeRequest{ResponseType: responseType, ClientId: clientId, RedirectUri: redirectUri, Scope: scope, State: state}
 	response, err := c.client.Authorize(ctx, ToWireAuthorizeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireAuthorizeResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireAuthorizeResponse)
 }
 
 // AuthorizeRaw is the faithful form of [Identity.Authorize].
 func (c *Identity) AuthorizeRaw(ctx context.Context, request *AuthorizeRequest) (*AuthorizeResponse, error) {
 	response, err := c.client.Authorize(ctx, ToWireAuthorizeRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireAuthorizeResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireAuthorizeResponse)
 }
 
 // IdentityTokenOptions carries the optional parameters of [Identity.Token].
@@ -244,92 +238,62 @@ func (c *Identity) Token(ctx context.Context, grantType string, code string, red
 	}
 	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType, ExpiresIn: opts.ExpiresIn, Name: opts.Name, GrantSubject: opts.GrantSubject}
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireTokenResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireTokenResponse)
 }
 
 // TokenRaw is the faithful form of [Identity.Token].
 func (c *Identity) TokenRaw(ctx context.Context, request *TokenRequest) (*TokenResponse, error) {
 	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireTokenResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireTokenResponse)
 }
 
 // Introspect is the ergonomic form of [Identity.IntrospectRaw].
 func (c *Identity) Introspect(ctx context.Context, token string, tokenTypeHint string) (*IntrospectResponse, error) {
 	request := &IntrospectRequest{Token: token, TokenTypeHint: tokenTypeHint}
 	response, err := c.client.Introspect(ctx, ToWireIntrospectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireIntrospectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireIntrospectResponse)
 }
 
 // IntrospectRaw is the faithful form of [Identity.Introspect].
 func (c *Identity) IntrospectRaw(ctx context.Context, request *IntrospectRequest) (*IntrospectResponse, error) {
 	response, err := c.client.Introspect(ctx, ToWireIntrospectRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireIntrospectResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireIntrospectResponse)
 }
 
 // UserInfo calls the UserInfo RPC of Identity.
 func (c *Identity) UserInfo(ctx context.Context, request *UserInfoRequest) (*UserInfoResponse, error) {
 	response, err := c.client.UserInfo(ctx, ToWireUserInfoRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireUserInfoResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireUserInfoResponse)
 }
 
 // ListGrants calls the ListGrants RPC of Identity.
 func (c *Identity) ListGrants(ctx context.Context, request *ListGrantsRequest) (*ListGrantsResponse, error) {
 	response, err := c.client.ListGrants(ctx, ToWireListGrantsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListGrantsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListGrantsResponse)
 }
 
 // GetGrant is the ergonomic form of [Identity.GetGrantRaw].
 func (c *Identity) GetGrant(ctx context.Context, grantId string) (*GetGrantResponse, error) {
 	request := &GetGrantRequest{GrantId: grantId}
 	response, err := c.client.GetGrant(ctx, ToWireGetGrantRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetGrantResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetGrantResponse)
 }
 
 // GetGrantRaw is the faithful form of [Identity.GetGrant].
 func (c *Identity) GetGrantRaw(ctx context.Context, request *GetGrantRequest) (*GetGrantResponse, error) {
 	response, err := c.client.GetGrant(ctx, ToWireGetGrantRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetGrantResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetGrantResponse)
 }
 
 // RevokeGrant is the ergonomic form of [Identity.RevokeGrantRaw].
 func (c *Identity) RevokeGrant(ctx context.Context, grantId string) (*RevokeGrantResponse, error) {
 	request := &RevokeGrantRequest{GrantId: grantId}
 	response, err := c.client.RevokeGrant(ctx, ToWireRevokeGrantRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRevokeGrantResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRevokeGrantResponse)
 }
 
 // RevokeGrantRaw is the faithful form of [Identity.RevokeGrant].
 func (c *Identity) RevokeGrantRaw(ctx context.Context, request *RevokeGrantRequest) (*RevokeGrantResponse, error) {
 	response, err := c.client.RevokeGrant(ctx, ToWireRevokeGrantRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRevokeGrantResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRevokeGrantResponse)
 }

@@ -637,10 +637,7 @@ func ConnectWorkflow(ctx context.Context, name string, opts ...ClientOption) (*W
 func (c *Workflow) ApplyDefinition(ctx context.Context, provider string, idempotencyKey string, spec *WorkflowDefinitionSpec) (*WorkflowDefinition, error) {
 	request := &ApplyWorkflowProviderDefinitionRequest{Provider: provider, IdempotencyKey: idempotencyKey, Spec: spec, Context: c.context}
 	response, err := c.client.ApplyDefinition(ctx, ToWireApplyWorkflowProviderDefinitionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // ApplyDefinitionRaw is the faithful form of [Workflow.ApplyDefinition].
@@ -651,20 +648,14 @@ func (c *Workflow) ApplyDefinitionRaw(ctx context.Context, request *ApplyWorkflo
 		request = &shallow
 	}
 	response, err := c.client.ApplyDefinition(ctx, ToWireApplyWorkflowProviderDefinitionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // GetDefinition is the ergonomic form of [Workflow.GetDefinitionRaw].
 func (c *Workflow) GetDefinition(ctx context.Context, provider string, definitionId string) (*WorkflowDefinition, error) {
 	request := &GetWorkflowProviderDefinitionRequest{Provider: provider, DefinitionId: definitionId, Context: c.context}
 	response, err := c.client.GetDefinition(ctx, ToWireGetWorkflowProviderDefinitionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // GetDefinitionRaw is the faithful form of [Workflow.GetDefinition].
@@ -675,10 +666,7 @@ func (c *Workflow) GetDefinitionRaw(ctx context.Context, request *GetWorkflowPro
 		request = &shallow
 	}
 	response, err := c.client.GetDefinition(ctx, ToWireGetWorkflowProviderDefinitionRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // ListDefinitions is the ergonomic form of [Workflow.ListDefinitionsRaw].
@@ -700,20 +688,14 @@ func (c *Workflow) ListDefinitionsRaw(ctx context.Context, request *ListWorkflow
 		request = &shallow
 	}
 	response, err := c.client.ListDefinitions(ctx, ToWireListWorkflowProviderDefinitionsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListWorkflowProviderDefinitionsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListWorkflowProviderDefinitionsResponse)
 }
 
 // SetDefinitionPaused is the ergonomic form of [Workflow.SetDefinitionPausedRaw].
 func (c *Workflow) SetDefinitionPaused(ctx context.Context, provider string, definitionId string, paused bool) (*WorkflowDefinition, error) {
 	request := &SetWorkflowProviderDefinitionPausedRequest{Provider: provider, DefinitionId: definitionId, Paused: paused, Context: c.context}
 	response, err := c.client.SetDefinitionPaused(ctx, ToWireSetWorkflowProviderDefinitionPausedRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // SetDefinitionPausedRaw is the faithful form of [Workflow.SetDefinitionPaused].
@@ -724,20 +706,14 @@ func (c *Workflow) SetDefinitionPausedRaw(ctx context.Context, request *SetWorkf
 		request = &shallow
 	}
 	response, err := c.client.SetDefinitionPaused(ctx, ToWireSetWorkflowProviderDefinitionPausedRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // SetActivationPaused is the ergonomic form of [Workflow.SetActivationPausedRaw].
 func (c *Workflow) SetActivationPaused(ctx context.Context, provider string, definitionId string, activationId string, paused bool) (*WorkflowDefinition, error) {
 	request := &SetWorkflowProviderActivationPausedRequest{Provider: provider, DefinitionId: definitionId, ActivationId: activationId, Paused: paused, Context: c.context}
 	response, err := c.client.SetActivationPaused(ctx, ToWireSetWorkflowProviderActivationPausedRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // SetActivationPausedRaw is the faithful form of [Workflow.SetActivationPaused].
@@ -748,10 +724,7 @@ func (c *Workflow) SetActivationPausedRaw(ctx context.Context, request *SetWorkf
 		request = &shallow
 	}
 	response, err := c.client.SetActivationPaused(ctx, ToWireSetWorkflowProviderActivationPausedRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowDefinition(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowDefinition)
 }
 
 // DeleteDefinition is the ergonomic form of [Workflow.DeleteDefinitionRaw].
@@ -780,10 +753,7 @@ func (c *Workflow) DeleteDefinitionRaw(ctx context.Context, request *DeleteWorkf
 func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflowKey string, provider string, definitionId string, expectedDefinitionGeneration int64, input map[string]any) (*WorkflowRun, error) {
 	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, Provider: provider, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Input: input, Context: c.context}
 	response, err := c.client.StartRun(ctx, ToWireStartWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowRun(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
 
 // StartRunRaw is the faithful form of [Workflow.StartRun].
@@ -794,20 +764,14 @@ func (c *Workflow) StartRunRaw(ctx context.Context, request *StartWorkflowProvid
 		request = &shallow
 	}
 	response, err := c.client.StartRun(ctx, ToWireStartWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowRun(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
 
 // ListRuns is the ergonomic form of [Workflow.ListRunsRaw].
 func (c *Workflow) ListRuns(ctx context.Context, provider string, pageSize int32, pageToken string, status WorkflowRunStatus, targetApp string, definitionId string) (*ListWorkflowProviderRunsResponse, error) {
 	request := &ListWorkflowProviderRunsRequest{Provider: provider, PageSize: pageSize, PageToken: pageToken, Status: status, TargetApp: targetApp, DefinitionId: definitionId, Context: c.context}
 	response, err := c.client.ListRuns(ctx, ToWireListWorkflowProviderRunsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListWorkflowProviderRunsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListWorkflowProviderRunsResponse)
 }
 
 // ListRunsRaw is the faithful form of [Workflow.ListRuns].
@@ -818,20 +782,14 @@ func (c *Workflow) ListRunsRaw(ctx context.Context, request *ListWorkflowProvide
 		request = &shallow
 	}
 	response, err := c.client.ListRuns(ctx, ToWireListWorkflowProviderRunsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListWorkflowProviderRunsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListWorkflowProviderRunsResponse)
 }
 
 // GetRun is the ergonomic form of [Workflow.GetRunRaw].
 func (c *Workflow) GetRun(ctx context.Context, provider string, runId string) (*WorkflowRun, error) {
 	request := &GetWorkflowProviderRunRequest{Provider: provider, RunId: runId, Context: c.context}
 	response, err := c.client.GetRun(ctx, ToWireGetWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowRun(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
 
 // GetRunRaw is the faithful form of [Workflow.GetRun].
@@ -842,10 +800,7 @@ func (c *Workflow) GetRunRaw(ctx context.Context, request *GetWorkflowProviderRu
 		request = &shallow
 	}
 	response, err := c.client.GetRun(ctx, ToWireGetWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowRun(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
 
 // GetRunEvents is the ergonomic form of [Workflow.GetRunEventsRaw].
@@ -867,10 +822,7 @@ func (c *Workflow) GetRunEventsRaw(ctx context.Context, request *GetWorkflowProv
 		request = &shallow
 	}
 	response, err := c.client.GetRunEvents(ctx, ToWireGetWorkflowProviderRunEventsRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetWorkflowProviderRunEventsResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetWorkflowProviderRunEventsResponse)
 }
 
 // GetRunOutput is the ergonomic form of [Workflow.GetRunOutputRaw].
@@ -892,20 +844,14 @@ func (c *Workflow) GetRunOutputRaw(ctx context.Context, request *GetWorkflowProv
 		request = &shallow
 	}
 	response, err := c.client.GetRunOutput(ctx, ToWireGetWorkflowProviderRunOutputRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireGetWorkflowProviderRunOutputResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireGetWorkflowProviderRunOutputResponse)
 }
 
 // CancelRun is the ergonomic form of [Workflow.CancelRunRaw].
 func (c *Workflow) CancelRun(ctx context.Context, provider string, runId string, reason string) (*WorkflowRun, error) {
 	request := &CancelWorkflowProviderRunRequest{Provider: provider, RunId: runId, Reason: reason, Context: c.context}
 	response, err := c.client.CancelRun(ctx, ToWireCancelWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowRun(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
 
 // CancelRunRaw is the faithful form of [Workflow.CancelRun].
@@ -916,20 +862,14 @@ func (c *Workflow) CancelRunRaw(ctx context.Context, request *CancelWorkflowProv
 		request = &shallow
 	}
 	response, err := c.client.CancelRun(ctx, ToWireCancelWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowRun(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowRun)
 }
 
 // SignalRun is the ergonomic form of [Workflow.SignalRunRaw].
 func (c *Workflow) SignalRun(ctx context.Context, provider string, runId string, signal *WorkflowSignal) (*SignalWorkflowRunResponse, error) {
 	request := &SignalWorkflowProviderRunRequest{Provider: provider, RunId: runId, Signal: signal, Context: c.context}
 	response, err := c.client.SignalRun(ctx, ToWireSignalWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireSignalWorkflowRunResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireSignalWorkflowRunResponse)
 }
 
 // SignalRunRaw is the faithful form of [Workflow.SignalRun].
@@ -940,20 +880,14 @@ func (c *Workflow) SignalRunRaw(ctx context.Context, request *SignalWorkflowProv
 		request = &shallow
 	}
 	response, err := c.client.SignalRun(ctx, ToWireSignalWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireSignalWorkflowRunResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireSignalWorkflowRunResponse)
 }
 
 // SignalOrStartRun is the ergonomic form of [Workflow.SignalOrStartRunRaw].
 func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, idempotencyKey string, provider string, definitionId string, expectedDefinitionGeneration int64, signal *WorkflowSignal, input map[string]any) (*SignalWorkflowRunResponse, error) {
 	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, Provider: provider, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, Input: input, Context: c.context}
 	response, err := c.client.SignalOrStartRun(ctx, ToWireSignalOrStartWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireSignalWorkflowRunResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireSignalWorkflowRunResponse)
 }
 
 // SignalOrStartRunRaw is the faithful form of [Workflow.SignalOrStartRun].
@@ -964,20 +898,14 @@ func (c *Workflow) SignalOrStartRunRaw(ctx context.Context, request *SignalOrSta
 		request = &shallow
 	}
 	response, err := c.client.SignalOrStartRun(ctx, ToWireSignalOrStartWorkflowProviderRunRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireSignalWorkflowRunResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireSignalWorkflowRunResponse)
 }
 
 // DeliverEvent is the ergonomic form of [Workflow.DeliverEventRaw].
 func (c *Workflow) DeliverEvent(ctx context.Context, provider string, event *WorkflowEvent) (*WorkflowEvent, error) {
 	request := &DeliverWorkflowProviderEventRequest{Provider: provider, Event: event, Context: c.context}
 	response, err := c.client.DeliverEvent(ctx, ToWireDeliverWorkflowProviderEventRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowEvent(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowEvent)
 }
 
 // DeliverEventRaw is the faithful form of [Workflow.DeliverEvent].
@@ -988,8 +916,5 @@ func (c *Workflow) DeliverEventRaw(ctx context.Context, request *DeliverWorkflow
 		request = &shallow
 	}
 	response, err := c.client.DeliverEvent(ctx, ToWireDeliverWorkflowProviderEventRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireWorkflowEvent(response), nil
+	return decodeUnaryResponse(response, err, FromWireWorkflowEvent)
 }

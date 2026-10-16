@@ -128,10 +128,7 @@ func NewRegistrationLifecycle(conn grpc.ClientConnInterface) *RegistrationLifecy
 // present and every provider is ready.
 func (c *RegistrationLifecycle) Check(ctx context.Context, request *RegistrationCheckRequest) (*RegistrationCheckResponse, error) {
 	response, err := c.client.Check(ctx, ToWireRegistrationCheckRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRegistrationCheckResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireRegistrationCheckResponse)
 }
 
 // RemoteManagement is the generated client for gestalt.provider.v1.RemoteManagement.
@@ -153,19 +150,13 @@ func NewRemoteManagement(conn grpc.ClientConnInterface) *RemoteManagement {
 // CreateRemote calls the CreateRemote RPC of RemoteManagement.
 func (c *RemoteManagement) CreateRemote(ctx context.Context, request *CreateRemoteRequest) (*Remote, error) {
 	response, err := c.client.CreateRemote(ctx, ToWireCreateRemoteRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireRemote(response), nil
+	return decodeUnaryResponse(response, err, FromWireRemote)
 }
 
 // ListRemotes calls the ListRemotes RPC of RemoteManagement.
 func (c *RemoteManagement) ListRemotes(ctx context.Context, request *ListRemotesRequest) (*ListRemotesResponse, error) {
 	response, err := c.client.ListRemotes(ctx, ToWireListRemotesRequest(request))
-	if err != nil {
-		return nil, toGestaltError(err)
-	}
-	return FromWireListRemotesResponse(response), nil
+	return decodeUnaryResponse(response, err, FromWireListRemotesResponse)
 }
 
 // DeleteRemote calls the DeleteRemote RPC of RemoteManagement.
