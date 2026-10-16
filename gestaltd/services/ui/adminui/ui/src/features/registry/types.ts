@@ -67,21 +67,3 @@ export type RegistryAppDetail = RegistryAppSummary & {
   freshReplicas: FleetReplica[];
   staleReplicas: FleetReplica[];
 };
-
-export type MaterializationsResponse = {
-  app: string;
-  version: string;
-  rolloutState?: string;
-  materializations: Array<{
-    instanceId: string;
-    sourceVersion?: string;
-    acknowledgedAt?: string | null;
-    materializedAt?: string | null;
-    stoppedAt?: string | null;
-    restartedAt?: string | null;
-    attemptCount: number;
-    lastErrorMessage?: string;
-    inCohort: boolean;
-    converged: boolean;
-  }>;
-};
