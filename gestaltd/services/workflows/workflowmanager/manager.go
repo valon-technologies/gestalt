@@ -957,10 +957,7 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 			return false
 		}
 	}
-	if req.Status != "" && run.Status != req.Status {
-		return false
-	}
-	return true
+	return req.Status == "" || run.Status == req.Status
 }
 
 func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req EventDeliver) (out coreworkflow.Event, err error) {
