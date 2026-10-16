@@ -141,7 +141,7 @@ func (c *stubCursor) Continue() bool {
 	if c.err != nil {
 		return false
 	}
-	if c.unique && c.indexKeys != nil && c.pos >= 0 && c.pos < len(c.indexKeys) {
+	if c.unique && c.pos >= 0 && c.pos < len(c.indexKeys) {
 		prev := c.indexKeys[c.pos]
 		for c.pos++; c.pos < len(c.keys); c.pos++ {
 			if indexeddbcodec.CompareKeys(c.indexKeys[c.pos], prev) != 0 {
@@ -173,7 +173,7 @@ func (c *stubCursor) ContinueToKey(key any) bool {
 		return false
 	}
 	var prevKey any
-	if c.unique && c.indexKeys != nil && c.pos >= 0 && c.pos < len(c.indexKeys) {
+	if c.unique && c.pos >= 0 && c.pos < len(c.indexKeys) {
 		prevKey = c.indexKeys[c.pos]
 	}
 	for c.pos++; c.pos < len(c.keys); c.pos++ {
@@ -185,11 +185,8 @@ func (c *stubCursor) ContinueToKey(key any) bool {
 			continue
 		}
 		cmp := indexeddbcodec.CompareKeys(cur, target)
-		if c.reverse {
-			if cmp <= 0 {
-				return true
-			}
-		} else if cmp >= 0 {
+		// Stop at the target or on its far side in the cursor's direction.
+		if cmp == 0 || (cmp < 0) == c.reverse {
 			return true
 		}
 	}
@@ -268,9 +265,5 @@ func applyCountLimit[T any](items []T, count ...uint32) []T {
 	if len(count) == 0 || count[0] == 0 {
 		return items
 	}
-	limit := int(count[0])
-	if limit >= len(items) {
-		return items
-	}
-	return items[:limit]
+	return items[:min(int(count[0]), len(items))]
 }
