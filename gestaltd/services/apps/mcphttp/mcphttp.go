@@ -247,8 +247,6 @@ func resolveLocalJSONRef(root any, ref string) (any, bool) {
 				return nil, false
 			}
 			cur = next
-		case []any:
-			return nil, false
 		default:
 			return nil, false
 		}

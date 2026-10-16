@@ -49,8 +49,7 @@ func canonicalArchiveSHA256(raw string) (string, bool) {
 	normalized := strings.ToLower(raw)
 	for _, r := range normalized {
 		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'f':
+		case r >= '0' && r <= '9', r >= 'a' && r <= 'f':
 		default:
 			return "", false
 		}

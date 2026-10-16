@@ -366,9 +366,7 @@ func isFullGitSHA(value string) bool {
 	}
 	for _, ch := range value {
 		switch {
-		case ch >= '0' && ch <= '9':
-		case ch >= 'a' && ch <= 'f':
-		case ch >= 'A' && ch <= 'F':
+		case ch >= '0' && ch <= '9', ch >= 'a' && ch <= 'f', ch >= 'A' && ch <= 'F':
 		default:
 			return false
 		}

@@ -31,10 +31,7 @@ func validManagedSubjectLocalID(id string) bool {
 	}
 	for _, ch := range id {
 		switch {
-		case ch >= 'a' && ch <= 'z':
-		case ch >= 'A' && ch <= 'Z':
-		case ch >= '0' && ch <= '9':
-		case ch == '.', ch == '_', ch == '-':
+		case ch >= 'a' && ch <= 'z', ch >= 'A' && ch <= 'Z', ch >= '0' && ch <= '9', ch == '.', ch == '_', ch == '-':
 		default:
 			return false
 		}

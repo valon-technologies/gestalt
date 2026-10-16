@@ -247,9 +247,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		case spec != nil && spec.AssetRoot != "" && !sourceMode:
 		case manifest.Build != nil && !manifest.Build.PrepareOnly && !sourceMode:
 			return fmt.Errorf("entrypoint is required when build is set")
-		case manifest.IsDeclarativeOnlyProvider():
-		case spec != nil && spec.IsSpecLoaded():
-		case sourceMode:
+		case manifest.IsDeclarativeOnlyProvider(), spec != nil && spec.IsSpecLoaded(), sourceMode:
 		default:
 			return fmt.Errorf("entrypoint is required")
 		}
