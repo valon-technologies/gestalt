@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"time"
@@ -97,10 +98,8 @@ func (c *AppRegistryRetentionConfig) UnmarshalYAML(value *yaml.Node) error {
 
 // UnusedRetentionDuration returns the configured unused snapshot retention window.
 func (c AppRegistryConfig) UnusedRetentionDuration() (time.Duration, error) {
-	if c.Retention == nil || strings.TrimSpace(c.Retention.UnusedRetention) == "" {
-		return defaultAppRegistryUnusedRetention, nil
-	}
-	duration, err := ParseDuration(strings.TrimSpace(c.Retention.UnusedRetention))
+	raw := cmp.Or(c.Retention, &AppRegistryRetentionConfig{}).UnusedRetention
+	duration, err := appRegistryDuration(raw, defaultAppRegistryUnusedRetention)
 	if err != nil {
 		return 0, fmt.Errorf("retention.unusedRetention: %w", err)
 	}
@@ -109,10 +108,8 @@ func (c AppRegistryConfig) UnusedRetentionDuration() (time.Duration, error) {
 
 // DeployedRetentionDuration returns the configured historical redeploy window.
 func (c AppRegistryConfig) DeployedRetentionDuration() (time.Duration, error) {
-	if c.Retention == nil || strings.TrimSpace(c.Retention.DeployedRetention) == "" {
-		return defaultAppRegistryDeployedRetention, nil
-	}
-	duration, err := ParseDuration(strings.TrimSpace(c.Retention.DeployedRetention))
+	raw := cmp.Or(c.Retention, &AppRegistryRetentionConfig{}).DeployedRetention
+	duration, err := appRegistryDuration(raw, defaultAppRegistryDeployedRetention)
 	if err != nil {
 		return 0, fmt.Errorf("retention.deployedRetention: %w", err)
 	}
