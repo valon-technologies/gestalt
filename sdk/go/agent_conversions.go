@@ -9,9 +9,6 @@ import (
 )
 
 func agentMessageFromProto(value *proto.AgentMessage) AgentMessage {
-	if value == nil {
-		return AgentMessage{}
-	}
 	return AgentMessage{
 		Role:     value.GetRole(),
 		Text:     value.GetText(),
@@ -75,9 +72,6 @@ func agentMessagePartsFromProto(values []*proto.AgentMessagePart) []AgentMessage
 }
 
 func agentMessagePartFromProto(value *proto.AgentMessagePart) AgentMessagePart {
-	if value == nil {
-		return AgentMessagePart{}
-	}
 	return AgentMessagePart{
 		Type:       AgentMessagePartType(value.GetType()),
 		Text:       value.GetText(),
@@ -258,9 +252,6 @@ func agentPreparedWorkspaceFromProto(value *proto.PreparedAgentWorkspace) *Agent
 }
 
 func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
-	if value == nil {
-		return AgentToolRef{}
-	}
 	return AgentToolRef{
 		App:            value.GetApp(),
 		Operation:      value.GetOperation(),
@@ -459,9 +450,6 @@ func agentSessionsToProto(values []AgentSession) ([]*proto.AgentSession, error) 
 }
 
 func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
-	if req == nil {
-		return &CreateAgentProviderSessionRequest{}
-	}
 	return &CreateAgentProviderSessionRequest{
 		ProviderName:       req.GetProviderName(),
 		IdempotencyKey:     req.GetIdempotencyKey(),
@@ -488,9 +476,6 @@ func agentSessionStartConfigFromProto(value *proto.AgentSessionStartConfig) *Age
 }
 
 func agentSessionStartHookFromProto(value *proto.AgentSessionStartHook) AgentSessionStartHook {
-	if value == nil {
-		return AgentSessionStartHook{}
-	}
 	return AgentSessionStartHook{
 		ID:      value.GetId(),
 		Type:    value.GetType(),
@@ -513,9 +498,6 @@ func agentSessionStartHookOutputFromProto(value *proto.AgentSessionStartHookOutp
 }
 
 func getAgentProviderSessionRequestFromProto(req *proto.GetAgentProviderSessionRequest) *GetAgentProviderSessionRequest {
-	if req == nil {
-		return &GetAgentProviderSessionRequest{}
-	}
 	return &GetAgentProviderSessionRequest{
 		ProviderName: req.GetProviderName(),
 		SessionID:    req.GetSessionId(),
@@ -524,9 +506,6 @@ func getAgentProviderSessionRequestFromProto(req *proto.GetAgentProviderSessionR
 }
 
 func listAgentProviderSessionsRequestFromProto(req *proto.ListAgentProviderSessionsRequest) *ListAgentProviderSessionsRequest {
-	if req == nil {
-		return &ListAgentProviderSessionsRequest{}
-	}
 	return &ListAgentProviderSessionsRequest{
 		ProviderName: req.GetProviderName(),
 		Context:      cloneRequestContext(req.GetContext()),
@@ -549,9 +528,6 @@ func listAgentProviderSessionsResponseToProto(value *ListAgentProviderSessionsRe
 }
 
 func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSessionRequest) *UpdateAgentProviderSessionRequest {
-	if req == nil {
-		return &UpdateAgentProviderSessionRequest{}
-	}
 	return &UpdateAgentProviderSessionRequest{
 		ProviderName: req.GetProviderName(),
 		SessionID:    req.GetSessionId(),
@@ -629,9 +605,6 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 }
 
 func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {
-	if req == nil {
-		return &GetAgentProviderTurnRequest{}
-	}
 	return &GetAgentProviderTurnRequest{
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
@@ -640,9 +613,6 @@ func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest
 }
 
 func listAgentProviderTurnsRequestFromProto(req *proto.ListAgentProviderTurnsRequest) *ListAgentProviderTurnsRequest {
-	if req == nil {
-		return &ListAgentProviderTurnsRequest{}
-	}
 	return &ListAgentProviderTurnsRequest{
 		ProviderName: req.GetProviderName(),
 		SessionID:    req.GetSessionId(),
@@ -666,9 +636,6 @@ func listAgentProviderTurnsResponseToProto(value *ListAgentProviderTurnsResponse
 }
 
 func cancelAgentProviderTurnRequestFromProto(req *proto.CancelAgentProviderTurnRequest) *CancelAgentProviderTurnRequest {
-	if req == nil {
-		return &CancelAgentProviderTurnRequest{}
-	}
 	return &CancelAgentProviderTurnRequest{
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
@@ -747,9 +714,6 @@ func agentTurnDisplayToProto(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, 
 }
 
 func listAgentProviderTurnEventsRequestFromProto(req *proto.ListAgentProviderTurnEventsRequest) *ListAgentProviderTurnEventsRequest {
-	if req == nil {
-		return &ListAgentProviderTurnEventsRequest{}
-	}
 	return &ListAgentProviderTurnEventsRequest{
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
@@ -771,9 +735,6 @@ func listAgentProviderTurnEventsResponseToProto(value *ListAgentProviderTurnEven
 }
 
 func getAgentProviderInteractionRequestFromProto(req *proto.GetAgentProviderInteractionRequest) *GetAgentProviderInteractionRequest {
-	if req == nil {
-		return &GetAgentProviderInteractionRequest{}
-	}
 	return &GetAgentProviderInteractionRequest{
 		InteractionID: req.GetInteractionId(),
 		Context:       cloneRequestContext(req.GetContext()),
@@ -781,9 +742,6 @@ func getAgentProviderInteractionRequestFromProto(req *proto.GetAgentProviderInte
 }
 
 func listAgentProviderInteractionsRequestFromProto(req *proto.ListAgentProviderInteractionsRequest) *ListAgentProviderInteractionsRequest {
-	if req == nil {
-		return &ListAgentProviderInteractionsRequest{}
-	}
 	return &ListAgentProviderInteractionsRequest{
 		ProviderName: req.GetProviderName(),
 		TurnID:       req.GetTurnId(),
@@ -845,9 +803,6 @@ func listAgentProviderInteractionsResponseToProto(value *ListAgentProviderIntera
 }
 
 func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProviderInteractionRequest) *ResolveAgentProviderInteractionRequest {
-	if req == nil {
-		return &ResolveAgentProviderInteractionRequest{}
-	}
 	return &ResolveAgentProviderInteractionRequest{
 		ProviderName:  req.GetProviderName(),
 		TurnID:        req.GetTurnId(),
@@ -858,9 +813,6 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 }
 
 func listedAgentToolFromProto(value *proto.ListedAgentTool) ListedAgentTool {
-	if value == nil {
-		return ListedAgentTool{}
-	}
 	ref := agentToolRefFromProto(value.GetRef())
 	var refPtr *AgentToolRef
 	if value.GetRef() != nil {
