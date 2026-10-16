@@ -540,9 +540,6 @@ func cloneBool(src *bool) *bool {
 }
 
 func cloneCatalogDefault(value any) any {
-	if value == nil {
-		return nil
-	}
 	switch pb := value.(type) {
 	case *structpb.Value:
 		return cloneProtoValue(pb)
