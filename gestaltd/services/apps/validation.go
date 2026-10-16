@@ -11,42 +11,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 )
 
-type resolvedDependencyCatalog struct {
-	catalog     *catalog.Catalog
-	sessionOnly bool
-	err         error
-}
-
 type EffectiveCatalogResult struct {
 	Catalog     *catalog.Catalog
 	Available   bool
 	SessionOnly bool
-}
-
-type catalogResolutionCache struct {
-	entries map[string]resolvedDependencyCatalog
-}
-
-func newCatalogResolutionCache(size int) *catalogResolutionCache {
-	if size < 0 {
-		size = 0
-	}
-	return &catalogResolutionCache{entries: make(map[string]resolvedDependencyCatalog, size)}
-}
-
-func (c *catalogResolutionCache) resolve(ctx context.Context, name string, entry *ValidationApp) resolvedDependencyCatalog {
-	if c == nil {
-		resolved := resolvedDependencyCatalog{}
-		resolved.catalog, resolved.sessionOnly, resolved.err = resolveStaticCatalog(ctx, name, entry)
-		return resolved
-	}
-	if resolved, ok := c.entries[name]; ok {
-		return resolved
-	}
-	resolved := resolvedDependencyCatalog{}
-	resolved.catalog, resolved.sessionOnly, resolved.err = resolveStaticCatalog(ctx, name, entry)
-	c.entries[name] = resolved
-	return resolved
 }
 
 func ValidateEffectiveCatalog(ctx context.Context, name string, entry *ValidationApp) error {
@@ -62,67 +30,38 @@ func EffectiveCatalog(ctx context.Context, name string, entry *ValidationApp) (*
 }
 
 func ValidateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig) error {
-	if cfg == nil {
-		return nil
-	}
-	return validateEffectiveCatalogs(ctx, cfg, newCatalogResolutionCache(len(cfg.Apps)))
+	_, err := EffectiveCatalogsAndDependencies(ctx, cfg)
+	return err
 }
 
 func ValidateEffectiveCatalogsAndDependencies(ctx context.Context, cfg *ValidationConfig) error {
-	_, err := EffectiveCatalogsAndDependencies(ctx, cfg)
-	return err
+	return ValidateEffectiveCatalogs(ctx, cfg)
 }
 
 func EffectiveCatalogsAndDependencies(ctx context.Context, cfg *ValidationConfig) (map[string]EffectiveCatalogResult, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	cache := newCatalogResolutionCache(len(cfg.Apps))
-	if err := validateEffectiveCatalogs(ctx, cfg, cache); err != nil {
-		return nil, err
-	}
-	if err := validateDependencies(ctx, cfg, cache); err != nil {
-		return nil, err
-	}
-	results := make(map[string]EffectiveCatalogResult, len(cache.entries))
-	for name, resolved := range cache.entries {
-		results[name] = EffectiveCatalogResult{
-			Catalog:     resolved.catalog.Clone(),
-			Available:   resolved.catalog != nil,
-			SessionOnly: resolved.sessionOnly,
-		}
-	}
-	return results, nil
-}
-
-func validateEffectiveCatalogs(ctx context.Context, cfg *ValidationConfig, cache *catalogResolutionCache) error {
-	if cfg == nil {
-		return nil
-	}
+	results := make(map[string]EffectiveCatalogResult, len(cfg.Apps))
 	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
 		entry := cfg.Apps[name]
 		if entry == nil {
 			continue
 		}
-		resolved := cache.resolve(ctx, name, entry)
-		if resolved.err != nil {
-			return fmt.Errorf("config validation: apps.%s: %w", name, resolved.err)
+		effective, sessionOnly, err := resolveStaticCatalog(ctx, name, entry)
+		if err != nil {
+			return nil, fmt.Errorf("config validation: apps.%s: %w", name, err)
+		}
+		results[name] = EffectiveCatalogResult{
+			Catalog:     effective.Clone(),
+			Available:   effective != nil,
+			SessionOnly: sessionOnly,
 		}
 	}
-	return nil
+	return results, nil
 }
 
-func ValidateDependencies(ctx context.Context, cfg *ValidationConfig) error {
-	if cfg == nil {
-		return nil
-	}
-	return validateDependencies(ctx, cfg, newCatalogResolutionCache(len(cfg.Apps)))
-}
-
-func validateDependencies(ctx context.Context, cfg *ValidationConfig, cache *catalogResolutionCache) error {
-	_ = ctx
-	_ = cfg
-	_ = cache
+func ValidateDependencies(context.Context, *ValidationConfig) error {
 	return nil
 }
 
@@ -319,8 +258,6 @@ func validateAllowedOperationCoverage(name string, allowed map[string]*Operation
 
 func mergeCatalogs(name string, first, second *catalog.Catalog) (*catalog.Catalog, error) {
 	switch {
-	case first == nil && second == nil:
-		return nil, nil
 	case first == nil:
 		return second.Clone(), nil
 	case second == nil:
