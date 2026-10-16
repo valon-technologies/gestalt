@@ -204,28 +204,23 @@ func (p *managedProc) handler() http.Handler {
 			serveNotReady(w)
 			return
 		}
-		proxy, err := p.reverseProxy()
-		if err != nil {
-			http.Error(w, "dev server unavailable", http.StatusBadGateway)
-			return
-		}
+		proxy := p.reverseProxy()
 		proxy.ServeHTTP(w, r)
 	})
 }
 
-func (p *managedProc) reverseProxy() (*httputil.ReverseProxy, error) {
+func (p *managedProc) reverseProxy() *httputil.ReverseProxy {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.proxy != nil && p.proxyPort == p.port {
-		return p.proxy, nil
+		return p.proxy
 	}
-	upstream, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", p.port))
-	if err != nil {
-		return nil, err
-	}
-	p.proxy = newReverseProxy(upstream)
+	p.proxy = newReverseProxy(&url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("127.0.0.1:%d", p.port),
+	})
 	p.proxyPort = p.port
-	return p.proxy, nil
+	return p.proxy
 }
 
 func (p *managedProc) start(ctx context.Context, logger *slog.Logger) error {
