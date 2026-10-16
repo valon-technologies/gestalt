@@ -185,7 +185,7 @@ func (s *AppRolloutService) EvaluateHeartbeatRollout(
 	if evaluation.StabilityWindow <= 0 {
 		return nil, false, fmt.Errorf("evaluate heartbeat rollout: stability window must be positive")
 	}
-	evaluatedAt := normalizedRolloutTime(evaluation.EvaluatedAt)
+	evaluatedAt := normalizedRecordTime(evaluation.EvaluatedAt)
 	tx, err := s.db.Transaction(ctx, []string{StoreAppRollouts}, idb.TransactionReadwrite, idb.TransactionOptions{})
 	if err != nil {
 		return nil, false, fmt.Errorf("evaluate heartbeat rollout: begin transaction: %w", err)
@@ -322,10 +322,10 @@ func (s *AppRolloutService) transition(
 	rollout.State = state
 	switch state {
 	case core.AppRolloutStateComplete:
-		rollout.CompletedAt = normalizedRolloutTime(at)
+		rollout.CompletedAt = normalizedRecordTime(at)
 		rollout.FailureSummary = nil
 	case core.AppRolloutStateFailed:
-		rollout.FailedAt = normalizedRolloutTime(at)
+		rollout.FailedAt = normalizedRecordTime(at)
 	case core.AppRolloutStateRestarting:
 	default:
 		return nil, fmt.Errorf("transition app rollout: invalid target state %q", state)
@@ -383,17 +383,10 @@ func normalizeAppRollout(rollout *core.AppRollout) *core.AppRollout {
 		copy.Mode = core.AppRolloutModeEnrollment
 	}
 	copy.TargetSourceVersion = strings.TrimSpace(copy.TargetSourceVersion)
-	copy.CreatedAt = normalizedRolloutTime(copy.CreatedAt)
-	copy.EnrollmentEndsAt = normalizedRolloutTime(copy.EnrollmentEndsAt)
-	copy.Deadline = normalizedRolloutTime(copy.Deadline)
+	copy.CreatedAt = normalizedRecordTime(copy.CreatedAt)
+	copy.EnrollmentEndsAt = normalizedRecordTime(copy.EnrollmentEndsAt)
+	copy.Deadline = normalizedRecordTime(copy.Deadline)
 	return &copy
-}
-
-func normalizedRolloutTime(value time.Time) time.Time {
-	if value.IsZero() {
-		value = time.Now()
-	}
-	return value.UTC().Truncate(time.Millisecond)
 }
 
 func isActiveRolloutState(state core.AppRolloutState) bool {
