@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/publicsurface"
 )
@@ -97,14 +98,7 @@ func renderPublicMethodEntry(pm publicsurface.PublicMethod) string {
 }
 
 func publicStringList(values []string) string {
-	if len(values) == 0 {
-		return "[]"
-	}
-	parts := make([]string, len(values))
-	for i, v := range values {
-		parts[i] = fmt.Sprintf("%q", v)
-	}
-	return "[" + strings.Join(parts, ", ") + "]"
+	return emit.StringList(values, "[]", "[", "]")
 }
 
 func renderPublicTypes(view *publicsurface.View, paths PublicImports) string {
@@ -273,7 +267,6 @@ func renderPublicConverters(view *publicsurface.View, paths PublicImports) strin
 	}
 	return b.String()
 }
-
 
 type publicWireConverter struct {
 	input        *model.Message

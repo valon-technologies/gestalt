@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -233,12 +234,5 @@ func fromWireFunc(messageFullName string) string {
 }
 
 func pythonStringTuple(values []string) string {
-	if len(values) == 0 {
-		return "()"
-	}
-	parts := make([]string, len(values))
-	for i, v := range values {
-		parts[i] = fmt.Sprintf("%q", v)
-	}
-	return "(" + strings.Join(parts, ", ") + ",)"
+	return emit.StringList(values, "()", "(", ",)")
 }

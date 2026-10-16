@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/emit"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -226,14 +227,7 @@ func fromWireFunc(messageGoName string) string {
 }
 
 func goStringList(values []string) string {
-	if len(values) == 0 {
-		return "nil"
-	}
-	parts := make([]string, len(values))
-	for i, v := range values {
-		parts[i] = fmt.Sprintf("%q", v)
-	}
-	return "[]string{" + strings.Join(parts, ", ") + "}"
+	return emit.StringList(values, "nil", "[]string{", "}")
 }
 
 func goFillList(m *model.Method) string {
