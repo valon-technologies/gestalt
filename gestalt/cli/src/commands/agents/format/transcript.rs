@@ -75,8 +75,6 @@ pub(crate) fn turn_event_display_summary(
     let _ = event;
     match display.kind.trim() {
         "text" => display_text(display).map(|text| match display.phase.trim() {
-            "delta" => format!("assistant delta: {text}"),
-            "completed" => format!("assistant completed: {text}"),
             phase if !phase.is_empty() => format!("assistant {phase}: {text}"),
             _ => format!("assistant: {text}"),
         }),
@@ -86,8 +84,6 @@ pub(crate) fn turn_event_display_summary(
             let label = display_label(display).unwrap_or("interaction");
             let reference = display_ref(display).unwrap_or(label);
             match display.phase.trim() {
-                "requested" => Some(format!("{label} requested ({reference})")),
-                "resolved" => Some(format!("{label} resolved ({reference})")),
                 phase if !phase.is_empty() => Some(format!("{label} {phase} ({reference})")),
                 _ => Some(label.to_string()),
             }
@@ -95,12 +91,9 @@ pub(crate) fn turn_event_display_summary(
         "status" => {
             let label = display_label(display).unwrap_or("turn");
             match (display.phase.trim(), display_text(display)) {
-                ("started", Some(text)) => Some(format!("{label} started: {text}")),
-                ("started", None) => Some(format!("{label} started")),
-                ("completed", Some(text)) => Some(format!("{label} completed: {text}")),
-                ("completed", None) => Some(format!("{label} completed")),
-                ("canceled", Some(text)) => Some(format!("{label} canceled: {text}")),
-                ("canceled", None) => Some(format!("{label} canceled")),
+                (phase @ ("started" | "completed" | "canceled"), None) => {
+                    Some(format!("{label} {phase}"))
+                }
                 ("progress", Some(text)) => Some(format!("{label}: {text}")),
                 (phase, Some(text)) if !phase.is_empty() => {
                     Some(format!("{label} {phase}: {text}"))
@@ -117,7 +110,6 @@ pub(crate) fn turn_event_display_summary(
             })?;
             let label = display_label(display).unwrap_or("error");
             match display.phase.trim() {
-                "failed" if label == "turn" => Some(format!("turn failed: {text}")),
                 "failed" => Some(format!("{label} failed: {text}")),
                 _ => Some(format!("{label}: {text}")),
             }
@@ -135,15 +127,9 @@ pub(crate) fn turn_event_display_summary_from_value(value: &Value) -> Option<Str
 pub(crate) fn tool_display_summary(display: &AgentTurnDisplayInfo) -> Option<String> {
     let tool = display_tool_label(display);
     let mut summary = match display.phase.trim() {
-        "started" => display_action(display)
+        phase @ ("started" | "completed" | "failed") => display_action(display)
             .map(|action| format!("{action} {tool}"))
-            .unwrap_or_else(|| format!("{tool} started")),
-        "completed" => display_action(display)
-            .map(|action| format!("{action} {tool}"))
-            .unwrap_or_else(|| format!("{tool} completed")),
-        "failed" => display_action(display)
-            .map(|action| format!("{action} {tool}"))
-            .unwrap_or_else(|| format!("{tool} failed")),
+            .unwrap_or_else(|| format!("{tool} {phase}")),
         "progress" => match (display_action(display), display_text(display)) {
             (Some(action), Some(text)) => format!("{action} {tool}: {text}"),
             (Some(action), None) => format!("{action} {tool}"),

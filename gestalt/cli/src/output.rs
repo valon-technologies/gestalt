@@ -58,11 +58,6 @@ fn value_to_cell(v: Option<&serde_json::Value>) -> String {
 }
 
 pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
-    if rows.is_empty() {
-        println!("No results.");
-        return;
-    }
-
     println!("{}", render_table(headers, rows));
 }
 
@@ -71,27 +66,9 @@ pub fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
         return "No results.".to_string();
     }
 
-    render_table_with_style(headers, rows, TableStyle::BordersOnly)
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TableStyle {
-    BordersOnly,
-}
-
-fn render_table_with_style(headers: &[&str], rows: &[Vec<String>], style: TableStyle) -> String {
     let term_width = terminal_size::terminal_size()
         .map(|(w, _)| w.0)
         .unwrap_or(80);
-    render_table_with_style_and_width(headers, rows, style, term_width)
-}
-
-fn render_table_with_style_and_width(
-    headers: &[&str],
-    rows: &[Vec<String>],
-    style: TableStyle,
-    width: u16,
-) -> String {
     let mut table = Table::new();
     let header: Vec<Cell> = headers.iter().map(|header| Cell::new(*header)).collect();
     let data_rows: Vec<Vec<Cell>> = rows
@@ -100,12 +77,10 @@ fn render_table_with_style_and_width(
         .collect();
 
     table
-        .load_preset(match style {
-            TableStyle::BordersOnly => UTF8_BORDERS_ONLY,
-        })
+        .load_preset(UTF8_BORDERS_ONLY)
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_width(width)
+        .set_width(term_width)
         .set_header(header)
         .add_rows(data_rows);
 

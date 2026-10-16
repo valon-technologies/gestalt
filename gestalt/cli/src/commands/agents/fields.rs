@@ -69,9 +69,6 @@ pub(crate) fn message_label(message: &AgentMessageInfo) -> Option<String> {
     let role = non_empty_str(&message.role)?;
     Some(match role {
         "user" => "you>".to_string(),
-        "system" => "system>".to_string(),
-        "assistant" => "assistant>".to_string(),
-        "tool" => "tool>".to_string(),
         other => format!("{other}>"),
     })
 }

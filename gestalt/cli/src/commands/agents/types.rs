@@ -16,12 +16,7 @@ where
     let value = Value::deserialize(deserializer)?;
     match value {
         Value::String(s) => Ok(s),
-        Value::Number(n) => Ok(n
-            .as_i64()
-            .map(map_fn)
-            .filter(|name| !name.is_empty())
-            .unwrap_or_default()
-            .to_string()),
+        Value::Number(n) => Ok(n.as_i64().map(map_fn).unwrap_or_default().to_string()),
         Value::Null => Ok(String::new()),
         _ => Ok(value.to_string()),
     }
