@@ -69,9 +69,7 @@ type hostServiceRelayTokenClaims struct {
 func NewHostServiceRelayTokenManager(secret []byte) (*HostServiceRelayTokenManager, error) {
 	if len(secret) == 0 {
 		secret = make([]byte, 32)
-		if _, err := rand.Read(secret); err != nil {
-			return nil, fmt.Errorf("generate host service relay token secret: %w", err)
-		}
+		_, _ = rand.Read(secret)
 	}
 	return &HostServiceRelayTokenManager{
 		secret:     append([]byte(nil), secret...),

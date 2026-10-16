@@ -52,9 +52,7 @@ type tokenClaims struct {
 func NewTokenManager(secret []byte) (*TokenManager, error) {
 	if len(secret) == 0 {
 		secret = make([]byte, 32)
-		if _, err := rand.Read(secret); err != nil {
-			return nil, fmt.Errorf("generate egress proxy token secret: %w", err)
-		}
+		_, _ = rand.Read(secret)
 	}
 	return &TokenManager{
 		secret:     append([]byte(nil), secret...),

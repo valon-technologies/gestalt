@@ -399,10 +399,7 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 }
 
 func writeProviderLocalBaseConfig(path, dbPath string) error {
-	encryptionKey, err := randomHex(32)
-	if err != nil {
-		return err
-	}
+	encryptionKey := randomHex(32)
 
 	cfg := map[string]any{
 		"apiVersion": config.ConfigAPIVersion,
@@ -673,12 +670,10 @@ func reserveLocalPort() (int, error) {
 	return addr.Port, nil
 }
 
-func randomHex(numBytes int) (string, error) {
+func randomHex(numBytes int) string {
 	key := make([]byte, numBytes)
-	if _, err := rand.Read(key); err != nil {
-		return "", fmt.Errorf("generate encryption key: %w", err)
-	}
-	return hex.EncodeToString(key), nil
+	_, _ = rand.Read(key)
+	return hex.EncodeToString(key)
 }
 
 func canonicalPath(path string) (string, error) {

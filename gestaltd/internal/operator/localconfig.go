@@ -92,9 +92,7 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 	}
 
 	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return "", fmt.Errorf("generate encryption key: %w", err)
-	}
+	_, _ = rand.Read(key)
 
 	dbPath := filepath.Join(configDir, "gestalt.db")
 	cfg := defaultManagedConfig(dbPath, hex.EncodeToString(key))

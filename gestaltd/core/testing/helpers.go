@@ -8,8 +8,6 @@ import (
 func EncryptionKey(t *testing.T) []byte {
 	t.Helper()
 	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		t.Fatalf("generating encryption key: %v", err)
-	}
+	_, _ = rand.Read(key)
 	return key
 }

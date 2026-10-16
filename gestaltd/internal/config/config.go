@@ -2597,10 +2597,7 @@ func ValidateSelectedAgentHarnessEnvPaths(paths []string, providerName string, h
 		return nil
 	}
 	harnessName = strings.TrimSpace(harnessName)
-	missingEnvSentinelContext, err := newMissingEnvSentinelPrefix()
-	if err != nil {
-		return err
-	}
+	missingEnvSentinelContext := newMissingEnvSentinelPrefix()
 	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingSentinel, missingEnvSentinelContext)
 	if err != nil {
 		return err
@@ -2858,11 +2855,7 @@ func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, 
 	if !allowMissing {
 		mode = envMissingSentinel
 		rejectMissing = true
-		var err error
-		missingEnvSentinelContext, err = newMissingEnvSentinelPrefix()
-		if err != nil {
-			return nil, err
-		}
+		missingEnvSentinelContext = newMissingEnvSentinelPrefix()
 	}
 
 	return loadWithLookupPathsMode(paths, lookup, mode, missingEnvSentinelContext, rejectMissing, true, validate)
@@ -3318,12 +3311,10 @@ func restoreMissingEnvSentinelsInNode(node *yaml.Node, sentinelPrefix string) {
 	}
 }
 
-func newMissingEnvSentinelPrefix() (string, error) {
+func newMissingEnvSentinelPrefix() string {
 	var token [9]byte
-	if _, err := rand.Read(token[:]); err != nil {
-		return "", fmt.Errorf("creating missing env sentinel: %w", err)
-	}
-	return missingEnvSentinelPrefix + base64.RawURLEncoding.EncodeToString(token[:]) + "_", nil
+	_, _ = rand.Read(token[:])
+	return missingEnvSentinelPrefix + base64.RawURLEncoding.EncodeToString(token[:]) + "_"
 }
 
 func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err error) {
