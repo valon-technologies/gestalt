@@ -1,6 +1,7 @@
 package scim
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -34,15 +35,15 @@ func (h *leanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/scim/v2/ResourceTypes/") && r.Method == http.MethodGet:
 		h.resourceTypes(w, strings.TrimPrefix(p, "/scim/v2/ResourceTypes/"))
 	case p == "/scim/v2/Users" && r.Method == http.MethodGet:
-		h.listUsers(w, r, cid)
+		listResources(w, r, cid, h.s.list)
 	case p == "/scim/v2/Users" && r.Method == http.MethodPost:
-		h.createUser(w, r, cid)
+		createResource(w, r, cid, h.s.Create)
 	case strings.HasPrefix(p, "/scim/v2/Users/"):
 		h.user(w, r, cid, strings.TrimPrefix(p, "/scim/v2/Users/"))
 	case p == "/scim/v2/Groups" && r.Method == http.MethodGet:
-		h.listGroups(w, r, cid)
+		listResources(w, r, cid, h.s.listGroups)
 	case p == "/scim/v2/Groups" && r.Method == http.MethodPost:
-		h.createGroup(w, r, cid)
+		createResource(w, r, cid, h.s.CreateGroup)
 	case strings.HasPrefix(p, "/scim/v2/Groups/"):
 		h.group(w, r, cid, strings.TrimPrefix(p, "/scim/v2/Groups/"))
 	default:
@@ -160,7 +161,7 @@ func (h *leanHandler) schemas(w http.ResponseWriter, schemaID string) {
 	}
 	writeJSON(w, 200, map[string]any{"schemas": []string{ListSchemaURN}, "totalResults": 2, "startIndex": 1, "itemsPerPage": 2, "Resources": resources})
 }
-func (h *leanHandler) listUsers(w http.ResponseWriter, r *http.Request, c string) {
+func listResources[T any](w http.ResponseWriter, r *http.Request, c string, list func(context.Context, string, string, int, int) (listResponse[T], error)) {
 	if err := validateProjectionQuery(r); err != nil {
 		writeError(w, err)
 		return
@@ -170,29 +171,29 @@ func (h *leanHandler) listUsers(w http.ResponseWriter, r *http.Request, c string
 		writeError(w, e)
 		return
 	}
-	v, e := h.s.list(r.Context(), c, r.URL.Query().Get("filter"), st, n)
+	v, e := list(r.Context(), c, r.URL.Query().Get("filter"), st, n)
 	if e != nil {
 		writeError(w, e)
 		return
 	}
 	writeJSON(w, 200, projectRepresentation(v, r.URL.Query().Get("attributes"), r.URL.Query().Get("excludedAttributes")))
 }
-func (h *leanHandler) createUser(w http.ResponseWriter, r *http.Request, c string) {
+func createResource[I, R any](w http.ResponseWriter, r *http.Request, c string, create func(context.Context, string, I) (*R, error)) {
 	if err := validateProjectionQuery(r); err != nil {
 		writeError(w, err)
 		return
 	}
-	var in userInput
+	var in I
 	if e := decodeBody(r, &in); e != nil {
 		writeError(w, e)
 		return
 	}
-	u, e := h.s.Create(r.Context(), c, in)
+	resource, e := create(r.Context(), c, in)
 	if e != nil {
 		writeError(w, e)
 		return
 	}
-	writeResourceForRequest(w, r, 201, u)
+	writeResourceForRequest(w, r, 201, resource)
 }
 func (h *leanHandler) user(w http.ResponseWriter, r *http.Request, c, id string) {
 	if id == "" || strings.Contains(id, "/") {
@@ -234,40 +235,6 @@ func (h *leanHandler) user(w http.ResponseWriter, r *http.Request, c, id string)
 	default:
 		writeError(w, notFound())
 	}
-}
-func (h *leanHandler) listGroups(w http.ResponseWriter, r *http.Request, c string) {
-	if err := validateProjectionQuery(r); err != nil {
-		writeError(w, err)
-		return
-	}
-	st, n, e := pagination(r)
-	if e != nil {
-		writeError(w, e)
-		return
-	}
-	v, e := h.s.listGroups(r.Context(), c, r.URL.Query().Get("filter"), st, n)
-	if e != nil {
-		writeError(w, e)
-		return
-	}
-	writeJSON(w, 200, projectRepresentation(v, r.URL.Query().Get("attributes"), r.URL.Query().Get("excludedAttributes")))
-}
-func (h *leanHandler) createGroup(w http.ResponseWriter, r *http.Request, c string) {
-	if err := validateProjectionQuery(r); err != nil {
-		writeError(w, err)
-		return
-	}
-	var in groupInput
-	if e := decodeBody(r, &in); e != nil {
-		writeError(w, e)
-		return
-	}
-	g, e := h.s.CreateGroup(r.Context(), c, in)
-	if e != nil {
-		writeError(w, e)
-		return
-	}
-	writeResourceForRequest(w, r, 201, g)
 }
 func (h *leanHandler) group(w http.ResponseWriter, r *http.Request, c, id string) {
 	if id == "" || strings.Contains(id, "/") {
