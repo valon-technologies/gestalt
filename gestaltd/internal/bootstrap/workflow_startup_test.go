@@ -42,16 +42,13 @@ type noopTelemetryProvider struct{}
 func TestWorkflowRuntimeResolvePendingProviderWaitsForContext(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newWorkflowRuntime(&config.Config{
+	runtime := newWorkflowRuntime(&config.Config{
 		Providers: config.ProvidersConfig{
 			Workflow: map[string]*config.ProviderEntry{
 				"temporal": {},
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
 	runtime.InitProviderPlaceholders(map[string]*config.ProviderEntry{
 		"temporal": {},
 	})
@@ -72,10 +69,7 @@ func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T)
 			},
 		},
 	}
-	runtime, err := newWorkflowRuntime(cfg)
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
+	runtime := newWorkflowRuntime(cfg)
 	runtime.InitProviderPlaceholders(cfg.Providers.Workflow)
 	runtime.FailPendingProviders(errors.New("boom"))
 	runtime.PublishProvider("temporal", startupTestWorkflowProvider{})
@@ -87,7 +81,7 @@ func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T)
 func TestWorkflowRuntimeConfiguredProviderNamesIncludesNonDefaultProviders(t *testing.T) {
 	t.Parallel()
 
-	runtime, err := newWorkflowRuntime(&config.Config{
+	runtime := newWorkflowRuntime(&config.Config{
 		Providers: config.ProvidersConfig{
 			Workflow: map[string]*config.ProviderEntry{
 				"temporal": {},
@@ -95,9 +89,6 @@ func TestWorkflowRuntimeConfiguredProviderNamesIncludesNonDefaultProviders(t *te
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("newWorkflowRuntime: %v", err)
-	}
 	runtime.InitProviderPlaceholders(map[string]*config.ProviderEntry{
 		"temporal": {},
 		"local":    {},
