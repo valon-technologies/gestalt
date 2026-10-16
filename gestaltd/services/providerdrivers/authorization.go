@@ -2,7 +2,6 @@ package providerdrivers
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -22,20 +21,15 @@ type AuthorizationBuildResult struct {
 }
 
 func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AuthorizationDeps) (AuthorizationBuildResult, error) {
-	var cfg componentprovider.YAMLConfig
-	if err := node.Decode(&cfg); err != nil {
-		return AuthorizationBuildResult{}, fmt.Errorf("authorization provider: parsing config: %w", err)
-	}
-	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
+	prepared, err := prepareYAMLExecution(node, componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindAuthorization,
 		Subject:              "authorization provider",
 		SourceMissingMessage: "no Go authorization provider source package found",
-		Config:               cfg,
 	})
 	if err != nil {
 		return AuthorizationBuildResult{}, err
 	}
-	cfg = prepared.YAMLConfig
+	cfg := prepared.YAMLConfig
 
 	execCfg := authorizationservice.ExecConfig{
 		Command:      cfg.Command,
