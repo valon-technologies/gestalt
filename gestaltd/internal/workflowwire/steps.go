@@ -28,18 +28,7 @@ func TargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
 }
 
 func workflowStepsToProto(steps []coreworkflow.Step) ([]*proto.WorkflowStep, error) {
-	if len(steps) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowStep, 0, len(steps))
-	for i := range steps {
-		step, err := workflowStepToProto(steps[i])
-		if err != nil {
-			return nil, fmt.Errorf("workflow steps[%d]: %w", i, err)
-		}
-		out = append(out, step)
-	}
-	return out, nil
+	return encodeWorkflowList(steps, "workflow steps", workflowStepToProto)
 }
 
 func workflowStepsFromProto(steps []*proto.WorkflowStep) []coreworkflow.Step {
