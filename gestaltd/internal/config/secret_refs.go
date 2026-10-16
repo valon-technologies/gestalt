@@ -192,31 +192,16 @@ func isSecretsProviderConfigPath(path []string) bool {
 }
 
 func ReferencedConfigSecretProviders(cfg *Config) (map[string]struct{}, error) {
-	providers := map[string]struct{}{}
-	if cfg == nil {
-		return providers, nil
-	}
-	if err := TransformConfigStringFields(cfg, func(value string) (string, error) {
-		ref, ok, err := ParseSecretRefTransport(value)
-		if err != nil {
-			return "", err
-		}
-		if ok {
-			providers[ref.Provider] = struct{}{}
-		}
-		return value, nil
-	}); err != nil {
-		return nil, err
-	}
-	return providers, nil
+	return referencedSecretProviders(cfg, TransformConfigStringFields)
 }
 
 func ReferencedSourceAuthSecretProviders(cfg *Config) (map[string]struct{}, error) {
+	return referencedSecretProviders(cfg, TransformSourceAuthTokens)
+}
+
+func referencedSecretProviders(cfg *Config, walk func(*Config, ConfigStringTransformer) error) (map[string]struct{}, error) {
 	providers := map[string]struct{}{}
-	if cfg == nil {
-		return providers, nil
-	}
-	if err := TransformSourceAuthTokens(cfg, func(value string) (string, error) {
+	if err := walk(cfg, func(value string) (string, error) {
 		ref, ok, err := ParseSecretRefTransport(value)
 		if err != nil {
 			return "", err
