@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/pathutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -463,7 +464,7 @@ func preparedLocalWorkspace(root string, cwd string) (*proto.PreparedAgentWorksp
 	if err != nil {
 		return nil, fmt.Errorf("resolve workspace cwd: %w", err)
 	}
-	if !localPathWithin(rootReal, cwdReal) {
+	if !pathutil.IsWithin(rootReal, cwdReal) {
 		return nil, fmt.Errorf("workspace cwd escapes workspace root")
 	}
 	return &proto.PreparedAgentWorkspace{Root: rootReal, Cwd: cwdReal}, nil
@@ -471,18 +472,10 @@ func preparedLocalWorkspace(root string, cwd string) (*proto.PreparedAgentWorksp
 
 func localWorkspaceChild(root string, rel string) (string, error) {
 	clean := filepath.Clean(filepath.Join(root, filepath.FromSlash(rel)))
-	if !localPathWithin(root, clean) {
+	if !pathutil.IsWithin(root, clean) {
 		return "", fmt.Errorf("path escapes workspace root")
 	}
 	return clean, nil
-}
-
-func localPathWithin(parent string, child string) bool {
-	rel, err := filepath.Rel(parent, child)
-	if err != nil {
-		return false
-	}
-	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func cloneSession(session *localSession) *proto.RuntimeSession {

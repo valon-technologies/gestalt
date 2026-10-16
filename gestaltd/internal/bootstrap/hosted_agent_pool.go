@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pathutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -396,18 +397,10 @@ func validatePreparedAgentWorkspace(workspace *proto.PreparedAgentWorkspace) (*p
 	if !filepath.IsAbs(root) || !filepath.IsAbs(cwd) {
 		return nil, fmt.Errorf("prepared workspace root and cwd must be absolute")
 	}
-	if !preparedWorkspacePathWithin(root, cwd) {
+	if !pathutil.IsWithin(root, cwd) {
 		return nil, fmt.Errorf("prepared workspace cwd must be inside root")
 	}
 	return &proto.PreparedAgentWorkspace{Root: root, Cwd: cwd}, nil
-}
-
-func preparedWorkspacePathWithin(root string, cwd string) bool {
-	rel, err := filepath.Rel(root, cwd)
-	if err != nil {
-		return false
-	}
-	return rel == "." || rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (p *hostedAgentProviderPool) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {
