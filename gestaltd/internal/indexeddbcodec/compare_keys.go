@@ -173,10 +173,7 @@ func compareDates(a, b time.Time) int {
 func compareUTF16Strings(a, b string) int {
 	au := utf16.Encode([]rune(a))
 	bu := utf16.Encode([]rune(b))
-	limit := len(au)
-	if len(bu) < limit {
-		limit = len(bu)
-	}
+	limit := min(len(au), len(bu))
 	for i := 0; i < limit; i++ {
 		if au[i] < bu[i] {
 			return -1

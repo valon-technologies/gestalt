@@ -316,13 +316,8 @@ func (s *CompactService) listGroups(ctx context.Context, cid, raw string, start,
 		}
 		matching = append(matching, rr)
 	}
-	if start > len(matching)+1 {
-		start = len(matching) + 1
-	}
-	end := pageMin(start-1+count, len(matching))
-	if end < start-1 {
-		end = start - 1
-	}
+	start = min(start, len(matching)+1)
+	end := max(pageMin(start-1+count, len(matching)), start-1)
 	page := matching[start-1 : end]
 	all := make([]Group, 0, len(page))
 	for _, rr := range page {

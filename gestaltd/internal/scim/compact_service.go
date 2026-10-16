@@ -966,9 +966,7 @@ func (s *CompactService) list(ctx context.Context, clientID, raw string, start, 
 		}
 		matching = append(matching, rr)
 	}
-	if start > len(matching)+1 {
-		start = len(matching) + 1
-	}
+	start = min(start, len(matching)+1)
 	end := pageMin(start-1+count, len(matching))
 	page := matching[start-1 : end]
 	var hydration *scimHydration

@@ -50,9 +50,7 @@ func (c materializedCache) Prefetch(ctx context.Context, requests []materialized
 		return stats
 	}
 	slices.Sort(stats.Keys)
-	if parallelism < 1 {
-		parallelism = 1
-	}
+	parallelism = max(parallelism, 1)
 
 	var mu sync.Mutex
 	jobs := make(chan materializedCacheKey)

@@ -143,9 +143,7 @@ func (h *StatelessHTTPHandler) callSearch(ctx context.Context, req mcpgo.CallToo
 	if limit < 1 {
 		limit = defaultSearchLimit
 	}
-	if limit > maxSearchLimit {
-		limit = maxSearchLimit
-	}
+	limit = min(limit, maxSearchLimit)
 	if instance != "" && appFilter == "" {
 		return mcpgo.NewToolResultError("app is required when _instance is set"), nil
 	}

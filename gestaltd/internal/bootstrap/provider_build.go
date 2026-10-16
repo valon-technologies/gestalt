@@ -1509,9 +1509,7 @@ func buildDevSupervisedAppProvider(ctx context.Context, name string, entry *conf
 	timeout := 90 * time.Second
 	if commands, err := providerpkg.SourceRunCommands(entry.ResolvedManifestPath); err == nil {
 		for _, command := range commands {
-			if command.ReadyTimeout > timeout {
-				timeout = command.ReadyTimeout
-			}
+			timeout = max(timeout, command.ReadyTimeout)
 		}
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, timeout)

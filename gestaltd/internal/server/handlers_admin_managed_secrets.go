@@ -431,9 +431,7 @@ func parseManagedSecretAuditLimit(w http.ResponseWriter, r *http.Request) int {
 		writeError(w, http.StatusBadRequest, "limit must be a positive integer")
 		return -1
 	}
-	if limit > managedSecretMaxAuditLimit {
-		limit = managedSecretMaxAuditLimit
-	}
+	limit = min(limit, managedSecretMaxAuditLimit)
 	return limit
 }
 

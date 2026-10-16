@@ -251,10 +251,7 @@ func s3ObjectAccessReadRequest(r *http.Request, client s3sdk.S3, ref s3sdk.Objec
 		if suffix <= 0 || meta.Size <= 0 {
 			return s3sdk.ReadRequest{}, s3HTTPRange{}, s3sdk.ErrInvalidRange
 		}
-		start := meta.Size - suffix
-		if start < 0 {
-			start = 0
-		}
+		start := max(meta.Size-suffix, 0)
 		end := meta.Size - 1
 		byteRange.Start = &start
 		byteRange.End = &end

@@ -3703,10 +3703,7 @@ func assignUniqueListedAgentToolNamesInOrder(tools []coreagent.ListedTool, order
 		}
 		name := base
 		if _, exists := used[name]; exists {
-			suffix := nextSuffix[base]
-			if suffix < 2 {
-				suffix = 2
-			}
+			suffix := max(nextSuffix[base], 2)
 			for {
 				candidate := fmt.Sprintf("%s_%d", base, suffix)
 				suffix++

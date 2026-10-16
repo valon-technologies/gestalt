@@ -20,9 +20,7 @@ func paginationQueryInt(r *http.Request, name string, defaultValue, minimum int)
 	if err != nil {
 		return 0, invalid(name + " is invalid")
 	}
-	if value < minimum {
-		value = minimum
-	}
+	value = max(value, minimum)
 	return value, nil
 }
 
@@ -35,9 +33,7 @@ func pagination(r *http.Request) (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	if count > 200 {
-		count = 200
-	}
+	count = min(count, 200)
 	return start, count, nil
 }
 
