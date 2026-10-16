@@ -1561,14 +1561,7 @@ func cloneHTTPRequestBody(src *providermanifestv1.HTTPRequestBody) *providermani
 
 func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecurityScheme {
 	if base == nil {
-		if override == nil {
-			return nil
-		}
 		cloned := cloneHTTPSecuritySchemes(map[string]*HTTPSecurityScheme{"_": override})
-		return cloned["_"]
-	}
-	if override == nil {
-		cloned := cloneHTTPSecuritySchemes(map[string]*HTTPSecurityScheme{"_": base})
 		return cloned["_"]
 	}
 	merged := *base
@@ -1610,14 +1603,7 @@ func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecuritySc
 
 func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 	if base == nil {
-		if override == nil {
-			return nil
-		}
 		cloned := cloneHTTPBindings(map[string]*HTTPBinding{"_": override})
-		return cloned["_"]
-	}
-	if override == nil {
-		cloned := cloneHTTPBindings(map[string]*HTTPBinding{"_": base})
 		return cloned["_"]
 	}
 	merged := *base
@@ -1788,42 +1774,39 @@ func (e *ProviderEntry) EffectiveAllowedOperations() map[string]*OperationOverri
 
 func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityScheme {
 	var merged map[string]*HTTPSecurityScheme
-	if spec := e.ManifestSpec(); spec != nil && spec.SecuritySchemes != nil {
+	if spec := e.ManifestSpec(); spec != nil {
 		merged = cloneHTTPSecuritySchemes(spec.SecuritySchemes)
 	}
-	if e == nil || e.SecuritySchemes == nil {
+	if e == nil {
 		return merged
 	}
-	if merged == nil {
-		merged = map[string]*HTTPSecurityScheme{}
-	}
-	for name, scheme := range e.SecuritySchemes {
-		if scheme == nil {
-			merged[name] = nil
-			continue
-		}
-		merged[name] = mergeHTTPSecurityScheme(merged[name], scheme)
-	}
-	return merged
+	return mergeHTTPOverrides(merged, e.SecuritySchemes, mergeHTTPSecurityScheme)
 }
 
 func (e *ProviderEntry) EffectiveHTTPBindings() map[string]*HTTPBinding {
 	var merged map[string]*HTTPBinding
-	if spec := e.ManifestSpec(); spec != nil && spec.HTTP != nil {
+	if spec := e.ManifestSpec(); spec != nil {
 		merged = cloneHTTPBindings(spec.HTTP)
 	}
-	if e == nil || e.HTTP == nil {
+	if e == nil {
+		return merged
+	}
+	return mergeHTTPOverrides(merged, e.HTTP, mergeHTTPBinding)
+}
+
+func mergeHTTPOverrides[T any](merged, overrides map[string]*T, merge func(*T, *T) *T) map[string]*T {
+	if overrides == nil {
 		return merged
 	}
 	if merged == nil {
-		merged = map[string]*HTTPBinding{}
+		merged = map[string]*T{}
 	}
-	for name, binding := range e.HTTP {
-		if binding == nil {
+	for name, override := range overrides {
+		if override == nil {
 			merged[name] = nil
 			continue
 		}
-		merged[name] = mergeHTTPBinding(merged[name], binding)
+		merged[name] = merge(merged[name], override)
 	}
 	return merged
 }
