@@ -383,9 +383,5 @@ func stopGRPC(s *grpc.Server) {
 }
 
 func nextBackoff(d time.Duration) time.Duration {
-	d *= 2
-	if d > maxBackoff {
-		return maxBackoff
-	}
-	return d
+	return min(d*2, maxBackoff)
 }

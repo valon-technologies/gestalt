@@ -319,7 +319,7 @@ func (s *CompactService) listGroups(ctx context.Context, cid, raw string, start,
 	if start > len(matching)+1 {
 		start = len(matching) + 1
 	}
-	end := pageMin(start-1+count, len(matching))
+	end := min(start-1+count, len(matching))
 	if end < start-1 {
 		end = start - 1
 	}
