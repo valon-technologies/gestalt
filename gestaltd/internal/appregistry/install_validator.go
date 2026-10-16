@@ -266,6 +266,9 @@ func validateReverseDependents(
 		if installation == nil || appName == targetApp {
 			continue
 		}
+		if !v.configuredForRuntime(appName) {
+			continue
+		}
 		dependentEntry, err := v.fetchPublishedEntry(ctx, installation.Registry, appName, installation.Version)
 		if err != nil {
 			if errors.Is(err, ErrRegistryDocumentNotFound) {
@@ -300,6 +303,17 @@ func validateReverseDependents(
 		}
 	}
 	return nil
+}
+
+// configuredForRuntime reports whether appName will run after the next restart.
+// An installed app that was removed from config never runs again, and its stored
+// name may not be a valid registry name, so it cannot constrain a candidate.
+// A nil ConfigApps means the config is unknown, so every installed app counts.
+func (v *InstallValidator) configuredForRuntime(appName string) bool {
+	if v.ConfigApps == nil {
+		return true
+	}
+	return v.ConfigApps[appName] != nil
 }
 
 func (v *InstallValidator) fetchPublishedEntry(ctx context.Context, registryName, appName, version string) (*Entry, error) {
