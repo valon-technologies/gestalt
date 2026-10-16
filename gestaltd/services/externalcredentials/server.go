@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/publicrpc"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -173,7 +174,7 @@ func (s *externalCredentialProviderServer) ResolveCredential(ctx context.Context
 	}
 	return &proto.ResolveExternalCredentialResponse{
 		Token:        resp.Token,
-		ExpiresAt:    timeToProto(resp.ExpiresAt),
+		ExpiresAt:    protoutil.TimeToProto(resp.ExpiresAt),
 		MetadataJson: resp.MetadataJSON,
 		Params:       cloneStringMap(resp.Params),
 		Credential:   externalCredentialToProto(resp.Credential),

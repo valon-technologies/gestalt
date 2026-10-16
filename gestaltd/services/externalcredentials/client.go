@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -17,7 +18,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ExecConfig struct {
@@ -277,8 +277,8 @@ func externalCredentialToProto(credential *core.ExternalCredential) *proto.Exter
 		Qualifier:    strings.TrimSpace(credential.Qualifier),
 		AccountKey:   strings.TrimSpace(credential.AccountKey),
 		MetadataJson: credential.MetadataJSON,
-		CreatedAt:    timeToProto(nonZeroTimePtr(credential.CreatedAt)),
-		UpdatedAt:    timeToProto(nonZeroTimePtr(credential.UpdatedAt)),
+		CreatedAt:    protoutil.TimeToProto(nonZeroTimePtr(credential.CreatedAt)),
+		UpdatedAt:    protoutil.TimeToProto(nonZeroTimePtr(credential.UpdatedAt)),
 	}
 	switch {
 	case credential.Grant != nil:
@@ -286,15 +286,15 @@ func externalCredentialToProto(credential *core.ExternalCredential) *proto.Exter
 			AccessToken:       credential.Grant.AccessToken,
 			RefreshToken:      credential.Grant.RefreshToken,
 			Scope:             credential.Grant.Scope,
-			ExpiresAt:         timeToProto(credential.Grant.ExpiresAt),
-			LastRefreshedAt:   timeToProto(credential.Grant.LastRefreshedAt),
+			ExpiresAt:         protoutil.TimeToProto(credential.Grant.ExpiresAt),
+			LastRefreshedAt:   protoutil.TimeToProto(credential.Grant.LastRefreshedAt),
 			RefreshErrorCount: int32(credential.Grant.RefreshErrorCount),
 		}}
 	case credential.Client != nil:
 		out.Credential = &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
 			ClientId:              credential.Client.ClientID,
 			ClientSecret:          credential.Client.ClientSecret,
-			ClientSecretExpiresAt: timeToProto(credential.Client.ClientSecretExpiresAt),
+			ClientSecretExpiresAt: protoutil.TimeToProto(credential.Client.ClientSecretExpiresAt),
 		}}
 	case credential.Opaque != nil:
 		out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
@@ -341,7 +341,7 @@ func resolveCredentialResponseFromProto(resp *proto.ResolveExternalCredentialRes
 	}
 	return &core.ResolveExternalCredentialResponse{
 		Token:        resp.GetToken(),
-		ExpiresAt:    timeFromProto(resp.GetExpiresAt()),
+		ExpiresAt:    protoutil.TimeFromProto(resp.GetExpiresAt()),
 		MetadataJSON: resp.GetMetadataJson(),
 		Params:       cloneStringMap(resp.GetParams()),
 		Credential:   externalCredentialFromProto(resp.GetCredential()),
@@ -511,8 +511,8 @@ func externalCredentialFromProto(credential *proto.ExternalCredential) *core.Ext
 		Qualifier:    strings.TrimSpace(credential.GetQualifier()),
 		AccountKey:   strings.TrimSpace(credential.GetAccountKey()),
 		MetadataJSON: credential.GetMetadataJson(),
-		CreatedAt:    derefTime(timeFromProto(credential.GetCreatedAt())),
-		UpdatedAt:    derefTime(timeFromProto(credential.GetUpdatedAt())),
+		CreatedAt:    derefTime(protoutil.TimeFromProto(credential.GetCreatedAt())),
+		UpdatedAt:    derefTime(protoutil.TimeFromProto(credential.GetUpdatedAt())),
 	}
 	switch value := credential.GetCredential().(type) {
 	case *proto.ExternalCredential_Grant:
@@ -520,15 +520,15 @@ func externalCredentialFromProto(credential *proto.ExternalCredential) *core.Ext
 			AccessToken:       value.Grant.GetAccessToken(),
 			RefreshToken:      value.Grant.GetRefreshToken(),
 			Scope:             value.Grant.GetScope(),
-			ExpiresAt:         timeFromProto(value.Grant.GetExpiresAt()),
-			LastRefreshedAt:   timeFromProto(value.Grant.GetLastRefreshedAt()),
+			ExpiresAt:         protoutil.TimeFromProto(value.Grant.GetExpiresAt()),
+			LastRefreshedAt:   protoutil.TimeFromProto(value.Grant.GetLastRefreshedAt()),
 			RefreshErrorCount: int(value.Grant.GetRefreshErrorCount()),
 		}
 	case *proto.ExternalCredential_Client:
 		out.Client = &core.ExternalCredentialClientInfo{
 			ClientID:              value.Client.GetClientId(),
 			ClientSecret:          value.Client.GetClientSecret(),
-			ClientSecretExpiresAt: timeFromProto(value.Client.GetClientSecretExpiresAt()),
+			ClientSecretExpiresAt: protoutil.TimeFromProto(value.Client.GetClientSecretExpiresAt()),
 		}
 	case *proto.ExternalCredential_Opaque:
 		out.Opaque = &core.ExternalCredentialOpaque{
@@ -567,21 +567,6 @@ func nonZeroTimePtr(value time.Time) *time.Time {
 	if value.IsZero() {
 		return nil
 	}
-	return &value
-}
-
-func timeToProto(t *time.Time) *timestamppb.Timestamp {
-	if t == nil {
-		return nil
-	}
-	return timestamppb.New(*t)
-}
-
-func timeFromProto(t *timestamppb.Timestamp) *time.Time {
-	if t == nil {
-		return nil
-	}
-	value := t.AsTime()
 	return &value
 }
 
