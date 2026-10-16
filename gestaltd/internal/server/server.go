@@ -416,10 +416,6 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("resolve mounted app static handlers: %w", err)
 	}
 	mountedUIs = append(mountedUIs, appStatics...)
-	mountedUIs, err = normalizeMountedUIs(mountedUIs)
-	if err != nil {
-		return nil, err
-	}
 	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.AppDefs, cfg.Providers, mountedUIs)
 	if err != nil {
 		return nil, err

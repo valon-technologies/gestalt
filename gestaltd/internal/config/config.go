@@ -2653,9 +2653,7 @@ func normalizeConfigShapeForPartialLoad(cfg *Config) error {
 	normalizeProviderSourceShapes(cfg)
 	normalizeProviderEntries(cfg)
 	normalizeServerRuntimeConfig(cfg)
-	if err := normalizeAuthorizationConfig(cfg); err != nil {
-		return err
-	}
+	normalizeAuthorizationConfig(cfg)
 	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
 	}
@@ -3729,12 +3727,11 @@ func applyDefaultSourceProviderEntries(entries map[string]*ProviderEntry, defaul
 	return entries
 }
 
-func normalizeAuthorizationConfig(cfg *Config) error {
+func normalizeAuthorizationConfig(cfg *Config) {
 	if cfg == nil {
-		return nil
+		return
 	}
 	cfg.Authorization = normalizedAuthorizationConfig(cfg.Authorization)
-	return nil
 }
 
 func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {

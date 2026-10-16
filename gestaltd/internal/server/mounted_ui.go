@@ -101,13 +101,6 @@ func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func normalizeMountedUIs(mounted []MountedUI) ([]MountedUI, error) {
-	if len(mounted) == 0 {
-		return nil, nil
-	}
-	return append([]MountedUI(nil), mounted...), nil
-}
-
 func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	inner := mounted.Handler
 	if inner == nil {
