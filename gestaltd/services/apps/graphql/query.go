@@ -1,54 +1,31 @@
 package graphql
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 const defaultMaxDepth = 2
 
 func generateQuery(schema *Schema, field Field, isMutation bool) string {
-	var b strings.Builder
-
+	operation := "query"
 	if isMutation {
-		b.WriteString("mutation")
-	} else {
-		b.WriteString("query")
+		operation = "mutation"
 	}
 
+	variables := make([]string, len(field.Args))
+	arguments := make([]string, len(field.Args))
+	for i, arg := range field.Args {
+		variables[i] = "$" + arg.Name + ": " + formatTypeRef(&arg.Type)
+		arguments[i] = arg.Name + ": $" + arg.Name
+	}
+	call := field.Name
 	if len(field.Args) > 0 {
-		b.WriteByte('(')
-		for i, arg := range field.Args {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			fmt.Fprintf(&b, "$%s: %s", arg.Name, formatTypeRef(arg.Type))
-		}
-		b.WriteByte(')')
+		operation += "(" + strings.Join(variables, ", ") + ")"
+		call += "(" + strings.Join(arguments, ", ") + ")"
 	}
 
-	b.WriteString(" { ")
-	b.WriteString(field.Name)
-
-	if len(field.Args) > 0 {
-		b.WriteByte('(')
-		for i, arg := range field.Args {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			fmt.Fprintf(&b, "%s: $%s", arg.Name, arg.Name)
-		}
-		b.WriteByte(')')
+	if selectionSet := buildSelectionSet(schema, field.Type, defaultMaxDepth, nil); selectionSet != "" {
+		call += " " + selectionSet
 	}
-
-	selectionSet := buildSelectionSet(schema, field.Type, defaultMaxDepth, nil)
-	if selectionSet != "" {
-		b.WriteString(" ")
-		b.WriteString(selectionSet)
-	}
-
-	b.WriteString(" }")
-	return b.String()
+	return operation + " { " + call + " }"
 }
 
 func buildSelectionSet(schema *Schema, ref TypeRef, depth int, ancestors map[string]bool) string {
@@ -105,9 +82,6 @@ func buildSelectionSet(schema *Schema, ref TypeRef, depth int, ancestors map[str
 		case KindScalar, KindEnum:
 			fields = append(fields, f.Name)
 		case KindObject:
-			if depth <= 0 {
-				continue
-			}
 			sub := buildSelectionSet(schema, f.Type, depth-1, ancestors)
 			if sub != "" {
 				fields = append(fields, f.Name+" "+sub)
@@ -156,24 +130,18 @@ func buildConnectionSelectionSet(schema *Schema, ft *FullType, depth int, ancest
 		}
 	}
 
-	if len(parts) == 0 {
-		return ""
-	}
 	return "{ " + strings.Join(parts, " ") + " }"
 }
 
-func formatTypeRef(ref TypeRef) string {
+func formatTypeRef(ref *TypeRef) string {
+	if ref == nil {
+		return "Unknown"
+	}
 	switch ref.Kind {
 	case KindNonNull:
-		if ref.OfType != nil {
-			return formatTypeRef(*ref.OfType) + "!"
-		}
-		return "Unknown!"
+		return formatTypeRef(ref.OfType) + "!"
 	case KindList:
-		if ref.OfType != nil {
-			return "[" + formatTypeRef(*ref.OfType) + "]"
-		}
-		return "[Unknown]"
+		return "[" + formatTypeRef(ref.OfType) + "]"
 	default:
 		if ref.Name != nil {
 			return *ref.Name
