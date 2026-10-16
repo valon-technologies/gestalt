@@ -519,8 +519,5 @@ func subjectPermissionContextToPermissionSet(values []*proto.SubjectPermissionCo
 }
 
 func cloneStrings(values []string) []string {
-	if len(values) == 0 {
-		return nil
-	}
 	return append([]string(nil), values...)
 }

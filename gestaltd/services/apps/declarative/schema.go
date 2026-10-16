@@ -125,10 +125,6 @@ func CompileSchemas(c *catalog.Catalog) {
 }
 
 func parametersFromInputSchema(raw json.RawMessage) []catalog.CatalogParameter {
-	if len(raw) == 0 {
-		return nil
-	}
-
 	var schema topLevelInputSchema
 	if err := json.Unmarshal(raw, &schema); err != nil || len(schema.Properties) == 0 {
 		return nil

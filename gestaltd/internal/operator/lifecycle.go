@@ -896,9 +896,6 @@ func providerRepositoriesForConfig(cfg *config.Config) ([]providerregistry.Named
 }
 
 func cloneProviderRepositories(repos []providerregistry.NamedRepository) []providerregistry.NamedRepository {
-	if len(repos) == 0 {
-		return nil
-	}
 	return append([]providerregistry.NamedRepository(nil), repos...)
 }
 

@@ -2891,9 +2891,6 @@ func agentToolSearchRefAllows(ref coreagent.ToolRef, operation string) bool {
 }
 
 func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) error {
-	if len(refs) == 0 {
-		return nil
-	}
 	for i := range refs {
 		ref := refs[i]
 		if strings.TrimSpace(ref.System) != "" {

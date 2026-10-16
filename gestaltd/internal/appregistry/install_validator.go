@@ -154,9 +154,6 @@ func validateDeclaredDependencies(
 	input ValidateInput,
 	knownByApp map[string]*core.AppInstallation,
 ) error {
-	if len(input.Entry.Requires.Apps) == 0 {
-		return nil
-	}
 	for depKey, requirement := range input.Entry.Requires.Apps {
 		depApp, err := RequirementAppName(depKey)
 		if err != nil {
@@ -231,9 +228,6 @@ func validateRequiredOperations(
 	missingReason InstallValidationReason,
 	schemaReason InstallValidationReason,
 ) error {
-	if len(required) == 0 {
-		return nil
-	}
 	for opName, requirement := range required {
 		opName = strings.TrimSpace(opName)
 		if opName == "" {

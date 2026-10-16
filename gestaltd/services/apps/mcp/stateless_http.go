@@ -407,9 +407,6 @@ func sessionCatalogSchemaEnums(raw json.RawMessage) map[string]map[string]struct
 }
 
 func schemaProperties(raw json.RawMessage) map[string]map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
 	var schema map[string]any
 	if err := json.Unmarshal(raw, &schema); err != nil {
 		return nil

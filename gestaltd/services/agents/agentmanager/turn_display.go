@@ -187,9 +187,6 @@ func displayErrorText(value any) string {
 }
 
 func displayStringField(data map[string]any, keys ...string) string {
-	if len(data) == 0 {
-		return ""
-	}
 	for _, key := range keys {
 		value, ok := data[key]
 		if !ok || value == nil {
@@ -206,9 +203,6 @@ func displayStringField(data map[string]any, keys ...string) string {
 }
 
 func displayValueField(data map[string]any, keys ...string) any {
-	if len(data) == 0 {
-		return nil
-	}
 	for _, key := range keys {
 		if value, ok := data[key]; ok && value != nil {
 			return value
