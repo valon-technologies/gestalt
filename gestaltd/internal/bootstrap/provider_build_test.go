@@ -193,8 +193,8 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 	if err != nil {
 		t.Fatalf("buildWorkflowsAndAgents: %v", err)
 	}
-	defer func() { _ = closeWorkflows(workflows...) }()
-	defer func() { _ = closeAgents(agents...) }()
+	defer func() { _ = closeResources(workflows...) }()
+	defer func() { _ = closeResources(agents...) }()
 	<-ready
 	if errs := errResolver(); len(errs) != 0 {
 		t.Fatalf("provider build errors = %v, want none", errs)
@@ -220,7 +220,7 @@ func TestBuildConfiguredProvidersUnpublishesSuccessesOnPartialFailure(t *testing
 		return closeRecordingAgentProvider{closed: closed}, nil
 	}, runtime.PublishProvider, func(name string, err error) {
 		runtime.FailStartupProvider(name, err)
-	}, runtime.UnpublishProvider, runtime.FailPendingProviders, closeAgents, func(name string, err error) error {
+	}, runtime.UnpublishProvider, runtime.FailPendingProviders, closeResources, func(name string, err error) error {
 		return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)
 	})
 	if !errors.Is(err, boom) {

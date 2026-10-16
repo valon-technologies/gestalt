@@ -108,12 +108,12 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		if providersReady != nil {
 			<-providersReady
 		}
-		_ = closeWorkflows(extraWorkflows...)
-		_ = closeAgents(extraAgents...)
+		_ = closeResources(extraWorkflows...)
+		_ = closeResources(extraAgents...)
 		return warnings, err
 	}
-	defer func() { _ = closeWorkflows(extraWorkflows...) }()
-	defer func() { _ = closeAgents(extraAgents...) }()
+	defer func() { _ = closeResources(extraWorkflows...) }()
+	defer func() { _ = closeResources(extraAgents...) }()
 	<-providersReady
 	if errs := errResolver(); len(errs) > 0 {
 		return warnings, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))

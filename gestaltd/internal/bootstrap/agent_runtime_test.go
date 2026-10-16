@@ -768,8 +768,8 @@ func TestAgentRuntimeConfigSelectedProviderStartsSessionWithRuntimeFields(t *tes
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -855,8 +855,8 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -993,8 +993,8 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -1105,8 +1105,8 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -1207,8 +1207,8 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -1327,8 +1327,8 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -1438,8 +1438,8 @@ func TestAgentRuntimeConfigProactiveReplacementRespectsMaxReadyInstances(t *test
 	}
 	defer func() {
 		close(releaseReplacement)
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -1537,8 +1537,8 @@ func TestAgentRuntimeConfigDoesNotImmediatelyChurnWhenExpiryReserveExceedsRuntim
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -1614,8 +1614,8 @@ func TestAgentRuntimeConfigReplacesExpiresOnlyRuntimeBeforeExpiry(t *testing.T) 
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
@@ -2069,8 +2069,8 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 	if len(agents) != 1 {
@@ -2539,8 +2539,8 @@ func TestAgentRuntimeConfigUsesPublicHostServiceRelayBinding(t *testing.T) {
 		t.Fatalf("buildAgents: %v", err)
 	}
 	defer func() {
-		if err := closeAgents(agents...); err != nil {
-			t.Fatalf("closeAgents: %v", err)
+		if err := closeResources(agents...); err != nil {
+			t.Fatalf("closeResources: %v", err)
 		}
 	}()
 
