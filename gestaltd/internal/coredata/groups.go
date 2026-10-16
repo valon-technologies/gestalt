@@ -65,14 +65,7 @@ func (s *GroupService) Get(ctx context.Context, groupID string) (*Group, error) 
 	if groupID == "" {
 		return nil, fmt.Errorf("get group: id is required")
 	}
-	rec, err := s.store.Get(ctx, groupID)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get group: %w", err)
-	}
-	return recordToGroup(rec), nil
+	return getStoredValue(ctx, s.store, groupID, "get group", recordToGroup)
 }
 
 func (s *GroupService) UpsertDisplayName(ctx context.Context, groupID, displayName string) (*Group, error) {

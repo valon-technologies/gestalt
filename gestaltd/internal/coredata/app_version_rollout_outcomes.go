@@ -40,14 +40,7 @@ func (s *AppVersionRolloutOutcomeService) Get(ctx context.Context, changeRequest
 	if changeRequestID == "" {
 		return nil, fmt.Errorf("get app version rollout outcome: change request id is required")
 	}
-	rec, err := s.store.Get(ctx, changeRequestID)
-	if err != nil {
-		if errors.Is(err, idb.ErrNotFound) {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get app version rollout outcome: %w", err)
-	}
-	return recordToAppVersionRolloutOutcome(rec), nil
+	return getStoredValue(ctx, s.store, changeRequestID, "get app version rollout outcome", recordToAppVersionRolloutOutcome)
 }
 
 func (s *AppVersionRolloutOutcomeService) GetMany(ctx context.Context, changeRequestIDs []string) (map[string]*core.AppVersionRolloutOutcome, error) {
