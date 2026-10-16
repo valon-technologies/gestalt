@@ -12,7 +12,6 @@ fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let format = cli.format;
     let url = cli.url.as_deref();
-    let url_was_explicit = cli.url.is_some();
 
     let command = match cli.command {
         Some(cmd) => cmd,
@@ -50,7 +49,7 @@ fn run() -> anyhow::Result<()> {
                 gestalt_sdk::public::generated::app_client::WorkflowClient::new(transport);
             commands::workflows::dispatch(&api, &workflow, command, format)
         }
-        Commands::Agent(args) => dispatch_agent(args, url, url_was_explicit, format),
+        Commands::Agent(args) => dispatch_agent(args, url, format),
     }
 }
 
@@ -72,7 +71,6 @@ fn dispatch_token_command(
 fn dispatch_agent(
     args: AgentArgs,
     url: Option<&str>,
-    _url_was_explicit: bool,
     format: gestalt::output::Format,
 ) -> anyhow::Result<()> {
     if args.command.is_some() {

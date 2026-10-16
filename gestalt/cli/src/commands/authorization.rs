@@ -300,7 +300,7 @@ fn build_list_relationships_request(
 }
 
 fn parse_source_layer(value: Option<&str>) -> i32 {
-    match value.map(str::trim).filter(|v| !v.is_empty()) {
+    match value.map(str::trim) {
         Some("static_config") | Some("staticconfig") => SOURCE_LAYER_STATIC_CONFIG,
         Some("runtime") => SOURCE_LAYER_RUNTIME,
         _ => SOURCE_LAYER_UNSPECIFIED,

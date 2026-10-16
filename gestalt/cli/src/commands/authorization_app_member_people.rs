@@ -170,9 +170,6 @@ fn normalize_subject_id(raw: &str) -> Result<String> {
 }
 
 fn validate_person_subject_id(subject_id: &str) -> Result<()> {
-    if is_service_account_subject(subject_id) {
-        return Ok(());
-    }
     let Some(local) = subject_id
         .strip_prefix("user:")
         .map(str::trim)
@@ -180,7 +177,7 @@ fn validate_person_subject_id(subject_id: &str) -> Result<()> {
     else {
         return Ok(());
     };
-    if local.contains('@') || !is_canonical_user_uuid(local) {
+    if !is_canonical_user_uuid(local) {
         bail!(
             "subject id must be user:<uuid>; resolve people with --email from the workspace directory"
         );

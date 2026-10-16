@@ -781,7 +781,7 @@ impl ToolActivity {
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: display_detail_value(display_tool_input(display)),
+            args: detail_value_from_json(display_tool_input(display)),
             output: None,
             error: None,
         }
@@ -1003,8 +1003,8 @@ impl ToolTerminalEvent {
             name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status,
-            args: display_detail_value(display_tool_input(display)),
-            output: display_detail_value(display_tool_output(display)),
+            args: detail_value_from_json(display_tool_input(display)),
+            output: detail_value_from_json(display_tool_output(display)),
             error,
         }
     }
@@ -1015,8 +1015,8 @@ impl ToolTerminalEvent {
             name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
-            args: display_detail_value(display_tool_input(display)),
-            output: display_detail_value(display_tool_output(display)).or_else(|| {
+            args: detail_value_from_json(display_tool_input(display)),
+            output: detail_value_from_json(display_tool_output(display)).or_else(|| {
                 display_text(display).map(|value| ToolDetailValue::from_full(value.to_string()))
             }),
             error: preview_display_error(display_tool_error(display)),
@@ -1026,9 +1026,7 @@ impl ToolTerminalEvent {
     fn status_label(&self) -> Option<String> {
         match self.status {
             ToolActivityStatus::Running => None,
-            ToolActivityStatus::Completed(_) => Some(format!("{} completed", self.name)),
-            ToolActivityStatus::Failed(_) => Some(format!("{} failed", self.name)),
-            ToolActivityStatus::Ended(_) => Some(format!("{} ended", self.name)),
+            _ => Some(format!("{} {}", self.name, self.status.summary())),
         }
     }
 }
@@ -1060,10 +1058,6 @@ impl ToolActivityStatus {
 }
 
 fn detail_value_from_json(value: Option<&Value>) -> Option<ToolDetailValue> {
-    value.and_then(|value| format_tool_detail(value).ok())
-}
-
-fn display_detail_value(value: Option<&Value>) -> Option<ToolDetailValue> {
     value.and_then(|value| format_tool_detail(value).ok())
 }
 
