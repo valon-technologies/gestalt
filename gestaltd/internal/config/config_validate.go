@@ -821,8 +821,8 @@ func validateConfigSecretRefs(cfg *Config) error {
 		return fmt.Errorf("config validation: %w", err)
 	}
 	for name := range referenced {
-		entry, ok := cfg.Providers.Secrets[name]
-		if !ok || entry == nil {
+		entry := cfg.Providers.Secrets[name]
+		if entry == nil {
 			return fmt.Errorf("config validation: secret refs reference unknown secrets provider %q", name)
 		}
 	}
@@ -2327,8 +2327,8 @@ func validateAppS3Bindings(cfg *Config, name string, entry *ProviderEntry) error
 		if _, exists := seen[binding]; exists {
 			return fmt.Errorf("config validation: app %q s3[%d] duplicates %q", name, i, binding)
 		}
-		boundEntry, ok := cfg.Providers.S3[binding]
-		if !ok || boundEntry == nil {
+		boundEntry := cfg.Providers.S3[binding]
+		if boundEntry == nil {
 			return fmt.Errorf("config validation: app %q s3[%d] references unknown s3 %q", name, i, binding)
 		}
 		seen[binding] = struct{}{}
@@ -2766,8 +2766,8 @@ func validateAppCacheBindings(cfg *Config, name string, entry *ProviderEntry) er
 		if _, exists := seen[binding]; exists {
 			return fmt.Errorf("config validation: app %q cache[%d] duplicates %q", name, i, binding)
 		}
-		boundEntry, ok := cfg.Providers.Cache[binding]
-		if !ok || boundEntry == nil {
+		boundEntry := cfg.Providers.Cache[binding]
+		if boundEntry == nil {
 			return fmt.Errorf("config validation: app %q cache[%d] references unknown cache %q", name, i, binding)
 		}
 		entry.Cache[i] = binding
