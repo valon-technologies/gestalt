@@ -312,14 +312,13 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 			status.Actions = []string{actionConnect}
 		}
 	default:
+		status.Disconnectable = true
 		switch {
 		case validCount == 0:
 			status.Status = connectionStatusNeedsUserConnection
 			status.CredentialState = credentialStateInvalid
 			status.HealthState = healthStateUnhealthy
-			status.Disconnectable = true
-			status.Connected = false
-			status.Actions = reconnectStatusActions(instances, connectable, true, false)
+			status.Actions = subjectConnectionActions(len(instances) > 1, connectable, false)
 			status.StatusCode = "reconnect_required"
 			status.StatusReason = "stored credential is expired and refresh has failed; reconnect it"
 		case !chosen:
@@ -327,25 +326,21 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 			status.Status = connectionStatusNeedsInstanceSelection
 			status.CredentialState = credentialStateConnected
 			status.HealthState = healthStateNotChecked
-			status.Disconnectable = true
-			status.Connected = false
-			status.Actions = subjectConnectionActions(true, connectable, true)
+			status.Actions = subjectConnectionActions(true, false, connectable)
 			status.StatusCode = "instance_selection_required"
 			status.StatusReason = "multiple accounts are available; choose which account this workspace should use"
 		case invalidCount == 0:
 			status.Status = connectionStatusReady
 			status.CredentialState = credentialStateConnected
 			status.HealthState = healthStateNotChecked
-			status.Disconnectable = true
 			status.Connected = true
-			status.Actions = subjectConnectionActions(true, connectable, false)
+			status.Actions = subjectConnectionActions(false, false, connectable)
 		default:
 			status.Status = connectionStatusDegraded
 			status.CredentialState = credentialStateInvalid
 			status.HealthState = healthStateUnhealthy
-			status.Disconnectable = true
 			status.Connected = true
-			status.Actions = reconnectStatusActions(instances, connectable, true, connectable)
+			status.Actions = subjectConnectionActions(len(instances) > 1, connectable, connectable)
 			status.StatusCode = "reconnect_required"
 			status.StatusReason = "one or more stored credentials are expired and refresh has failed; reconnect them"
 		}
@@ -402,32 +397,16 @@ func invalidInstanceCount(instances []instanceInfo) int {
 	return count
 }
 
-func reconnectStatusActions(instances []instanceInfo, reconnectable, disconnectable, addInstance bool) []string {
-	var actions []string
-	if len(instances) > 1 {
-		actions = append(actions, actionSelectInstance)
-	}
-	if reconnectable && invalidInstanceCount(instances) > 0 {
-		actions = append(actions, actionReconnect)
-	}
-	if disconnectable {
-		actions = append(actions, actionDisconnect)
-	}
-	if addInstance {
-		actions = append(actions, actionAddInstance)
-	}
-	return actions
-}
-
-func subjectConnectionActions(disconnectable, connectable, selectInstance bool) []string {
+func subjectConnectionActions(selectInstance, reconnect, addInstance bool) []string {
 	var actions []string
 	if selectInstance {
 		actions = append(actions, actionSelectInstance)
 	}
-	if disconnectable {
-		actions = append(actions, actionDisconnect)
+	if reconnect {
+		actions = append(actions, actionReconnect)
 	}
-	if connectable {
+	actions = append(actions, actionDisconnect)
+	if addInstance {
 		actions = append(actions, actionAddInstance)
 	}
 	return actions
