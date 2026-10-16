@@ -122,15 +122,9 @@ func recUint64(rec idb.Record, key string) uint64 {
 	case uint64:
 		return n
 	case int64:
-		if n < 0 {
-			return 0
-		}
-		return uint64(n)
+		return uint64(max(n, 0))
 	case int:
-		if n < 0 {
-			return 0
-		}
-		return uint64(n)
+		return uint64(max(n, 0))
 	case float64:
 		if n < 0 {
 			return 0
