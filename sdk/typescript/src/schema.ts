@@ -203,7 +203,7 @@ export function object<T extends Record<string, unknown>>(
   const base = withMeta<T>(
     "object",
     (value, path) => {
-      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      if (typeof value !== "object" || Array.isArray(value)) {
         throw new TypeError(`${path} must be an object`);
       }
       const source = value as Record<string, unknown>;

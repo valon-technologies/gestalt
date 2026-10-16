@@ -93,9 +93,6 @@ export function providerMigrationLedgerStore(providerName: string): string {
   if (slash >= 0) {
     normalized = normalized.slice(slash + 1);
   }
-  if (!normalized) {
-    return DEFAULT_LEDGER_STORE;
-  }
   const slug = migrationLedgerSlug(normalized);
   if (!slug) {
     return DEFAULT_LEDGER_STORE;

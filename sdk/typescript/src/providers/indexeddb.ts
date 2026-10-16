@@ -9,7 +9,6 @@ import {
   TransactionMode as ProtoTransactionMode,
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
   IndexedDBQuerySchema,
-  KeyRangeSchema as ProtoKeyRangeSchema,
   KeyValueSchema as ProtoKeyValueSchema,
 } from "../internal/gen/v1/indexeddb_pb.ts";
 import {
@@ -1890,7 +1889,7 @@ function toNativeTypedValue(v: KeyScalar): import("../indexeddb.ts").TypedValue 
     return { kind: typedValueKindStringValue(v) };
   }
   if (typeof v === "number") {
-    if (Number.isInteger(v) && Number.isSafeInteger(v)) {
+    if (Number.isSafeInteger(v)) {
       return { kind: typedValueKindIntValue(BigInt(v)) };
     }
     return { kind: typedValueKindFloatValue(v) };
@@ -1918,15 +1917,6 @@ function toProtoCursorKey(key: Key): MessageInitShape<typeof ProtoKeyValueSchema
   return toProtoKeyValue(key);
 }
 
-function keyRangeToProto(kr: KeyRange): MessageInitShape<typeof ProtoKeyRangeSchema> {
-  return {
-    ...(kr.lower !== undefined ? { lower: toProtoKeyValue(kr.lower) } : {}),
-    ...(kr.upper !== undefined ? { upper: toProtoKeyValue(kr.upper) } : {}),
-    lowerOpen: kr.lowerOpen,
-    upperOpen: kr.upperOpen,
-  };
-}
-
 function toProtoRecord(record: Record): any {
   const fields: { [key: string]: unknown } = {};
   for (const [key, value] of Object.entries(record)) {
@@ -1950,7 +1940,7 @@ function toProtoTypedValue(v: unknown): any {
   if (typeof v === "boolean") return { kind: { case: "boolValue", value: v } };
   if (typeof v === "bigint") return { kind: { case: "intValue", value: v } };
   if (typeof v === "number") {
-    if (Number.isInteger(v) && Number.isSafeInteger(v)) {
+    if (Number.isSafeInteger(v)) {
       return { kind: { case: "intValue", value: BigInt(v) } };
     }
     return { kind: { case: "floatValue", value: v } };
