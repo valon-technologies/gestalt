@@ -132,15 +132,7 @@ func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 }
 
 func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
-	out := make([]any, len(values))
-	for i, value := range values {
-		goValue, err := AnyFromTypedValue(value)
-		if err != nil {
-			return nil, fmt.Errorf("unmarshal value %d: %w", i, err)
-		}
-		out[i] = goValue
-	}
-	return out, nil
+	return convertIndexedSlice(values, "unmarshal value", AnyFromTypedValue)
 }
 
 func RecordToProto(record Record) (*proto.Record, error) {
@@ -172,25 +164,21 @@ func RecordFromProto(record *proto.Record) (Record, error) {
 }
 
 func RecordsFromProto(records []*proto.Record) ([]Record, error) {
-	out := make([]Record, len(records))
-	for i, record := range records {
-		goRecord, err := RecordFromProto(record)
-		if err != nil {
-			return nil, fmt.Errorf("unmarshal record %d: %w", i, err)
-		}
-		out[i] = goRecord
-	}
-	return out, nil
+	return convertIndexedSlice(records, "unmarshal record", RecordFromProto)
 }
 
 func RecordsToProto(records []Record) ([]*proto.Record, error) {
-	out := make([]*proto.Record, len(records))
-	for i, record := range records {
-		pbRecord, err := RecordToProto(record)
+	return convertIndexedSlice(records, "marshal record", RecordToProto)
+}
+
+func convertIndexedSlice[T, R any](values []T, operation string, convert func(T) (R, error)) ([]R, error) {
+	out := make([]R, len(values))
+	for i, value := range values {
+		converted, err := convert(value)
 		if err != nil {
-			return nil, fmt.Errorf("marshal record %d: %w", i, err)
+			return nil, fmt.Errorf("%s %d: %w", operation, i, err)
 		}
-		out[i] = pbRecord
+		out[i] = converted
 	}
 	return out, nil
 }
