@@ -58,13 +58,13 @@ func newAgentProviderHandle(name string, tracker *startupWaitTracker) *startupPr
 }
 
 func agentSessionStartConfigs(cfg *config.Config) map[string]*coreagent.SessionStartConfig {
-	if cfg == nil || len(cfg.Providers.Agent) == 0 {
+	if cfg == nil {
 		return nil
 	}
 	out := make(map[string]*coreagent.SessionStartConfig)
 	for name, entry := range cfg.Providers.Agent {
 		name = strings.TrimSpace(name)
-		if name == "" || entry == nil || entry.Lifecycle == nil || len(entry.Lifecycle.SessionStart) == 0 {
+		if name == "" || entry == nil || entry.Lifecycle == nil {
 			continue
 		}
 		hooks := make([]coreagent.SessionStartHook, 0, len(entry.Lifecycle.SessionStart))

@@ -146,9 +146,6 @@ func (m *TokenManager) tokenTTL(ttl time.Duration) time.Duration {
 }
 
 func normalizeAllowedHosts(hosts []string) []string {
-	if len(hosts) == 0 {
-		return nil
-	}
 	out := make([]string, 0, len(hosts))
 	for _, host := range hosts {
 		host = strings.TrimSpace(host)
