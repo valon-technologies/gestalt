@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/httpheaders"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
@@ -19,22 +20,7 @@ type staticHeaderProvider interface {
 // WithInvokeRequestHeaders attaches outbound header overrides requested by a
 // nested app invoke to the invocation context.
 func WithInvokeRequestHeaders(ctx context.Context, headers map[string]string) context.Context {
-	if ctx == nil || len(headers) == 0 {
-		return ctx
-	}
-	normalized := make(map[string]string, len(headers))
-	for name, value := range headers {
-		name = strings.TrimSpace(name)
-		value = strings.TrimSpace(value)
-		if name == "" || value == "" {
-			continue
-		}
-		normalized[http.CanonicalHeaderKey(name)] = value
-	}
-	if len(normalized) == 0 {
-		return ctx
-	}
-	return context.WithValue(ctx, invokeRequestHeadersCtxKey{}, normalized)
+	return httpheaders.WithOverrides(ctx, invokeRequestHeadersCtxKey{}, headers)
 }
 
 // InvokeRequestHeadersFromContext returns outbound header overrides requested
