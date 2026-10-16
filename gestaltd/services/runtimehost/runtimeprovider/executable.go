@@ -3,13 +3,11 @@ package runtimeprovider
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -26,14 +24,8 @@ type ExecutableConfig struct {
 }
 
 type executableProvider struct {
-	proc      *runtimehost.AppProcess
-	runtime   proto.RuntimeClient
-	lifecycle proto.ProviderLifecycleClient
-
-	name      string
-	telemetry metricutil.TelemetryProviders
-	mu        sync.Mutex
-	sessions  map[string]*proto.RuntimeSession
+	proc    *runtimehost.AppProcess
+	runtime proto.RuntimeClient
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider, error) {
@@ -41,7 +33,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
-		Egress:       cloneRuntimeEgressPolicy(cfg.Egress),
+		Egress:       cfg.Egress,
 		HostBinary:   cfg.HostBinary,
 		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
@@ -58,20 +50,9 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 	}
 
 	return &executableProvider{
-		proc:      proc,
-		runtime:   proto.NewRuntimeClient(proc.Conn()),
-		lifecycle: lifecycle,
-		name:      cfg.Name,
-		telemetry: cfg.Telemetry,
-		sessions:  make(map[string]*proto.RuntimeSession),
+		proc:    proc,
+		runtime: proto.NewRuntimeClient(proc.Conn()),
 	}, nil
-}
-
-func cloneRuntimeEgressPolicy(policy egress.Policy) egress.Policy {
-	return egress.Policy{
-		AllowedHosts:  append([]string(nil), policy.AllowedHosts...),
-		DefaultAction: policy.DefaultAction,
-	}
 }
 
 func (p *executableProvider) Support(ctx context.Context) (*proto.RuntimeSupport, error) {
@@ -87,7 +68,6 @@ func (p *executableProvider) StartSession(ctx context.Context, req *proto.StartR
 	if err != nil {
 		return nil, fmt.Errorf("start runtime session: %w", err)
 	}
-	p.trackSession(resp)
 	return resp, nil
 }
 
@@ -99,12 +79,6 @@ func (p *executableProvider) ListSessions(ctx context.Context, req *proto.ListRu
 	if err != nil {
 		return nil, fmt.Errorf("list runtime sessions: %w", err)
 	}
-	for _, protoSession := range resp.GetSessions() {
-		if protoSession == nil || protoSession.GetId() == "" {
-			continue
-		}
-		p.trackSession(protoSession)
-	}
 	return resp, nil
 }
 
@@ -113,15 +87,11 @@ func (p *executableProvider) GetSession(ctx context.Context, req *proto.GetRunti
 	if err != nil {
 		return nil, fmt.Errorf("get runtime session: %w", err)
 	}
-	p.trackSession(resp)
 	return resp, nil
 }
 
 func (p *executableProvider) StopSession(ctx context.Context, req *proto.StopRuntimeSessionRequest) error {
 	_, err := p.runtime.StopSession(ctx, req)
-	p.mu.Lock()
-	delete(p.sessions, req.GetSessionId())
-	p.mu.Unlock()
 	if err != nil {
 		return fmt.Errorf("stop runtime session: %w", err)
 	}
@@ -149,11 +119,6 @@ func (p *executableProvider) StartApp(ctx context.Context, req *proto.StartHoste
 	if err != nil {
 		return nil, fmt.Errorf("start hosted app: %w", err)
 	}
-	p.mu.Lock()
-	if session, ok := p.sessions[req.GetSessionId()]; ok && session != nil {
-		session.State = SessionStateRunning
-	}
-	p.mu.Unlock()
 	return resp, nil
 }
 
@@ -161,20 +126,5 @@ func (p *executableProvider) Close() error {
 	if p == nil || p.proc == nil {
 		return nil
 	}
-	p.mu.Lock()
-	p.sessions = nil
-	p.mu.Unlock()
 	return p.proc.Close()
-}
-
-func (p *executableProvider) trackSession(session *proto.RuntimeSession) {
-	if p == nil || session == nil || session.GetId() == "" {
-		return
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.sessions == nil {
-		p.sessions = make(map[string]*proto.RuntimeSession)
-	}
-	p.sessions[session.GetId()] = gproto.Clone(session).(*proto.RuntimeSession)
 }
