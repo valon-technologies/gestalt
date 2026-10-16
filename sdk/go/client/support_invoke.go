@@ -198,43 +198,35 @@ func parseJSONResultBody(body []byte) (any, error) {
 }
 
 func graphQLErrors(app string, rawBody []byte, value any) error {
-	object, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-	errorsValue, ok := object["errors"].([]any)
-	if !ok || len(errorsValue) == 0 {
+	object, _ := value.(map[string]any)
+	errorsValue, _ := object["errors"].([]any)
+	if len(errorsValue) == 0 {
 		return nil
 	}
 	message := "GraphQL returned errors"
-	if first, ok := errorsValue[0].(map[string]any); ok {
-		if text, ok := first["message"].(string); ok && strings.TrimSpace(text) != "" {
-			message = text
-		}
+	first, _ := errorsValue[0].(map[string]any)
+	if text, _ := first["message"].(string); strings.TrimSpace(text) != "" {
+		message = text
 	}
 	return newInvokeError(app, "graphql", 0, message, "graphql_errors", value, rawBody)
 }
 
 func extractInvokeErrorFields(parsed any) (message, reason string) {
-	object, ok := parsed.(map[string]any)
-	if !ok {
-		return "", ""
+	object, _ := parsed.(map[string]any)
+	nested, _ := object["error"].(map[string]any)
+	if text, _ := nested["message"].(string); strings.TrimSpace(text) != "" {
+		message = text
 	}
-	if nested, ok := object["error"].(map[string]any); ok {
-		if text, ok := nested["message"].(string); ok && strings.TrimSpace(text) != "" {
-			message = text
-		}
-		if code, ok := nested["code"].(string); ok && strings.TrimSpace(code) != "" {
-			reason = code
-		}
+	if code, _ := nested["code"].(string); strings.TrimSpace(code) != "" {
+		reason = code
 	}
 	if message == "" {
-		if text, ok := object["message"].(string); ok && strings.TrimSpace(text) != "" {
+		if text, _ := object["message"].(string); strings.TrimSpace(text) != "" {
 			message = text
 		}
 	}
 	if reason == "" {
-		if code, ok := object["code"].(string); ok && strings.TrimSpace(code) != "" {
+		if code, _ := object["code"].(string); strings.TrimSpace(code) != "" {
 			reason = code
 		}
 	}
