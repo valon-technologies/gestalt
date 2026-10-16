@@ -118,8 +118,8 @@ func (s *Server) mountedUIListingAccessRequest(appName, subjectID string) (invoc
 
 // configuredMountedPath returns the app's declared static mount path.
 func (s *Server) configuredMountedPath(appName string) string {
-	entry, ok := s.pluginDefs[appName]
-	if !ok || entry == nil || entry.Static == nil {
+	entry := s.pluginDefs[appName]
+	if entry == nil || entry.Static == nil {
 		return ""
 	}
 	return strings.TrimSpace(entry.Static.Mount)

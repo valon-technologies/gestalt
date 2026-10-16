@@ -61,17 +61,10 @@ func buildOIDCFederatedLogoutURL(issuerURL, clientID, returnTo string, configure
 }
 
 func oidcLogoutConfigFromMap(config map[string]any) (issuerURL, clientID string) {
-	if len(config) == 0 {
-		return "", ""
-	}
 	return configString(config, "issuerUrl"), configString(config, "clientId")
 }
 
 func configString(config map[string]any, key string) string {
-	raw, ok := config[key]
-	if !ok || raw == nil {
-		return ""
-	}
-	value, _ := raw.(string)
+	value, _ := config[key].(string)
 	return strings.TrimSpace(value)
 }

@@ -193,8 +193,8 @@ func handleRESTInvoke(
 		return
 	}
 	addSubjectLabelMetricDims(ctx, p)
-	req, ok := adapted.(*proto.AppInvokeRequest)
-	if !ok || req == nil {
+	req, _ := adapted.(*proto.AppInvokeRequest)
+	if req == nil {
 		req = &protoReq
 	}
 

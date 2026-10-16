@@ -368,8 +368,8 @@ func (p *LocalProvider) sessionLocked(sessionID string) (*localSession, error) {
 	if p.closed {
 		return nil, fmt.Errorf("runtime provider is closed")
 	}
-	session, ok := p.sessions[sessionID]
-	if !ok || session == nil {
+	session := p.sessions[sessionID]
+	if session == nil {
 		return nil, fmt.Errorf("runtime session %q is not available", sessionID)
 	}
 	return session, nil

@@ -29,28 +29,16 @@ func asArray(value any) ([]any, bool) {
 }
 
 func stringArg(args map[string]any, key string) string {
-	if value, ok := args[key]; ok {
-		if s, ok := value.(string); ok {
-			return strings.TrimSpace(s)
-		}
-	}
-	return ""
+	return stringValue(args[key])
 }
 
 func stringValue(value any) string {
-	if value == nil {
-		return ""
-	}
 	text, _ := value.(string)
 	return strings.TrimSpace(text)
 }
 
 func intArg(args map[string]any, key string) int {
-	value, ok := args[key]
-	if !ok || value == nil {
-		return 0
-	}
-	switch v := value.(type) {
+	switch v := args[key].(type) {
 	case int:
 		return v
 	case int64:
@@ -63,9 +51,6 @@ func intArg(args map[string]any, key string) int {
 }
 
 func rejectUnknownKeys(m map[string]any, path string, allowed ...string) error {
-	if len(m) == 0 {
-		return nil
-	}
 	allowedSet := make(map[string]struct{}, len(allowed))
 	for _, key := range allowed {
 		allowedSet[key] = struct{}{}
@@ -79,8 +64,8 @@ func rejectUnknownKeys(m map[string]any, path string, allowed ...string) error {
 }
 
 func objectArg(args map[string]any, key, path string) (map[string]any, error) {
-	value, ok := args[key]
-	if !ok || value == nil {
+	value := args[key]
+	if value == nil {
 		return nil, nil
 	}
 	out, ok := asMap(value)

@@ -218,30 +218,15 @@ func LatestKnownInstallation(installations []*core.AppInstallation) *core.AppIns
 }
 
 func stringMeta(metadata map[string]any, key string) string {
-	if metadata == nil {
+	value := metadata[key]
+	if value == nil {
 		return ""
 	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return ""
-	}
-	switch typed := value.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	default:
-		return strings.TrimSpace(fmt.Sprint(typed))
-	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 func stringMapMeta(metadata map[string]any, key string) map[string]string {
-	if metadata == nil {
-		return nil
-	}
-	value, ok := metadata[key]
-	if !ok || value == nil {
-		return nil
-	}
-	switch typed := value.(type) {
+	switch typed := metadata[key].(type) {
 	case map[string]string:
 		if len(typed) == 0 {
 			return nil

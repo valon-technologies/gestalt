@@ -80,8 +80,8 @@ func runAppRegistryRetentionPrune(args []string) error {
 		if err != nil {
 			return err
 		}
-		entry, ok := cfg.Apps[appName]
-		if !ok || entry == nil || !entry.Source.IsRegistry() {
+		entry := cfg.Apps[appName]
+		if entry == nil || !entry.Source.IsRegistry() {
 			return fmt.Errorf("app %q is not registry-managed in deploy config", appName)
 		}
 		registryName := strings.TrimSpace(entry.Source.Registry)
