@@ -156,11 +156,7 @@ func ValidateMetadata(metadata *Metadata) error {
 	}
 	switch metadata.Runtime {
 	case RuntimeExecutable:
-	case RuntimeDeclarative:
-		if metadata.Kind != providermanifestv1.KindApp {
-			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
-		}
-	case RuntimeUI:
+	case RuntimeDeclarative, RuntimeUI:
 		if metadata.Kind != providermanifestv1.KindApp {
 			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
 		}

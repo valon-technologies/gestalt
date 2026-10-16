@@ -672,9 +672,8 @@ func invocationStatusError(err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, invocation.ErrInvalidInvocation):
 		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, invocation.ErrStreamingUnsupported):
-		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
+	case errors.Is(err, invocation.ErrStreamingUnsupported),
+		errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrReconnectRequired):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, invocation.ErrAmbiguousInstance):
 		return status.Error(codes.Aborted, err.Error())

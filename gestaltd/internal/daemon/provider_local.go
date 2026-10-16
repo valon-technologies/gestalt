@@ -734,10 +734,8 @@ func sanitizeProviderLocalMountSlug(value string) string {
 	previousSeparator := false
 	for _, r := range value {
 		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r)
-			previousSeparator = false
-		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'z',
+			r >= '0' && r <= '9':
 			b.WriteRune(r)
 			previousSeparator = false
 		case r == '-' || r == '_' || r == '.':
