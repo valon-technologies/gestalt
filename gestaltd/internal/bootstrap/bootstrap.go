@@ -1919,12 +1919,8 @@ func buildWorkflowsAndAgents(ctx context.Context, cfg *config.Config, factories 
 }
 
 func failPendingStartupProviders(deps Deps, err error) {
-	if deps.WorkflowRuntime != nil {
-		deps.WorkflowRuntime.FailPendingProviders(err)
-	}
-	if deps.AgentRuntime != nil {
-		deps.AgentRuntime.FailPendingProviders(err)
-	}
+	deps.WorkflowRuntime.FailPendingProviders(err)
+	deps.AgentRuntime.FailPendingProviders(err)
 }
 
 func buildConfiguredProviders[T any](
@@ -2024,26 +2020,10 @@ func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryR
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreworkflow.Provider, error) {
 			return buildWorkflow(ctx, cfg, name, entry, factories, deps)
 		},
-		func(name string, provider coreworkflow.Provider) {
-			if deps.WorkflowRuntime != nil {
-				deps.WorkflowRuntime.PublishProvider(name, provider)
-			}
-		},
-		func(name string, err error) {
-			if deps.WorkflowRuntime != nil {
-				deps.WorkflowRuntime.FailStartupProvider(name, err)
-			}
-		},
-		func(name string) {
-			if deps.WorkflowRuntime != nil {
-				deps.WorkflowRuntime.UnpublishProvider(name)
-			}
-		},
-		func(err error) {
-			if deps.WorkflowRuntime != nil {
-				deps.WorkflowRuntime.FailPendingProviders(err)
-			}
-		},
+		deps.WorkflowRuntime.PublishProvider,
+		deps.WorkflowRuntime.FailStartupProvider,
+		deps.WorkflowRuntime.UnpublishProvider,
+		deps.WorkflowRuntime.FailPendingProviders,
 		closeWorkflows,
 		func(name string, err error) error {
 			return fmt.Errorf("bootstrap: workflow from resource %q: %w", name, err)
@@ -2056,26 +2036,10 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		func(ctx context.Context, name string, entry *config.ProviderEntry) (coreagent.Provider, error) {
 			return buildAgent(ctx, cfg, name, entry, factories, deps)
 		},
-		func(name string, provider coreagent.Provider) {
-			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.PublishProvider(name, provider)
-			}
-		},
-		func(name string, err error) {
-			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.FailStartupProvider(name, err)
-			}
-		},
-		func(name string) {
-			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.UnpublishProvider(name)
-			}
-		},
-		func(err error) {
-			if deps.AgentRuntime != nil {
-				deps.AgentRuntime.FailPendingProviders(err)
-			}
-		},
+		deps.AgentRuntime.PublishProvider,
+		deps.AgentRuntime.FailStartupProvider,
+		deps.AgentRuntime.UnpublishProvider,
+		deps.AgentRuntime.FailPendingProviders,
 		closeAgents,
 		func(name string, err error) error {
 			return fmt.Errorf("bootstrap: agent from resource %q: %w", name, err)

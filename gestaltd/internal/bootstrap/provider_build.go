@@ -127,10 +127,7 @@ func prepareProviderBuilds(
 			continue
 		}
 		remapStartupOperationRouting(&operationRouting, entry.EffectiveAllowedOperations())
-		var tracker *startupWaitTracker
-		if deps.WorkflowRuntime != nil {
-			tracker = deps.WorkflowRuntime.StartupWaitTracker()
-		}
+		tracker := deps.WorkflowRuntime.StartupWaitTracker()
 		proxy := newStartupProviderProxy(spec, operationRouting, tracker)
 		if err := reg.Providers.Register(name, proxy); err != nil {
 			builds.errs = append(builds.errs, fmt.Errorf("integration %q: %w", name, err))
