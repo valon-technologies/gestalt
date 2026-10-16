@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -29,9 +30,7 @@ func setupProviderTelemetryFromEnv(ctx context.Context) (providerTelemetryShutdo
 	if !strings.EqualFold(strings.TrimSpace(os.Getenv(proto.EnvProviderTelemetry)), providerTelemetryOTEL) {
 		return func(context.Context) error { return nil }, nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 
 	res, err := providerTelemetryResource(ctx)
 	if err != nil {
@@ -88,9 +87,7 @@ func setupProviderTelemetryFromEnv(ctx context.Context) (providerTelemetryShutdo
 }
 
 func shutdownProviderTelemetry(ctx context.Context, shutdowns []providerTelemetryShutdown) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = cmp.Or(ctx, context.Background())
 	var errs []error
 	for i := len(shutdowns) - 1; i >= 0; i-- {
 		errs = append(errs, shutdowns[i](ctx))
