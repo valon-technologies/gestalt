@@ -1,17 +1,16 @@
 package appregistry
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
 const (
@@ -286,16 +285,7 @@ func RetentionStorageURL(indexStorageURL string, appName string) string {
 
 // SHA256File returns the lowercase hex SHA-256 digest of a file.
 func SHA256File(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = file.Close() }()
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hasher.Sum(nil)), nil
+	return operator.FileSHA256(path)
 }
 
 // WriteTempJSON writes data to a temporary file and returns its path.
