@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerutil"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/graphql"
 )
@@ -112,10 +112,7 @@ func (p *graphQLSessionCatalogProvider) CatalogForRequest(ctx context.Context, t
 }
 
 func (p *graphQLSessionCatalogProvider) Close() error {
-	if closer, ok := p.Provider.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
+	return providerutil.Close(p.Provider)
 }
 
 type graphQLSessionCatalogOAuthProvider struct {

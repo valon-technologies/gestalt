@@ -3,10 +3,10 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/providerutil"
 )
 
 func bindProviderConnection(prov core.Provider, connection string) core.Provider {
@@ -99,10 +99,7 @@ func (p *connectedProvider) StaticHeaders() map[string]string {
 }
 
 func (p *connectedProvider) Close() error {
-	if closer, ok := p.inner.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
+	return providerutil.Close(p.inner)
 }
 
 type connectedSessionCatalogProvider struct {
@@ -124,11 +121,11 @@ func (p *connectedSessionCatalogProvider) ResolveHTTPSubject(ctx context.Context
 }
 
 func (p *connectedSessionCatalogProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	return resolveProviderConnectionForOperation(p.Provider, operation, params)
+	return providerutil.ResolveConnection(p.Provider, operation, params)
 }
 
 func (p *connectedSessionCatalogProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	return providerOperationConnectionOverrideAllowed(p.Provider, operation, params)
+	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
 }
 
 func (p *connectedSessionCatalogProvider) StaticHeaders() map[string]string {
@@ -144,10 +141,7 @@ func (p *connectedSessionCatalogProvider) CatalogForRequest(ctx context.Context,
 }
 
 func (p *connectedSessionCatalogProvider) Close() error {
-	if closer, ok := p.Provider.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
+	return providerutil.Close(p.Provider)
 }
 
 type connectedGraphQLProvider struct {
@@ -169,11 +163,11 @@ func (p *connectedGraphQLProvider) ResolveHTTPSubject(ctx context.Context, req *
 }
 
 func (p *connectedGraphQLProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	return resolveProviderConnectionForOperation(p.Provider, operation, params)
+	return providerutil.ResolveConnection(p.Provider, operation, params)
 }
 
 func (p *connectedGraphQLProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	return providerOperationConnectionOverrideAllowed(p.Provider, operation, params)
+	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
 }
 
 func (p *connectedGraphQLProvider) StaticHeaders() map[string]string {
@@ -193,10 +187,7 @@ func (p *connectedGraphQLProvider) CatalogForRequest(ctx context.Context, token 
 }
 
 func (p *connectedGraphQLProvider) Close() error {
-	if closer, ok := p.Provider.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
+	return providerutil.Close(p.Provider)
 }
 
 type connectedOAuthProvider struct {
@@ -218,11 +209,11 @@ func (p *connectedOAuthProvider) ResolveHTTPSubject(ctx context.Context, req *co
 }
 
 func (p *connectedOAuthProvider) ResolveConnectionForOperation(operation string, params map[string]any) (string, error) {
-	return resolveProviderConnectionForOperation(p.Provider, operation, params)
+	return providerutil.ResolveConnection(p.Provider, operation, params)
 }
 
 func (p *connectedOAuthProvider) OperationConnectionOverrideAllowed(operation string, params map[string]any) bool {
-	return providerOperationConnectionOverrideAllowed(p.Provider, operation, params)
+	return providerutil.ConnectionOverrideAllowed(p.Provider, operation, params)
 }
 
 func (p *connectedOAuthProvider) StaticHeaders() map[string]string {
@@ -258,24 +249,7 @@ func (p *connectedOAuthProvider) InvokeGraphQL(ctx context.Context, request core
 }
 
 func (p *connectedOAuthProvider) Close() error {
-	if closer, ok := p.Provider.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
-}
-
-func resolveProviderConnectionForOperation(prov core.Provider, operation string, params map[string]any) (string, error) {
-	if resolver, ok := prov.(core.OperationConnectionResolver); ok {
-		return resolver.ResolveConnectionForOperation(operation, params)
-	}
-	return prov.ConnectionForOperation(operation), nil
-}
-
-func providerOperationConnectionOverrideAllowed(prov core.Provider, operation string, params map[string]any) bool {
-	if policy, ok := prov.(core.OperationConnectionOverridePolicy); ok {
-		return policy.OperationConnectionOverrideAllowed(operation, params)
-	}
-	return false
+	return providerutil.Close(p.Provider)
 }
 
 func providerStaticHeaders(prov core.Provider) map[string]string {
