@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/maputil"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 )
 
@@ -50,19 +51,7 @@ func declarativeConnectionAuthDef(auth config.ConnectionAuthDef) declarative.Con
 }
 
 func declarativeConnectionParamDefs(params map[string]config.ConnectionParamDef) map[string]declarative.ConnectionParamDef {
-	if len(params) == 0 {
-		return nil
-	}
-	out := make(map[string]declarative.ConnectionParamDef, len(params))
-	for name, param := range params {
-		out[name] = declarative.ConnectionParamDef{
-			Required:        param.Required,
-			Description:     param.Description,
-			Default:         param.Default,
-			From:            param.From,
-			Field:           param.Field,
-			AccountIdentity: param.AccountIdentity,
-		}
-	}
-	return out
+	return maputil.ConvertNonEmpty(params, func(value config.ConnectionParamDef) declarative.ConnectionParamDef {
+		return declarative.ConnectionParamDef(value)
+	})
 }
