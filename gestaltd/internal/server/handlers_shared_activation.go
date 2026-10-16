@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -14,8 +15,8 @@ type sharedActivationRequest struct {
 	minimumHealthyInstances []int
 }
 
-func parseSharedActivationRequest(query map[string][]string) (sharedActivationRequest, string) {
-	retryParam := strings.TrimSpace(firstQueryValue(query, "retry"))
+func parseSharedActivationRequest(query url.Values) (sharedActivationRequest, string) {
+	retryParam := strings.TrimSpace(query.Get("retry"))
 	if retryParam != "" && retryParam != "true" {
 		return sharedActivationRequest{}, "retry must be true when provided"
 	}
@@ -34,19 +35,11 @@ func parseSharedActivationRequest(query map[string][]string) (sharedActivationRe
 	return req, ""
 }
 
-func firstQueryValue(query map[string][]string, key string) string {
-	values := query[key]
-	if len(values) == 0 {
-		return ""
-	}
-	return values[0]
-}
-
 func (s *Server) promoteFleetSourceVersion(w http.ResponseWriter, r *http.Request, req sharedActivationRequest) bool {
 	if s.sourceVersion == "" {
 		return true
 	}
-	expectedSourceVersion := strings.TrimSpace(firstQueryValue(r.URL.Query(), "source_version"))
+	expectedSourceVersion := strings.TrimSpace(r.URL.Query().Get("source_version"))
 	if expectedSourceVersion == "" {
 		writeError(w, http.StatusBadRequest, "source_version is required")
 		return false

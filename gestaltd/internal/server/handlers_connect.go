@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	plugins "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -900,7 +901,7 @@ func (s *Server) configuredConnectionInfo(integration, connection string) (confi
 	if !ok {
 		return configuredConnectionInfo{}, fmt.Errorf("connection %q is not configured for integration %q", connection, integration)
 	}
-	paramDefs := connectionParamDefsFromConfig(conn.ConnectionParams)
+	paramDefs := plugins.ConnectionParamDefsFromManifest(conn.ConnectionParams)
 	if err := core.ValidateConnectionParamDefs(paramDefs); err != nil {
 		return configuredConnectionInfo{}, fmt.Errorf("invalid connection parameters: %w", err)
 	}
@@ -909,24 +910,6 @@ func (s *Server) configuredConnectionInfo(integration, connection string) (confi
 		Mode:      config.ConnectionModeForConnection(conn),
 		ParamDefs: paramDefs,
 	}, nil
-}
-
-func connectionParamDefsFromConfig(defs map[string]config.ConnectionParamDef) map[string]core.ConnectionParamDef {
-	if len(defs) == 0 {
-		return nil
-	}
-	out := make(map[string]core.ConnectionParamDef, len(defs))
-	for name, def := range defs {
-		out[name] = core.ConnectionParamDef{
-			Required:        def.Required,
-			Description:     def.Description,
-			Default:         def.Default,
-			From:            def.From,
-			Field:           def.Field,
-			AccountIdentity: def.AccountIdentity,
-		}
-	}
-	return out
 }
 
 func (s *Server) requireConfiguredConnection(w http.ResponseWriter, integration, connection string) (configuredConnectionInfo, bool) {

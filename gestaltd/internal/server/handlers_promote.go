@@ -43,7 +43,7 @@ func (s *Server) changeAppVersionPauseHandler(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusServiceUnavailable, "source version state is unavailable")
 		return
 	}
-	owner := strings.TrimSpace(firstQueryValue(r.URL.Query(), "owner"))
+	owner := strings.TrimSpace(r.URL.Query().Get("owner"))
 	token := strings.TrimSpace(r.Header.Get("X-Valon-Deploy-Token"))
 	var err error
 	if acquire {
@@ -136,7 +136,7 @@ func (s *Server) validatePromotionSourceVersion(w http.ResponseWriter, r *http.R
 	if s.sourceVersion == "" {
 		return "", true
 	}
-	expectedSourceVersion := strings.TrimSpace(firstQueryValue(r.URL.Query(), "source_version"))
+	expectedSourceVersion := strings.TrimSpace(r.URL.Query().Get("source_version"))
 	if expectedSourceVersion == "" {
 		writeError(w, http.StatusBadRequest, "source_version is required")
 		return "", false
