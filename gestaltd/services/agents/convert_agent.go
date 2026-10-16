@@ -66,8 +66,6 @@ func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagen
 
 func agentExecutionStatusToProto(status coreagent.ExecutionStatus) proto.AgentExecutionStatus {
 	switch status {
-	case "":
-		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
 	case coreagent.ExecutionStatusPending:
 		return proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING
 	case coreagent.ExecutionStatusRunning:
@@ -100,8 +98,6 @@ func agentSessionStateFromProto(state proto.AgentSessionState) (coreagent.Sessio
 
 func agentSessionStateToProto(state coreagent.SessionState) proto.AgentSessionState {
 	switch state {
-	case "":
-		return proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
 	case coreagent.SessionStateActive:
 		return proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE
 	case coreagent.SessionStateArchived:
@@ -400,8 +396,6 @@ func agentInteractionTypeFromProto(value proto.AgentInteractionType) (coreagent.
 
 func agentInteractionTypeToProto(value coreagent.InteractionType) proto.AgentInteractionType {
 	switch value {
-	case "":
-		return proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED
 	case coreagent.InteractionTypeApproval:
 		return proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL
 	case coreagent.InteractionTypeClarification:
@@ -415,8 +409,6 @@ func agentInteractionTypeToProto(value coreagent.InteractionType) proto.AgentInt
 
 func agentInteractionStateToProto(value coreagent.InteractionState) proto.AgentInteractionState {
 	switch value {
-	case "":
-		return proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED
 	case coreagent.InteractionStatePending:
 		return proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING
 	case coreagent.InteractionStateResolved:

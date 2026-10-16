@@ -462,10 +462,6 @@ func MetricAuthorizationSubject(p *Principal) (kind, id string) {
 				}
 			}
 			return subjectKind, metricutil.UnknownAttrValue
-		case "service_account", "system":
-			if subjectID != "" {
-				return subjectKind, subjectID
-			}
 		default:
 			if subjectID != "" {
 				return subjectKind, subjectID

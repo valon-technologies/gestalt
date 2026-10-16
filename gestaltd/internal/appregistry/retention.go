@@ -237,8 +237,6 @@ func VersionSelectable(version, desiredVersion string, retention *RetentionIndex
 		return nil
 	case DeploymentStateDesired:
 		return ErrAppVersionAlreadyInstalled
-	case DeploymentStateExpired:
-		return ErrAppVersionExpired
 	case DeploymentStateLocked:
 		return ErrAppVersionLocked
 	default:
