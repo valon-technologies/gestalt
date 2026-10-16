@@ -1,7 +1,6 @@
 package s3
 
 import (
-	"fmt"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -57,27 +56,6 @@ func objectMetaFromProto(meta *proto.S3ObjectMeta) ObjectMeta {
 	}
 	if ts := meta.GetLastModified(); ts != nil {
 		out.LastModified = ts.AsTime()
-	}
-	return out
-}
-
-func requiredObjectMeta(meta *proto.S3ObjectMeta, op string) (ObjectMeta, error) {
-	if meta == nil {
-		return ObjectMeta{}, fmt.Errorf("s3: %s response missing metadata", op)
-	}
-	return objectMetaFromProto(meta), nil
-}
-
-func byteRangeToProto(r *ByteRange) *proto.ByteRange {
-	if r == nil {
-		return nil
-	}
-	out := &proto.ByteRange{}
-	if r.Start != nil {
-		out.Start = r.Start
-	}
-	if r.End != nil {
-		out.End = r.End
 	}
 	return out
 }
@@ -254,15 +232,4 @@ func objectAccessURLFromProto(resp *proto.CreateObjectAccessURLResponse, request
 		out.ExpiresAt = ts.AsTime()
 	}
 	return out
-}
-
-func firstS3Name(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
-}
-
-func grpcS3Err(err error) error {
-	return ClientError(err)
 }

@@ -680,55 +680,6 @@ func workflowRunTriggerToProto(input WorkflowRunTrigger) (*proto.WorkflowRunTrig
 	}}}, nil
 }
 
-// workflowRunTriggerFromProto converts an existing protocol trigger into
-// builder input.
-func workflowRunTriggerFromProto(value *proto.WorkflowRunTrigger) (WorkflowRunTrigger, error) {
-	if value == nil {
-		return WorkflowRunTrigger{}, nil
-	}
-	switch kind := value.GetKind().(type) {
-	case *proto.WorkflowRunTrigger_Manual:
-		return WorkflowRunTrigger{Manual: true}, nil
-	case *proto.WorkflowRunTrigger_Schedule:
-		if kind.Schedule == nil {
-			return WorkflowRunTrigger{}, nil
-		}
-		scheduledFor, err := timePtrFromTimestamp(kind.Schedule.GetScheduledFor())
-		if err != nil {
-			return WorkflowRunTrigger{}, err
-		}
-		return WorkflowRunTrigger{Schedule: &WorkflowScheduleTrigger{
-			ActivationID: kind.Schedule.GetActivationId(),
-			ScheduledFor: scheduledFor,
-		}}, nil
-	case *proto.WorkflowRunTrigger_Event:
-		if kind.Event == nil {
-			return WorkflowRunTrigger{}, nil
-		}
-		var event *WorkflowEvent
-		if kind.Event.GetEvent() != nil {
-			input := workflowEventFromProto(kind.Event.GetEvent())
-			event = &input
-		}
-		return WorkflowRunTrigger{Event: &WorkflowEventTriggerInvocation{
-			ActivationID: kind.Event.GetActivationId(),
-			Event:        event,
-		}}, nil
-	default:
-		return WorkflowRunTrigger{}, nil
-	}
-}
-
-// cloneWorkflowRunTriggerProto creates a copy of an existing workflow run
-// trigger.
-func cloneWorkflowRunTriggerProto(value *proto.WorkflowRunTrigger) (*proto.WorkflowRunTrigger, error) {
-	input, err := workflowRunTriggerFromProto(value)
-	if err != nil || value == nil {
-		return nil, err
-	}
-	return workflowRunTriggerToProto(input)
-}
-
 // WorkflowScheduleActivation contains a cron activation on a workflow
 // definition.
 type WorkflowScheduleActivation struct {
@@ -1153,14 +1104,6 @@ func workflowSubjectID(value *Subject) string {
 		return ""
 	}
 	return strings.TrimSpace(value.ID)
-}
-
-func workflowSubjectFromID(value string) *Subject {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil
-	}
-	return &Subject{ID: value}
 }
 
 // WorkflowRefInput references a run-input path in a workflow definition.

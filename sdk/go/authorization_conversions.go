@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"fmt"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -31,17 +30,6 @@ func authorizationActionFromProto(in *proto.Action) *AuthorizationAction {
 		return nil
 	}
 	return &AuthorizationAction{Name: in.GetName(), Properties: mapFromStruct(in.GetProperties())}
-}
-
-func protoAuthorizationAction(in *AuthorizationAction) (*proto.Action, error) {
-	if in == nil {
-		return nil, nil
-	}
-	properties, err := structFromMap(in.Properties)
-	if err != nil {
-		return nil, fmt.Errorf("action properties: %w", err)
-	}
-	return &proto.Action{Name: in.Name, Properties: properties}, nil
 }
 
 func authorizationResourceFromProto(in *proto.Resource) *AuthorizationResource {
@@ -181,29 +169,6 @@ func relationshipFilterFromProto(in *proto.RelationshipFilter) *RelationshipFilt
 		ResourceType:     in.GetResourceType(),
 		SourceLayer:      SourceLayer(in.GetSourceLayer()),
 	}
-}
-
-func protoRelationshipFilter(in *RelationshipFilter) (*proto.RelationshipFilter, error) {
-	if in == nil {
-		return nil, nil
-	}
-	target, err := protoRelationshipTarget(in.Target)
-	if err != nil {
-		return nil, err
-	}
-	resource, err := protoAuthorizationResource(in.Resource)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.RelationshipFilter{
-		Target:           target,
-		Relation:         in.Relation,
-		Resource:         resource,
-		TargetType:       proto.RelationshipTargetType(in.TargetType),
-		TargetEntityType: in.TargetEntityType,
-		ResourceType:     in.ResourceType,
-		SourceLayer:      proto.SourceLayer(in.SourceLayer),
-	}, nil
 }
 
 func listRelationshipsRequestFromProto(in *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
@@ -411,28 +376,6 @@ func authorizationModelFromProto(in *proto.AuthorizationModel) *AuthorizationMod
 		Version:       in.GetVersion(),
 		ResourceTypes: authorizationModelResourceTypesFromProto(in.GetResourceTypes()),
 	}
-}
-
-func protoAuthorizationModel(in *AuthorizationModel) (*proto.AuthorizationModel, error) {
-	if in == nil {
-		return nil, nil
-	}
-	resourceTypes, err := protoAuthorizationModelResourceTypes(in.ResourceTypes)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.AuthorizationModel{Id: in.Id, Version: in.Version, ResourceTypes: resourceTypes}, nil
-}
-
-func authorizationModelRefFromProto(in *proto.AuthorizationModelRef) *AuthorizationModelRef {
-	if in == nil {
-		return nil
-	}
-	var createdAt time.Time
-	if in.GetCreatedAt() != nil {
-		createdAt = in.GetCreatedAt().AsTime()
-	}
-	return &AuthorizationModelRef{Id: in.GetId(), Version: in.GetVersion(), CreatedAt: createdAt}
 }
 
 func protoAuthorizationModelRef(in *AuthorizationModelRef) *proto.AuthorizationModelRef {

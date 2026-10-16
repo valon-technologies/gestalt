@@ -292,23 +292,3 @@ func TestWorkflowTextLowersPluralStepPaths(t *testing.T) {
 		t.Fatalf("Text = %q, want %q", got, want)
 	}
 }
-
-func TestWorkflowRunTriggerRoundTripUsesActivationID(t *testing.T) {
-	scheduledFor := time.Date(2026, 5, 8, 15, 0, 0, 0, time.UTC)
-	trigger, err := workflowRunTriggerToProto(WorkflowRunTrigger{
-		Schedule: &WorkflowScheduleTrigger{ActivationID: "nightly", ScheduledFor: &scheduledFor},
-	})
-	if err != nil {
-		t.Fatalf("workflowRunTriggerToProto: %v", err)
-	}
-	copied, err := cloneWorkflowRunTriggerProto(trigger)
-	if err != nil {
-		t.Fatalf("cloneWorkflowRunTriggerProto: %v", err)
-	}
-	if got := copied.GetSchedule().GetActivationId(); got != "nightly" {
-		t.Fatalf("activation id = %q, want nightly", got)
-	}
-	if got := copied.GetSchedule().GetScheduledFor().AsTime(); !got.Equal(scheduledFor) {
-		t.Fatalf("scheduled_for = %v, want %v", got, scheduledFor)
-	}
-}
