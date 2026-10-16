@@ -188,7 +188,7 @@ func requestContextForRequest(req Request) (*proto.RequestContext, error) {
 	}
 	if !reqCtx.ToolRefsSet && req.ToolRefsSet {
 		reqCtx.ToolRefsSet = true
-		reqCtx.ToolRefs = agentToolRefsToProto(req.ToolRefs)
+		reqCtx.ToolRefs = convertProtoSlice(req.ToolRefs, agentToolRefToProto)
 	}
 	if emptyRequestContext(reqCtx) {
 		return nil, nil

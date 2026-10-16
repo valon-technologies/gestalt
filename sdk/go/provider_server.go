@@ -380,7 +380,7 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 		ctx = WithWorkflowContext(ctx, workflow.AsMap())
 	}
 	if reqCtx.GetToolRefsSet() {
-		ctx = WithToolRefsContext(ctx, agentToolRefsFromProto(reqCtx.GetToolRefs()))
+		ctx = WithToolRefsContext(ctx, convertProtoSlice(reqCtx.GetToolRefs(), agentToolRefFromProto))
 	}
 	return ctx
 }
