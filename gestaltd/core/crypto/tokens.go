@@ -3,25 +3,21 @@ package crypto
 import "fmt"
 
 func (e *AESGCMEncryptor) EncryptTokenPair(accessToken, refreshToken string) (accessEnc, refreshEnc string, err error) {
-	accessEnc, err = e.Encrypt(accessToken)
-	if err != nil {
-		return "", "", fmt.Errorf("encrypting access token: %w", err)
-	}
-	refreshEnc, err = e.Encrypt(refreshToken)
-	if err != nil {
-		return "", "", fmt.Errorf("encrypting refresh token: %w", err)
-	}
-	return accessEnc, refreshEnc, nil
+	return transformTokenPair(accessToken, refreshToken, "encrypting", e.Encrypt)
 }
 
 func (e *AESGCMEncryptor) DecryptTokenPair(accessEnc, refreshEnc string) (accessToken, refreshToken string, err error) {
-	accessToken, err = e.Decrypt(accessEnc)
+	return transformTokenPair(accessEnc, refreshEnc, "decrypting", e.Decrypt)
+}
+
+func transformTokenPair(access, refresh, action string, transform func(string) (string, error)) (string, string, error) {
+	accessResult, err := transform(access)
 	if err != nil {
-		return "", "", fmt.Errorf("decrypting access token: %w", err)
+		return "", "", fmt.Errorf("%s access token: %w", action, err)
 	}
-	refreshToken, err = e.Decrypt(refreshEnc)
+	refreshResult, err := transform(refresh)
 	if err != nil {
-		return "", "", fmt.Errorf("decrypting refresh token: %w", err)
+		return "", "", fmt.Errorf("%s refresh token: %w", action, err)
 	}
-	return accessToken, refreshToken, nil
+	return accessResult, refreshResult, nil
 }
