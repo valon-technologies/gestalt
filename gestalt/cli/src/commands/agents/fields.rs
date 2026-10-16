@@ -94,22 +94,16 @@ pub(crate) fn message_part_text(part: &AgentMessagePartInfo) -> Option<String> {
         return Some(part.text.clone());
     }
     if let Some(json) = part.json.as_ref() {
-        return compact_json(json).ok();
+        return Some(json.to_string());
     }
     if let Some(tool_call) = part.tool_call.as_ref() {
-        return compact_json(tool_call)
-            .ok()
-            .map(|value| format!("tool call {value}"));
+        return Some(format!("tool call {tool_call}"));
     }
     if let Some(tool_result) = part.tool_result.as_ref() {
-        return compact_json(tool_result)
-            .ok()
-            .map(|value| format!("tool result {value}"));
+        return Some(format!("tool result {tool_result}"));
     }
     if let Some(image_ref) = part.image_ref.as_ref() {
-        return compact_json(image_ref)
-            .ok()
-            .map(|value| format!("image {value}"));
+        return Some(format!("image {image_ref}"));
     }
     None
 }
@@ -178,10 +172,10 @@ pub(crate) fn display_status(display: &AgentTurnDisplayInfo) -> Option<String> {
     display_text(display).map(ToString::to_string)
 }
 
-pub(crate) fn display_value_text(value: &Value) -> Result<String> {
+pub(crate) fn display_value_text(value: &Value) -> String {
     match value {
-        Value::String(text) => Ok(text.clone()),
-        _ => compact_json(value),
+        Value::String(text) => text.clone(),
+        _ => value.to_string(),
     }
 }
 
@@ -192,14 +186,6 @@ pub(crate) fn non_empty_str(value: &str) -> Option<&str> {
     } else {
         Some(trimmed)
     }
-}
-
-pub(crate) fn compact_json(value: &Value) -> Result<String> {
-    serde_json::to_string(value).context("failed to encode compact JSON")
-}
-
-pub(crate) fn pretty_json(value: &Value) -> Result<String> {
-    serde_json::to_string_pretty(value).context("failed to encode pretty JSON")
 }
 
 pub(crate) fn extract_assistant_delta(data: &Map<String, Value>) -> Option<String> {

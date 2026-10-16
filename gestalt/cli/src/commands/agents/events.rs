@@ -168,16 +168,9 @@ pub(crate) fn tool_info_summary(info: &ToolEventInfo) -> String {
     }
     if let Some(error) = info.error.as_deref() {
         summary.push_str(&format!(": {error}"));
-    } else if let Some(output) = info.output.as_ref() {
-        if let Ok(encoded) = super::fields::compact_json(output) {
-            summary.push(' ');
-            summary.push_str(&encoded);
-        }
-    } else if let Some(input) = info.input.as_ref()
-        && let Ok(encoded) = super::fields::compact_json(input)
-    {
+    } else if let Some(value) = info.output.as_ref().or(info.input.as_ref()) {
         summary.push(' ');
-        summary.push_str(&encoded);
+        summary.push_str(&value.to_string());
     }
     summary
 }

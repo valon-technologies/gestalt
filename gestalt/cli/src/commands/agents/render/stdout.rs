@@ -18,9 +18,9 @@ use crate::commands::agents::events::{
     ClassifiedTurnEvent, ToolPhase, TurnEventEffect, classify_data_event, classify_turn_event,
 };
 use crate::commands::agents::fields::{
-    compact_json, display_action, display_label, display_ref, display_status, display_text,
-    display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_value_text, message_label, message_text, pretty_json, rendered_display_text,
+    display_action, display_label, display_ref, display_status, display_text, display_tool_error,
+    display_tool_input, display_tool_label, display_tool_output, display_value_text, message_label,
+    message_text, rendered_display_text,
 };
 use crate::commands::agents::requests::{
     INTERRUPT_CANCEL_REASON, cancel_turn_silent, resolve_interaction_info,
@@ -63,7 +63,8 @@ impl TurnDriverSink for ShellTurnDriver<'_> {
     }
 
     fn on_turn_snapshot(&mut self, turn: &AgentTurnInfo) -> Result<()> {
-        self.renderer.finish_turn(turn)
+        self.renderer.finish_turn(turn);
+        Ok(())
     }
 
     fn handle_waiting_for_input(
@@ -180,7 +181,7 @@ impl AgentTurnRenderer {
         self.after_seq
     }
 
-    fn render_messages(&mut self, messages: &[AgentMessageInfo]) -> Result<()> {
+    fn render_messages(&mut self, messages: &[AgentMessageInfo]) {
         self.finish_assistant_line();
         for message in messages {
             let Some(label) = message_label(message) else {
@@ -191,7 +192,6 @@ impl AgentTurnRenderer {
             };
             println!("{} {text}", self.label(&label));
         }
-        Ok(())
     }
 
     pub(crate) fn render_events(&mut self, events: &[AgentTurnEventInfo]) -> Result<()> {
@@ -205,13 +205,13 @@ impl AgentTurnRenderer {
                         if let Some(effect) = classify_data_event(event) {
                             self.render_effect(&effect)?;
                         } else {
-                            self.render_generic_event(event)?;
+                            self.render_generic_event(event);
                         }
                     }
                 }
                 ClassifiedTurnEvent::Data(effect) => self.render_effect(&effect)?,
                 ClassifiedTurnEvent::Private => {}
-                ClassifiedTurnEvent::Unknown(event) => self.render_generic_event(event)?,
+                ClassifiedTurnEvent::Unknown(event) => self.render_generic_event(event),
             }
         }
         Ok(())
@@ -256,7 +256,7 @@ impl AgentTurnRenderer {
                     ToolPhase::Started => {
                         print!("{} {} started", self.label("tool>"), info.name);
                         if let Some(input) = info.input.as_ref() {
-                            print!(" {}", compact_json(input)?);
+                            print!(" {input}");
                         }
                         println!();
                     }
@@ -275,7 +275,7 @@ impl AgentTurnRenderer {
                         if let Some(error) = info.error.as_deref() {
                             print!(": {error}");
                         } else if let Some(output) = info.output.as_ref() {
-                            print!(" {}", compact_json(output)?);
+                            print!(" {output}");
                         }
                         println!();
                     }
@@ -306,7 +306,7 @@ impl AgentTurnRenderer {
         Ok(())
     }
 
-    fn finish_turn(&mut self, turn: &AgentTurnInfo) -> Result<()> {
+    fn finish_turn(&mut self, turn: &AgentTurnInfo) {
         self.finish_assistant_line();
         let output_text = turn.output_text();
         match turn.status.as_str() {
@@ -325,15 +325,10 @@ impl AgentTurnRenderer {
         if !self.saw_structured_output
             && let Some(structured_output) = turn.structured_output()
         {
-            println!(
-                "{} {}",
-                self.label("structured>"),
-                pretty_json(structured_output)?
-            );
+            println!("{} {structured_output:#}", self.label("structured>"));
             self.saw_structured_output = true;
         }
         self.delta_buffer.clear();
-        Ok(())
     }
 
     fn start_assistant_line(&mut self) -> Result<()> {
@@ -360,7 +355,7 @@ impl AgentTurnRenderer {
         match display.kind.trim() {
             "text" => self.render_display_text(display, "assistant>"),
             "reasoning" => self.render_display_text(display, "reasoning>"),
-            "tool" => self.render_display_tool(display),
+            "tool" => Ok(self.render_display_tool(display)),
             "interaction" => Ok(self.render_display_interaction(event, display)),
             "status" => Ok(self.render_display_status(display)),
             "error" => Ok(self.render_display_error(display)),
@@ -428,7 +423,7 @@ impl AgentTurnRenderer {
         Ok(false)
     }
 
-    fn render_display_tool(&mut self, display: &AgentTurnDisplayInfo) -> Result<bool> {
+    fn render_display_tool(&mut self, display: &AgentTurnDisplayInfo) -> bool {
         self.finish_assistant_line();
         let tool = display_tool_label(display);
         let action = display_action(display);
@@ -442,7 +437,7 @@ impl AgentTurnRenderer {
                         .unwrap_or_else(|| format!("{tool} started"))
                 );
                 if let Some(input) = display_tool_input(display) {
-                    print!(" {}", compact_json(input)?);
+                    print!(" {input}");
                 }
                 println!();
             }
@@ -458,9 +453,9 @@ impl AgentTurnRenderer {
                     print!(" ({status})");
                 }
                 if let Some(error) = display_tool_error(display) {
-                    print!(": {}", display_value_text(error)?);
+                    print!(": {}", display_value_text(error));
                 } else if let Some(output) = display_tool_output(display) {
-                    print!(" {}", compact_json(output)?);
+                    print!(" {output}");
                 }
                 println!();
             }
@@ -476,7 +471,7 @@ impl AgentTurnRenderer {
                     print!(" ({status})");
                 }
                 if let Some(error) = display_tool_error(display) {
-                    print!(": {}", display_value_text(error)?);
+                    print!(": {}", display_value_text(error));
                 }
                 println!();
             }
@@ -494,9 +489,9 @@ impl AgentTurnRenderer {
                     println!("{} {tool} progress", self.label("tool>"));
                 }
             },
-            _ => return Ok(false),
+            _ => return false,
         }
-        Ok(true)
+        true
     }
 
     fn render_display_interaction(
@@ -556,12 +551,9 @@ impl AgentTurnRenderer {
         } else {
             "error>"
         };
-        let text = display_text(display).map(ToString::to_string).or_else(|| {
-            display
-                .error
-                .as_ref()
-                .and_then(|value| display_value_text(value).ok())
-        });
+        let text = display_text(display)
+            .map(ToString::to_string)
+            .or_else(|| display.error.as_ref().map(display_value_text));
         let Some(text) = text else {
             return false;
         };
@@ -572,7 +564,7 @@ impl AgentTurnRenderer {
         true
     }
 
-    fn render_generic_event(&mut self, event: &AgentTurnEventInfo) -> Result<()> {
+    fn render_generic_event(&mut self, event: &AgentTurnEventInfo) {
         self.finish_assistant_line();
         let mut fields = Vec::new();
         if !event.id.is_empty() {
@@ -597,10 +589,9 @@ impl AgentTurnRenderer {
                 self.label("event>"),
                 event.event_type,
                 suffix,
-                compact_json(&Value::Object(event.data.clone()))?
+                Value::Object(event.data.clone())
             );
         }
-        Ok(())
     }
 
     fn label(&self, value: &str) -> String {
@@ -616,7 +607,8 @@ pub(crate) fn render_turn_transcript(
     events: &[AgentTurnEventInfo],
 ) -> Result<()> {
     let mut renderer = AgentTurnRenderer::new();
-    renderer.render_messages(&turn.messages)?;
+    renderer.render_messages(&turn.messages);
     renderer.render_events(events)?;
-    renderer.finish_turn(turn)
+    renderer.finish_turn(turn);
+    Ok(())
 }

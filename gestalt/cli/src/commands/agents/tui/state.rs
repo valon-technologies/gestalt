@@ -10,9 +10,9 @@ use crate::commands::agents::events::{
     classify_turn_event,
 };
 use crate::commands::agents::fields::{
-    compact_json, display_action, display_format, display_language, display_status, display_text,
+    display_action, display_format, display_language, display_status, display_text,
     display_tool_error, display_tool_input, display_tool_label, display_tool_output,
-    display_tool_ref, display_value_text, pretty_json,
+    display_tool_ref, display_value_text,
 };
 use crate::commands::agents::types::{
     AgentInteractionInfo, AgentSessionInfo, AgentTurnDisplayInfo, AgentTurnEventInfo, AgentTurnInfo,
@@ -276,12 +276,9 @@ impl AgentUiState {
                 _ => false,
             },
             "error" => {
-                let text = display_text(display).map(ToString::to_string).or_else(|| {
-                    display
-                        .error
-                        .as_ref()
-                        .and_then(|value| display_value_text(value).ok())
-                });
+                let text = display_text(display)
+                    .map(ToString::to_string)
+                    .or_else(|| display.error.as_ref().map(display_value_text));
                 let Some(text) = text else {
                     return false;
                 };
@@ -321,10 +318,9 @@ impl AgentUiState {
         }
         if !self.saw_structured_output
             && let Some(structured_output) = turn.structured_output()
-            && let Ok(text) = pretty_json(structured_output)
             && terminal
         {
-            self.push_system(format!("structured output\n{text}"));
+            self.push_system(format!("structured output\n{structured_output:#}"));
             self.saw_structured_output = true;
         }
         if terminal {
@@ -767,7 +763,7 @@ impl ToolActivity {
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: detail_value_from_json(info.input.as_ref()),
+            args: info.input.as_ref().map(format_tool_detail),
             output: None,
             error: None,
         }
@@ -781,7 +777,7 @@ impl ToolActivity {
             status: ToolActivityStatus::Running,
             started_at: Some(Instant::now()),
             elapsed: None,
-            args: display_detail_value(display_tool_input(display)),
+            args: display_tool_input(display).map(format_tool_detail),
             output: None,
             error: None,
         }
@@ -985,8 +981,8 @@ impl ToolTerminalEvent {
             name: info.name.clone(),
             action: None,
             status,
-            args: detail_value_from_json(info.input.as_ref()),
-            output: detail_value_from_json(info.output.as_ref()),
+            args: info.input.as_ref().map(format_tool_detail),
+            output: info.output.as_ref().map(format_tool_detail),
             error,
         }
     }
@@ -1003,8 +999,8 @@ impl ToolTerminalEvent {
             name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status,
-            args: display_detail_value(display_tool_input(display)),
-            output: display_detail_value(display_tool_output(display)),
+            args: display_tool_input(display).map(format_tool_detail),
+            output: display_tool_output(display).map(format_tool_detail),
             error,
         }
     }
@@ -1015,10 +1011,12 @@ impl ToolTerminalEvent {
             name: display_tool_label(display),
             action: display_action(display).map(ToString::to_string),
             status: ToolActivityStatus::Running,
-            args: display_detail_value(display_tool_input(display)),
-            output: display_detail_value(display_tool_output(display)).or_else(|| {
-                display_text(display).map(|value| ToolDetailValue::from_full(value.to_string()))
-            }),
+            args: display_tool_input(display).map(format_tool_detail),
+            output: display_tool_output(display)
+                .map(format_tool_detail)
+                .or_else(|| {
+                    display_text(display).map(|value| ToolDetailValue::from_full(value.to_string()))
+                }),
             error: preview_display_error(display_tool_error(display)),
         }
     }
@@ -1059,26 +1057,18 @@ impl ToolActivityStatus {
     }
 }
 
-fn detail_value_from_json(value: Option<&Value>) -> Option<ToolDetailValue> {
-    value.and_then(|value| format_tool_detail(value).ok())
-}
-
-fn display_detail_value(value: Option<&Value>) -> Option<ToolDetailValue> {
-    value.and_then(|value| format_tool_detail(value).ok())
-}
-
 fn preview_display_error(value: Option<&Value>) -> Option<ToolDetailValue> {
     value
-        .and_then(|value| display_value_text(value).ok())
+        .map(display_value_text)
         .map(ToolDetailValue::from_full)
 }
 
-fn format_tool_detail(value: &Value) -> anyhow::Result<ToolDetailValue> {
+fn format_tool_detail(value: &Value) -> ToolDetailValue {
     let full = match value {
-        Value::Array(_) | Value::Object(_) => pretty_json(value)?,
-        _ => compact_json(value)?,
+        Value::Array(_) | Value::Object(_) => format!("{value:#}"),
+        _ => value.to_string(),
     };
-    Ok(ToolDetailValue::from_full(full))
+    ToolDetailValue::from_full(full)
 }
 
 fn truncate_multiline_preview(value: &str) -> String {
@@ -1174,9 +1164,12 @@ fn generic_event_text(event: &AgentTurnEventInfo) -> String {
     if event.data.is_empty() {
         format!("{}{}", event.event_type, suffix)
     } else {
-        compact_json(&Value::Object(event.data.clone()))
-            .map(|data| format!("{}{} {}", event.event_type, suffix, data))
-            .unwrap_or_else(|_| format!("{}{}", event.event_type, suffix))
+        format!(
+            "{}{} {}",
+            event.event_type,
+            suffix,
+            Value::Object(event.data.clone())
+        )
     }
 }
 

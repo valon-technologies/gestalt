@@ -32,7 +32,7 @@ use worker::{TurnWorker, WorkerCommand, WorkerEvent, spawn_turn_worker};
 use super::wire::is_text_input_interaction;
 use super::{
     AgentInteractionInfo, AgentShell, INTERRUPT_CANCEL_REASON, agent_model_lines,
-    agent_session_lines, agent_tui_help_lines, cancel_turn_silent, compact_json, display_markdown,
+    agent_session_lines, agent_tui_help_lines, cancel_turn_silent, display_markdown,
 };
 
 const TICK_RATE: Duration = Duration::from_millis(50);
@@ -1609,9 +1609,8 @@ fn interaction_summary(
     if !interaction.prompt.is_empty() {
         lines.push(Line::from(interaction.prompt.clone()));
     }
-    if !interaction.request.is_empty()
-        && let Ok(request) = compact_json(&Value::Object(interaction.request.clone()))
-    {
+    if !interaction.request.is_empty() {
+        let request = Value::Object(interaction.request.clone());
         lines.push(Line::from(format!("Request: {request}")));
     }
     if let Some(validation) = validation {
