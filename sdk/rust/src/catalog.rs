@@ -4,6 +4,7 @@ use std::path::Path;
 use schemars::JsonSchema;
 use serde_json::{Value as JsonValue, json};
 
+use crate::codec::support::{from_wire_struct, to_wire_value};
 use crate::error::{Error, Result};
 use crate::generated::v1;
 
@@ -219,15 +220,13 @@ fn response_to_proto(
 /// protobuf Struct. An empty string or parse error yields None.
 fn schema_string_to_struct(schema: &str) -> Option<prost_types::Struct> {
     let schema = schema.trim();
-    if schema.is_empty() {
-        return None;
-    }
     let parsed = serde_json::from_str::<JsonValue>(schema).ok()?;
     let mut fields = std::collections::BTreeMap::new();
     if let JsonValue::Object(map) = parsed {
-        for (k, v) in map {
-            fields.insert(k, json_value_to_prost_value(v));
-        }
+        fields = map
+            .into_iter()
+            .map(|(key, value)| (key, json_value_to_prost_value(value)))
+            .collect();
     }
     Some(prost_types::Struct { fields })
 }
@@ -236,8 +235,6 @@ fn schema_string_to_struct(schema: &str) -> Option<prost_types::Struct> {
 fn json_value_to_prost_value(value: JsonValue) -> prost_types::Value {
     use prost_types::value::Kind;
     let kind = match value {
-        JsonValue::Null => Kind::NullValue(0),
-        JsonValue::Bool(b) => Kind::BoolValue(b),
         JsonValue::Number(n) => {
             if let Some(i) = n.as_i64() {
                 Kind::NumberValue(i as f64)
@@ -245,17 +242,16 @@ fn json_value_to_prost_value(value: JsonValue) -> prost_types::Value {
                 Kind::NumberValue(n.as_f64().unwrap_or(0.0))
             }
         }
-        JsonValue::String(s) => Kind::StringValue(s),
         JsonValue::Array(arr) => Kind::ListValue(prost_types::ListValue {
             values: arr.into_iter().map(json_value_to_prost_value).collect(),
         }),
-        JsonValue::Object(map) => {
-            let mut fields = std::collections::BTreeMap::new();
-            for (k, v) in map {
-                fields.insert(k, json_value_to_prost_value(v));
-            }
-            Kind::StructValue(prost_types::Struct { fields })
-        }
+        JsonValue::Object(map) => Kind::StructValue(prost_types::Struct {
+            fields: map
+                .into_iter()
+                .map(|(key, value)| (key, json_value_to_prost_value(value)))
+                .collect(),
+        }),
+        other => return to_wire_value(other),
     };
     prost_types::Value { kind: Some(kind) }
 }
@@ -314,7 +310,7 @@ fn parameter_to_proto(parameter: &CatalogParameter) -> v1::CatalogParameter {
         r#type: parameter.r#type.clone(),
         description: parameter.description.clone(),
         required: parameter.required,
-        default: parameter.default.as_ref().map(json_value_to_proto_value),
+        default: parameter.default.clone().map(to_wire_value),
     }
 }
 
@@ -494,65 +490,8 @@ pub(crate) fn schema_parameters(schema: &JsonValue) -> Vec<CatalogParameter> {
         .collect()
 }
 
-fn json_value_to_proto_value(value: &JsonValue) -> prost_types::Value {
-    match value {
-        JsonValue::Null => prost_types::Value {
-            kind: Some(prost_types::value::Kind::NullValue(0)),
-        },
-        JsonValue::Bool(b) => prost_types::Value {
-            kind: Some(prost_types::value::Kind::BoolValue(*b)),
-        },
-        JsonValue::Number(n) => prost_types::Value {
-            kind: Some(prost_types::value::Kind::NumberValue(
-                n.as_f64().unwrap_or(0.0),
-            )),
-        },
-        JsonValue::String(s) => prost_types::Value {
-            kind: Some(prost_types::value::Kind::StringValue(s.clone())),
-        },
-        JsonValue::Array(items) => prost_types::Value {
-            kind: Some(prost_types::value::Kind::ListValue(
-                prost_types::ListValue {
-                    values: items.iter().map(json_value_to_proto_value).collect(),
-                },
-            )),
-        },
-        JsonValue::Object(map) => prost_types::Value {
-            kind: Some(prost_types::value::Kind::StructValue(prost_types::Struct {
-                fields: map
-                    .iter()
-                    .map(|(k, v)| (k.clone(), json_value_to_proto_value(v)))
-                    .collect(),
-            })),
-        },
-    }
-}
-
 pub(crate) fn object_map(value: Option<prost_types::Struct>) -> serde_json::Map<String, JsonValue> {
-    value
-        .map(|structure| {
-            structure
-                .fields
-                .into_iter()
-                .map(|(key, value)| (key, proto_value_to_json(value)))
-                .collect::<serde_json::Map<_, _>>()
-        })
-        .unwrap_or_default()
-}
-
-pub(crate) fn proto_value_to_json(value: prost_types::Value) -> JsonValue {
-    match value.kind {
-        Some(prost_types::value::Kind::NullValue(_)) | None => JsonValue::Null,
-        Some(prost_types::value::Kind::NumberValue(number)) => json!(number),
-        Some(prost_types::value::Kind::StringValue(text)) => json!(text),
-        Some(prost_types::value::Kind::BoolValue(flag)) => json!(flag),
-        Some(prost_types::value::Kind::StructValue(structure)) => {
-            JsonValue::Object(object_map(Some(structure)))
-        }
-        Some(prost_types::value::Kind::ListValue(list)) => {
-            JsonValue::Array(list.values.into_iter().map(proto_value_to_json).collect())
-        }
-    }
+    value.map(from_wire_struct).unwrap_or_default()
 }
 
 fn schema_type(schema: &JsonValue) -> String {
