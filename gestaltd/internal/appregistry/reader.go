@@ -62,56 +62,29 @@ func (r *RegistryReader) fetchJSON(ctx context.Context, url string, notFoundEmpt
 
 // FetchPendingIndex downloads apps/{app}/pending.json from a registry public root.
 func (r *RegistryReader) FetchPendingIndex(ctx context.Context, publicRoot, appName string) (*PendingIndex, error) {
-	appName = strings.TrimSpace(appName)
-	if appName == "" {
-		return nil, fmt.Errorf("app name is required")
-	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
-		return nil, err
-	}
-	publicRoot = strings.TrimRight(strings.TrimSpace(publicRoot), "/")
-	if publicRoot == "" {
-		return nil, fmt.Errorf("registry public URL is required")
-	}
-
-	url := PublicURL(publicRoot, AppPendingPath(appName))
-	body, err := r.fetchJSON(ctx, url, true)
-	if err != nil {
-		return nil, err
-	}
-	if body == nil {
-		return NewEmptyPendingIndex(appName), nil
-	}
-	return DecodePendingIndex(body)
+	return fetchOptionalAppIndex(ctx, r, publicRoot, appName, AppPendingPath, NewEmptyPendingIndex, DecodePendingIndex)
 }
 
 // FetchFailedIndex downloads apps/{app}/failed.json from a registry public root.
 func (r *RegistryReader) FetchFailedIndex(ctx context.Context, publicRoot, appName string) (*FailedIndex, error) {
-	appName = strings.TrimSpace(appName)
-	if appName == "" {
-		return nil, fmt.Errorf("app name is required")
-	}
-	if err := providerregistry.ValidateRepositoryName(appName); err != nil {
-		return nil, err
-	}
-	publicRoot = strings.TrimRight(strings.TrimSpace(publicRoot), "/")
-	if publicRoot == "" {
-		return nil, fmt.Errorf("registry public URL is required")
-	}
-
-	url := PublicURL(publicRoot, AppFailedPath(appName))
-	body, err := r.fetchJSON(ctx, url, true)
-	if err != nil {
-		return nil, err
-	}
-	if body == nil {
-		return NewEmptyFailedIndex(appName), nil
-	}
-	return DecodeFailedIndex(body)
+	return fetchOptionalAppIndex(ctx, r, publicRoot, appName, AppFailedPath, NewEmptyFailedIndex, DecodeFailedIndex)
 }
 
 // FetchRetentionIndex downloads apps/{app}/retention.json from a registry public root.
 func (r *RegistryReader) FetchRetentionIndex(ctx context.Context, publicRoot, appName string) (*RetentionIndex, error) {
+	return fetchOptionalAppIndex(ctx, r, publicRoot, appName, AppRetentionPath, func(string) *RetentionIndex {
+		return NewEmptyRetentionIndex()
+	}, DecodeRetentionIndex)
+}
+
+func fetchOptionalAppIndex[T any](
+	ctx context.Context,
+	r *RegistryReader,
+	publicRoot, appName string,
+	indexPath func(string) string,
+	emptyIndex func(string) *T,
+	decodeIndex func([]byte) (*T, error),
+) (*T, error) {
 	appName = strings.TrimSpace(appName)
 	if appName == "" {
 		return nil, fmt.Errorf("app name is required")
@@ -124,15 +97,15 @@ func (r *RegistryReader) FetchRetentionIndex(ctx context.Context, publicRoot, ap
 		return nil, fmt.Errorf("registry public URL is required")
 	}
 
-	url := PublicURL(publicRoot, AppRetentionPath(appName))
+	url := PublicURL(publicRoot, indexPath(appName))
 	body, err := r.fetchJSON(ctx, url, true)
 	if err != nil {
 		return nil, err
 	}
 	if body == nil {
-		return NewEmptyRetentionIndex(), nil
+		return emptyIndex(appName), nil
 	}
-	return DecodeRetentionIndex(body)
+	return decodeIndex(body)
 }
 
 // FetchAppIndex downloads apps/{app}/index.json from a registry public root.
