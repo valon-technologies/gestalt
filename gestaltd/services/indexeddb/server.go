@@ -174,27 +174,15 @@ func (s *indexedDBServer) DeleteIndex(ctx context.Context, req *proto.DeleteInde
 }
 
 func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	rec, err := store.Get(ctx, req.GetId())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return recordResponseFromRecord(rec)
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (idb.Record, error) {
+		return store.Get(ctx, req.GetId())
+	}, recordResponseFromRecord)
 }
 
 func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.KeyResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	key, err := store.GetKey(ctx, req.GetId())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.KeyResponse{Key: key}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (string, error) {
+		return store.GetKey(ctx, req.GetId())
+	}, keyResponseFromKey)
 }
 
 func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
@@ -250,147 +238,79 @@ func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameR
 }
 
 func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	var recs []idb.Record
-	if req.Count != nil && *req.Count > 0 {
-		recs, err = store.GetAll(ctx, req.GetQuery(), *req.Count)
-	} else {
-		recs, err = store.GetAll(ctx, req.GetQuery())
-	}
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return recordsResponseFromRecords(recs)
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) ([]idb.Record, error) {
+		if req.Count != nil && *req.Count > 0 {
+			return store.GetAll(ctx, req.GetQuery(), *req.Count)
+		}
+		return store.GetAll(ctx, req.GetQuery())
+	}, recordsResponseFromRecords)
 }
 
 func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	var keys []string
-	if req.Count != nil && *req.Count > 0 {
-		keys, err = store.GetAllKeys(ctx, req.GetQuery(), *req.Count)
-	} else {
-		keys, err = store.GetAllKeys(ctx, req.GetQuery())
-	}
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.KeysResponse{Keys: keys}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) ([]string, error) {
+		if req.Count != nil && *req.Count > 0 {
+			return store.GetAllKeys(ctx, req.GetQuery(), *req.Count)
+		}
+		return store.GetAllKeys(ctx, req.GetQuery())
+	}, keysResponseFromKeys)
 }
 
 func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.CountResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	count, err := store.Count(ctx, req.GetQuery())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.CountResponse{Count: count}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (int64, error) {
+		return store.Count(ctx, req.GetQuery())
+	}, countResponseFromCount)
 }
 
 func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.DeleteResponse, error) {
 	if req.GetQuery() == nil {
 		return nil, status.Error(codes.InvalidArgument, "query is required for DeleteRange")
 	}
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	deleted, err := store.DeleteRange(ctx, req.GetQuery())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.DeleteResponse{Deleted: deleted}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (int64, error) {
+		return store.DeleteRange(ctx, req.GetQuery())
+	}, deleteResponseFromCount)
 }
 
 func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	rec, err := store.Index(req.GetIndex()).Get(ctx, req.GetQuery())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return recordResponseFromRecord(rec)
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (idb.Record, error) {
+		return store.Index(req.GetIndex()).Get(ctx, req.GetQuery())
+	}, recordResponseFromRecord)
 }
 
 func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeyResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	key, err := store.Index(req.GetIndex()).GetKey(ctx, req.GetQuery())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.KeyResponse{Key: key}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (string, error) {
+		return store.Index(req.GetIndex()).GetKey(ctx, req.GetQuery())
+	}, keyResponseFromKey)
 }
 
 func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	query := indexGetAllQuery(req)
-	var recs []idb.Record
-	if req.Count != nil && *req.Count > 0 {
-		recs, err = store.Index(req.GetIndex()).GetAll(ctx, query, *req.Count)
-	} else {
-		recs, err = store.Index(req.GetIndex()).GetAll(ctx, query)
-	}
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return recordsResponseFromRecords(recs)
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) ([]idb.Record, error) {
+		query := indexGetAllQuery(req)
+		if req.Count != nil && *req.Count > 0 {
+			return store.Index(req.GetIndex()).GetAll(ctx, query, *req.Count)
+		}
+		return store.Index(req.GetIndex()).GetAll(ctx, query)
+	}, recordsResponseFromRecords)
 }
 
 func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeysResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	var keys []string
-	if req.Count != nil && *req.Count > 0 {
-		keys, err = store.Index(req.GetIndex()).GetAllKeys(ctx, req.GetQuery(), *req.Count)
-	} else {
-		keys, err = store.Index(req.GetIndex()).GetAllKeys(ctx, req.GetQuery())
-	}
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.KeysResponse{Keys: keys}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) ([]string, error) {
+		if req.Count != nil && *req.Count > 0 {
+			return store.Index(req.GetIndex()).GetAllKeys(ctx, req.GetQuery(), *req.Count)
+		}
+		return store.Index(req.GetIndex()).GetAllKeys(ctx, req.GetQuery())
+	}, keysResponseFromKeys)
 }
 
 func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryRequest) (*proto.CountResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	count, err := store.Index(req.GetIndex()).Count(ctx, req.GetQuery())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.CountResponse{Count: count}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (int64, error) {
+		return store.Index(req.GetIndex()).Count(ctx, req.GetQuery())
+	}, countResponseFromCount)
 }
 
 func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQueryRequest) (*proto.DeleteResponse, error) {
-	store, err := s.objectStore(req.GetStore())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	deleted, err := store.Index(req.GetIndex()).Delete(ctx, req.GetQuery())
-	if err != nil {
-		return nil, indexeddbToGRPCErr(err)
-	}
-	return &proto.DeleteResponse{Deleted: deleted}, nil
+	return objectStoreResponse(s, req.GetStore(), func(store idb.ObjectStore) (int64, error) {
+		return store.Index(req.GetIndex()).Delete(ctx, req.GetQuery())
+	}, deleteResponseFromCount)
 }
 
 func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) error {
@@ -1030,6 +950,34 @@ func cursorEntryToProto(c idb.Cursor, keysOnly bool) (*proto.CursorEntry, error)
 		entry.Record = pbRec
 	}
 	return entry, nil
+}
+
+func objectStoreResponse[T, R any](s *indexedDBServer, name string, call func(idb.ObjectStore) (T, error), encode func(T) (*R, error)) (*R, error) {
+	store, err := s.objectStore(name)
+	if err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	value, err := call(store)
+	if err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	return encode(value)
+}
+
+func keyResponseFromKey(key string) (*proto.KeyResponse, error) {
+	return &proto.KeyResponse{Key: key}, nil
+}
+
+func keysResponseFromKeys(keys []string) (*proto.KeysResponse, error) {
+	return &proto.KeysResponse{Keys: keys}, nil
+}
+
+func countResponseFromCount(count int64) (*proto.CountResponse, error) {
+	return &proto.CountResponse{Count: count}, nil
+}
+
+func deleteResponseFromCount(deleted int64) (*proto.DeleteResponse, error) {
+	return &proto.DeleteResponse{Deleted: deleted}, nil
 }
 
 func recordResponseFromRecord(rec idb.Record) (*proto.RecordResponse, error) {
