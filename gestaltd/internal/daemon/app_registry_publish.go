@@ -24,7 +24,7 @@ type appRegistryPublishOptions struct {
 	TriggerCommitSHA string
 	TriggerCommitURL string
 	DryRun           bool
-	DistDirs         appPublishDistDirs
+	DistDirs         publishDistDirs
 }
 
 func runAppRegistryPublish(args []string, gestaltdVersion string) error {
@@ -70,7 +70,7 @@ func parseAppRegistryPublishOptions(args []string) (appRegistryPublishOptions, e
 	triggerCommitSHA := fs.String("trigger-commit-sha", "", "commit SHA that triggered publication")
 	triggerCommitURL := fs.String("trigger-commit-url", "", "commit URL that triggered publication")
 	dryRun := fs.Bool("dry-run", false, "print the publish plan as JSON without uploading")
-	var distDirs appPublishDistDirs
+	var distDirs publishDistDirs
 	fs.Var(&distDirs, "dist-dir", "directory containing release archives (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return zero, err

@@ -19,21 +19,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
-type appPublishDistDirs []string
-
-func (d *appPublishDistDirs) String() string {
-	return strings.Join(*d, ",")
-}
-
-func (d *appPublishDistDirs) Set(value string) error {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return fmt.Errorf("--dist-dir requires a value")
-	}
-	*d = append(*d, value)
-	return nil
-}
-
 func runAppPublish(args []string) error {
 	return runAppPublishCommand("gestaltd app publish", printAppPublishUsage, args)
 }
@@ -50,7 +35,7 @@ type appPublishCommandOptions struct {
 	TriggerCommitSHA string
 	TriggerCommitURL string
 	DryRun           bool
-	DistDirs         appPublishDistDirs
+	DistDirs         publishDistDirs
 }
 
 func runAppPublishCommand(commandName string, usage func(io.Writer), args []string) error {
@@ -67,7 +52,7 @@ func runAppPublishCommand(commandName string, usage func(io.Writer), args []stri
 	triggerCommitSHA := fs.String("trigger-commit-sha", "", "commit SHA that triggered publication")
 	triggerCommitURL := fs.String("trigger-commit-url", "", "commit URL that triggered publication")
 	dryRun := fs.Bool("dry-run", false, "print the publish plan as JSON without uploading")
-	var distDirs appPublishDistDirs
+	var distDirs publishDistDirs
 	fs.Var(&distDirs, "dist-dir", "directory containing release archives (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err

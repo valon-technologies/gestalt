@@ -115,13 +115,7 @@ func EndSpan(span trace.Span, err error) {
 }
 
 func SetSpanAttributes(ctx context.Context, attrs ...attribute.KeyValue) {
-	if len(attrs) == 0 {
-		return
-	}
-	span := trace.SpanFromContext(ctx)
-	if span.IsRecording() {
-		span.SetAttributes(attrs...)
-	}
+	metricutil.SetSpanAttributes(ctx, attrs...)
 }
 
 func RecordAgentOperation(ctx context.Context, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {

@@ -36,13 +36,13 @@ var fullGitSHARe = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
 type providerPublishSourceRefInfo = operator.SnapshotSourceRefPath
 
-type providerPublishDistDirs []string
+type publishDistDirs []string
 
-func (d *providerPublishDistDirs) String() string {
+func (d *publishDistDirs) String() string {
 	return strings.Join(*d, ",")
 }
 
-func (d *providerPublishDistDirs) Set(value string) error {
+func (d *publishDistDirs) Set(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return fmt.Errorf("--dist-dir requires a value")
@@ -82,7 +82,7 @@ func runProviderPublish(args []string) (err error) {
 	ref := fs.String("ref", "", "full source commit SHA")
 	dryRun := fs.Bool("dry-run", false, "print the publish plan without uploading")
 	format := fs.String("format", providerPublishFormatText, "dry-run output format: text or json")
-	var distDirs providerPublishDistDirs
+	var distDirs publishDistDirs
 	var configPaths repeatedStringFlag
 	fs.Var(&distDirs, "dist-dir", "directory containing release archives (repeatable)")
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
