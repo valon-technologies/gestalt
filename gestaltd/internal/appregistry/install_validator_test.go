@@ -448,6 +448,79 @@ func TestInstallValidator(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("reverse_dependents_respect_running_config", func(t *testing.T) {
+		t.Parallel()
+
+		const removedApp = "frontPorchRestApi"
+		registryEntry := func() *config.ProviderEntry {
+			return &config.ProviderEntry{Source: config.ProviderSource{Registry: "toolshed"}}
+		}
+		validate := func(t *testing.T, validator *appregistry.InstallValidator) error {
+			t.Helper()
+			candidate := slackEntry(func(e *appregistry.Entry) { e.Version = "3.0.0" })
+			return validator.Validate(ctx, appregistry.ValidateInput{
+				Registry: "toolshed", App: "slack", Version: "3.0.0", Entry: &candidate,
+			})
+		}
+		requiresSlack := func(e *appregistry.Entry) {
+			e.Requires = appregistry.Requires{Apps: map[string]appregistry.AppRequirement{
+				"slack": {Version: "^2.0.0"},
+			}}
+		}
+
+		t.Run("skips_installed_app_removed_from_config", func(t *testing.T) {
+			t.Parallel()
+			svc := testutil.NewStubServices(t)
+			installFleetApp(t, svc, removedApp, "1.0.0")
+			validator := newValidator(t, svc, nil, "1.0.0")
+			validator.ConfigApps = map[string]*config.ProviderEntry{"slack": registryEntry()}
+			if err := validate(t, validator); err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+		})
+
+		t.Run("skips_removed_app_when_config_has_no_apps", func(t *testing.T) {
+			t.Parallel()
+			svc := testutil.NewStubServices(t)
+			installFleetApp(t, svc, removedApp, "1.0.0")
+			validator := newValidator(t, svc, nil, "1.0.0")
+			validator.ConfigApps = map[string]*config.ProviderEntry{}
+			if err := validate(t, validator); err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+		})
+
+		t.Run("still_rejects_configured_dependent", func(t *testing.T) {
+			t.Parallel()
+			svc := testutil.NewStubServices(t)
+			installFleetApp(t, svc, "g-issues", "1.0.0")
+			installFleetApp(t, svc, removedApp, "1.0.0")
+			validator := newValidator(t, svc, map[string]appregistry.Entry{
+				"1.0.0": baseEntry(requiresSlack),
+			}, "1.0.0")
+			validator.ConfigApps = map[string]*config.ProviderEntry{
+				"slack":    registryEntry(),
+				"g-issues": registryEntry(),
+			}
+			assertInstallValidationReason(t, validate(t, validator), appregistry.InstallValidationReverseDependentVersionUnsatisfied)
+		})
+
+		t.Run("still_reports_fetch_error_for_configured_app", func(t *testing.T) {
+			t.Parallel()
+			svc := testutil.NewStubServices(t)
+			installFleetApp(t, svc, removedApp, "1.0.0")
+			validator := newValidator(t, svc, nil, "1.0.0")
+			validator.ConfigApps = map[string]*config.ProviderEntry{
+				"slack":    registryEntry(),
+				removedApp: registryEntry(),
+			}
+			err := validate(t, validator)
+			if err == nil || errors.Is(err, appregistry.ErrInstallValidationFailed) || !strings.Contains(err.Error(), "reverse dependent "+removedApp+": fetch app registry entry") {
+				t.Fatalf("Validate = %v, want reverse dependent fetch error", err)
+			}
+		})
+	})
 }
 
 func TestInstaller_validation_failure_writes_nothing(t *testing.T) {
