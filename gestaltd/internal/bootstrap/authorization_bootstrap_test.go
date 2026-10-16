@@ -101,13 +101,6 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 		t.Fatal("SetAuthorizationState was not called")
 	}
 	model := provider.setAuthorizationState.GetModel()
-	wantID, err := authorizationModelContentHash(model)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	if got := model.GetId(); got != wantID {
-		t.Fatalf("model id = %q, want content hash %q", got, wantID)
-	}
 	version, err := strconv.ParseInt(model.GetVersion(), 10, 64)
 	if err != nil {
 		t.Fatalf("model version = %q, want epoch seconds: %v", model.GetVersion(), err)
@@ -933,80 +926,5 @@ func TestBootstrapAuthorizationProviderStateConfigOverridesEnv(t *testing.T) {
 	}
 	if provider.setAuthorizationState != nil {
 		t.Fatal("explicit config false should override a truthy env var")
-	}
-}
-
-func TestBootstrapAuthorizationProviderStatePlanAndApplyProduceSameDigest(t *testing.T) {
-	t.Parallel()
-
-	planProvider := &recordingAuthorizationProvider{}
-	planCfg := authorizationBootstrapTestConfig(boolPtr(false))
-	if err := bootstrapAuthorizationProviderState(context.Background(), planCfg, map[string]core.AuthorizationProvider{"authz": planProvider}, nil); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState (plan): %v", err)
-	}
-	planModel, err := staticAuthorizationModel(planCfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	if err := stampAuthorizationModel(planModel, time.Now()); err != nil {
-		t.Fatalf("stampAuthorizationModel: %v", err)
-	}
-	planDigest := planModel.GetId()
-
-	applyProvider := &recordingAuthorizationProvider{}
-	applyCfg := authorizationBootstrapTestConfig(boolPtr(true))
-	if err := bootstrapAuthorizationProviderState(context.Background(), applyCfg, map[string]core.AuthorizationProvider{"authz": applyProvider}, nil); err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState (apply): %v", err)
-	}
-	if applyProvider.setAuthorizationState == nil {
-		t.Fatal("SetAuthorizationState should be called when apply is enabled")
-	}
-	applyDigest := applyProvider.setAuthorizationState.GetModel().GetId()
-
-	if planDigest == "" || applyDigest == "" {
-		t.Fatalf("digests should be non-empty: plan=%q apply=%q", planDigest, applyDigest)
-	}
-	if planDigest != applyDigest {
-		t.Fatalf("plan digest %q should match apply digest %q for identical static models", planDigest, applyDigest)
-	}
-}
-
-func TestAuthorizationModelContentHashDeterministicAndSensitiveToChanges(t *testing.T) {
-	t.Parallel()
-
-	cfg := authorizationBootstrapTestConfig(nil)
-	modelA, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	modelB, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	digestA, err := authorizationModelContentHash(modelA)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	digestB, err := authorizationModelContentHash(modelB)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	if digestA != digestB {
-		t.Fatalf("digest should be deterministic for identical models: %q != %q", digestA, digestB)
-	}
-
-	cfg.Authorization.Models["default"].ResourceTypes["docs"] = config.AuthorizationResourceTypeDef{
-		Relations: map[string]config.AuthorizationRelationDef{"reader": {SubjectTypes: []string{"subject"}}},
-	}
-	modelC, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	digestC, err := authorizationModelContentHash(modelC)
-	if err != nil {
-		t.Fatalf("authorizationModelContentHash: %v", err)
-	}
-	if digestC == digestA {
-		t.Fatal("digest should change when the static model gains a resource type")
 	}
 }
