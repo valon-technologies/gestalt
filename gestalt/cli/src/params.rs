@@ -53,37 +53,28 @@ impl ParamValue {
 }
 
 pub fn parse_param_entry(s: &str) -> Result<ParamEntry, String> {
-    let eq_pos = s.find('=');
-    let colon_eq_pos = s.find(":=");
+    let (key, raw) = s
+        .split_once('=')
+        .ok_or_else(|| format!("invalid param: no '=' or ':=' found in '{s}'"))?;
 
-    let use_json = matches!(
-        (eq_pos, colon_eq_pos),
-        (_, Some(ce)) if eq_pos.is_none() || ce < eq_pos.unwrap()
-    );
-
-    if use_json {
-        let pos = colon_eq_pos.unwrap();
-        let key = &s[..pos];
-        let raw_json = &s[pos + 2..];
+    if let Some(key) = key.strip_suffix(':') {
         if key.is_empty() {
             return Err(format!("invalid KEY:=JSON: empty key in '{s}'"));
         }
-        let value: serde_json::Value = serde_json::from_str(raw_json)
-            .map_err(|e| format!("invalid JSON in '{key}:={raw_json}': {e}"))?;
+        let value: serde_json::Value = serde_json::from_str(raw)
+            .map_err(|e| format!("invalid JSON in '{key}:={raw}': {e}"))?;
         return Ok(ParamEntry {
             key: key.to_string(),
             value: ParamValue::JsonVal(value),
         });
     }
 
-    let pos = eq_pos.ok_or_else(|| format!("invalid param: no '=' or ':=' found in '{s}'"))?;
-    let key = &s[..pos];
     if key.is_empty() {
         return Err(format!("invalid KEY=VALUE: empty key in '{s}'"));
     }
     Ok(ParamEntry {
         key: key.to_string(),
-        value: ParamValue::StringVal(s[pos + 1..].to_string()),
+        value: ParamValue::StringVal(raw.to_string()),
     })
 }
 

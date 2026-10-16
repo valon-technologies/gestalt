@@ -6,12 +6,8 @@ pub(super) fn effective_format<'a>(format: Option<&'a str>, language: Option<&st
     }
 }
 
-pub(super) fn plain_text_for_format(
-    text: &str,
-    format: Option<&str>,
-    language: Option<&str>,
-) -> String {
-    if is_markdown_format(effective_format(format, language)) {
+pub(super) fn plain_text_for_format(text: &str, format: Option<&str>) -> String {
+    if format.is_some_and(is_markdown_format) {
         markdown_to_plain_text(text)
     } else {
         text.to_string()
@@ -151,9 +147,7 @@ fn markdown_inline_to_plain_text(text: &str) -> String {
             continue;
         }
 
-        let Some(ch) = rest.chars().next() else {
-            break;
-        };
+        let ch = rest.chars().next().expect("nonempty loop slice");
         rendered.push(ch);
         index += ch.len_utf8();
     }
