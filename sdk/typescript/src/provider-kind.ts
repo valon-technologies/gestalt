@@ -70,12 +70,6 @@ const PROVIDER_KIND_DEFINITIONS = {
   },
 } satisfies Record<ProviderKind, ProviderKindDefinition>;
 
-const EXTERNAL_PROVIDER_KIND_TOKEN_SET = new Set<string>(
-  Object.values(PROVIDER_KIND_DEFINITIONS).flatMap(
-    (definition) => definition.tokens,
-  ),
-);
-
 const EXTERNAL_PROVIDER_KIND_MAP = new Map<string, ProviderKind>(
   Object.entries(PROVIDER_KIND_DEFINITIONS).flatMap(([kind, definition]) =>
     definition.tokens.map((token) => [token, kind as ProviderKind] as const),
@@ -83,7 +77,7 @@ const EXTERNAL_PROVIDER_KIND_MAP = new Map<string, ProviderKind>(
 );
 
 export function isExternalProviderKindToken(value: string): boolean {
-  return EXTERNAL_PROVIDER_KIND_TOKEN_SET.has(value.trim().toLowerCase());
+  return EXTERNAL_PROVIDER_KIND_MAP.has(value.trim().toLowerCase());
 }
 
 export function parseExternalProviderKind(value: string): ProviderKind {
