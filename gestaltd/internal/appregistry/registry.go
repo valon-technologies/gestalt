@@ -529,25 +529,11 @@ func validateIndex(index *Index) error {
 }
 
 func DecodeIndex(data []byte) (*Index, error) {
-	var index Index
-	if err := json.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("decode app registry index: %w", err)
-	}
-	if err := validateIndex(&index); err != nil {
-		return nil, err
-	}
-	return &index, nil
+	return decodeRegistryDocument(data, "app registry index", validateIndex)
 }
 
 func DecodeEntry(data []byte) (*Entry, error) {
-	var entry Entry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return nil, fmt.Errorf("decode app registry entry: %w", err)
-	}
-	if err := validateEntry(&entry); err != nil {
-		return nil, err
-	}
-	return &entry, nil
+	return decodeRegistryDocument(data, "app registry entry", validateEntry)
 }
 
 func NewEmptyIndex() *Index {
@@ -794,4 +780,15 @@ func CatalogOperationContracts(cat *catalog.Catalog) map[string]OperationContrac
 		}
 	}
 	return out
+}
+
+func decodeRegistryDocument[T any](data []byte, label string, validate func(*T) error) (*T, error) {
+	var value T
+	if err := json.Unmarshal(data, &value); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", label, err)
+	}
+	if err := validate(&value); err != nil {
+		return nil, err
+	}
+	return &value, nil
 }
