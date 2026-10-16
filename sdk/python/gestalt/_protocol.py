@@ -210,9 +210,7 @@ def which_oneof(message: Any, group: str) -> str | None:
 
 
 def _json_from_native(value: Any, *, path: str, seen: set[int]) -> JsonValue:
-    if value is None or isinstance(value, bool | str):
-        return value
-    if isinstance(value, int):
+    if value is None or isinstance(value, str | int):
         return value
     if isinstance(value, float):
         if not _math.isfinite(value):

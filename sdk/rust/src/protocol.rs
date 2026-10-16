@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use prost_types::{ListValue, value::Kind};
 pub use prost_types::{Struct, Timestamp, Value};
 use serde::Serialize;
 use serde::ser::{
@@ -9,6 +8,7 @@ use serde::ser::{
     SerializeTuple, SerializeTupleStruct, SerializeTupleVariant,
 };
 
+use crate::codec::support::{from_wire_struct, from_wire_value, to_wire_struct, to_wire_value};
 use crate::generated::v1::StringList;
 use crate::{Error, Result};
 
@@ -38,52 +38,22 @@ pub(crate) fn json_value_from_serializable<T: Serialize>(
 
 /// Converts a JSON object map into a protobuf `Struct`.
 pub fn struct_from_map(fields: serde_json::Map<String, serde_json::Value>) -> Struct {
-    Struct {
-        fields: fields
-            .into_iter()
-            .map(|(key, value)| (key, value_from_json(value)))
-            .collect(),
-    }
+    to_wire_struct(fields)
 }
 
 /// Converts a protobuf `Struct` into a JSON object.
 pub fn json_from_struct(value: &Struct) -> serde_json::Value {
-    serde_json::Value::Object(
-        value
-            .fields
-            .iter()
-            .map(|(key, value)| (key.clone(), json_from_value(value)))
-            .collect(),
-    )
+    serde_json::Value::Object(from_wire_struct(value.clone()))
 }
 
 /// Converts a JSON value into a protobuf `Value`.
 pub fn value_from_json(value: serde_json::Value) -> Value {
-    let kind = match value {
-        serde_json::Value::Null => Kind::NullValue(0),
-        serde_json::Value::Bool(value) => Kind::BoolValue(value),
-        serde_json::Value::Number(value) => Kind::NumberValue(value.as_f64().unwrap_or(0.0)),
-        serde_json::Value::String(value) => Kind::StringValue(value),
-        serde_json::Value::Array(values) => Kind::ListValue(ListValue {
-            values: values.into_iter().map(value_from_json).collect(),
-        }),
-        serde_json::Value::Object(fields) => Kind::StructValue(struct_from_map(fields)),
-    };
-    Value { kind: Some(kind) }
+    to_wire_value(value)
 }
 
 /// Converts a protobuf `Value` into a JSON value.
 pub fn json_from_value(value: &Value) -> serde_json::Value {
-    match &value.kind {
-        Some(Kind::NullValue(_)) | None => serde_json::Value::Null,
-        Some(Kind::BoolValue(value)) => serde_json::Value::Bool(*value),
-        Some(Kind::NumberValue(value)) => serde_json::json!(*value),
-        Some(Kind::StringValue(value)) => serde_json::Value::String(value.clone()),
-        Some(Kind::ListValue(value)) => {
-            serde_json::Value::Array(value.values.iter().map(json_from_value).collect())
-        }
-        Some(Kind::StructValue(value)) => json_from_struct(value),
-    }
+    from_wire_value(value.clone())
 }
 
 /// Converts a `SystemTime` into a protobuf `Timestamp`.
@@ -203,9 +173,6 @@ impl ser::Serializer for JsonInputSerializer {
     }
 
     fn serialize_f64(self, value: f64) -> std::result::Result<Self::Ok, Self::Error> {
-        if !value.is_finite() {
-            return Err(json_input_error("numbers must be finite"));
-        }
         let number = serde_json::Number::from_f64(value)
             .ok_or_else(|| json_input_error("numbers must be finite"))?;
         Ok(serde_json::Value::Number(number))
