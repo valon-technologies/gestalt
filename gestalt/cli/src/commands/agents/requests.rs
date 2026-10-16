@@ -33,9 +33,9 @@ use super::types::{AgentInteractionInfo, AgentSessionInfo, AgentTurnEventInfo, A
 pub(crate) const DEFAULT_SESSION_LIST_LIMIT: usize = 50;
 pub(crate) const INTERRUPT_CANCEL_REASON: &str = "operator interrupted";
 
-fn agent_client(api: &ApiClient) -> Result<AgentClient<SyncRestTransport>> {
+fn agent_client(api: &ApiClient) -> AgentClient<SyncRestTransport> {
     let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
-    Ok(AgentClient::new(transport))
+    AgentClient::new(transport)
 }
 
 fn map_sdk_error(err: GestaltError) -> anyhow::Error {
@@ -47,7 +47,7 @@ pub fn create_session(
     args: &AgentSessionCreateArgs,
     format: Format,
 ) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = build_create_session_request(args)?;
     let resp = agent
         .create_session_sync(request)
@@ -74,7 +74,7 @@ pub fn list_sessions(
         }
         Some(limit)
     };
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::ListAgentProviderSessionsRequest {
         provider_name: provider.unwrap_or_default().to_string(),
         state: parse_session_state(state),
@@ -91,7 +91,7 @@ pub fn list_sessions(
 }
 
 pub fn get_session(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::GetAgentProviderSessionRequest {
         session_id: id.to_string(),
         ..Default::default()
@@ -109,7 +109,7 @@ pub fn update_session(
     args: &AgentSessionUpdateArgs,
     format: Format,
 ) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = build_update_session_request(args)?;
     let resp = agent
         .update_session_sync(request)
@@ -120,7 +120,7 @@ pub fn update_session(
 }
 
 pub fn create_turn(client: &ApiClient, args: &AgentTurnCreateArgs, format: Format) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = build_create_turn_request(args)?;
     let resp = agent
         .create_turn_sync(request)
@@ -136,7 +136,7 @@ pub fn list_turns(
     status: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::ListAgentProviderTurnsRequest {
         session_id: session_id.to_string(),
         status: parse_execution_status(status),
@@ -151,7 +151,7 @@ pub fn list_turns(
 }
 
 pub fn get_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::GetAgentProviderTurnRequest {
         turn_id: id.to_string(),
         ..Default::default()
@@ -165,7 +165,7 @@ pub fn get_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
 }
 
 pub fn transcript_turn(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::GetAgentProviderTurnRequest {
         turn_id: id.to_string(),
         ..Default::default()
@@ -200,7 +200,7 @@ pub fn cancel_turn(
     reason: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::CancelAgentProviderTurnRequest {
         turn_id: id.to_string(),
         reason: reason.unwrap_or_default().to_string(),
@@ -219,7 +219,7 @@ pub fn list_turn_events(
     args: &AgentTurnEventListArgs,
     format: Format,
 ) -> Result<()> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::ListAgentProviderTurnEventsRequest {
         turn_id: args.id.clone(),
         after_seq: args.after.unwrap_or(0) as i64,
@@ -239,7 +239,7 @@ pub(crate) fn cancel_turn_silent(
     id: &str,
     reason: &str,
 ) -> Result<AgentTurnInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::CancelAgentProviderTurnRequest {
         turn_id: id.to_string(),
         reason: reason.to_string(),
@@ -256,7 +256,7 @@ pub(crate) fn create_session_info(
     client: &ApiClient,
     args: &AgentSessionCreateArgs,
 ) -> Result<AgentSessionInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = build_create_session_request(args)?;
     let resp = agent
         .create_session_sync(request)
@@ -266,7 +266,7 @@ pub(crate) fn create_session_info(
 }
 
 pub(crate) fn get_session_info(client: &ApiClient, id: &str) -> Result<AgentSessionInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::GetAgentProviderSessionRequest {
         session_id: id.to_string(),
         ..Default::default()
@@ -282,7 +282,7 @@ pub(crate) fn resume_latest_session_info(
     client: &ApiClient,
     provider: Option<&str>,
 ) -> Result<AgentSessionInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::ListAgentProviderSessionsRequest {
         provider_name: provider.unwrap_or_default().to_string(),
         state: AGENT_SESSION_STATE_ACTIVE,
@@ -334,7 +334,7 @@ pub(crate) fn create_turn_info(
     client: &ApiClient,
     args: &AgentTurnCreateArgs,
 ) -> Result<AgentTurnInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = build_create_turn_request(args)?;
     let resp = agent
         .create_turn_sync(request)
@@ -344,7 +344,7 @@ pub(crate) fn create_turn_info(
 }
 
 pub(crate) fn get_turn_info(client: &ApiClient, id: &str) -> Result<AgentTurnInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::GetAgentProviderTurnRequest {
         turn_id: id.to_string(),
         ..Default::default()
@@ -360,7 +360,7 @@ pub(crate) fn list_interactions_info(
     client: &ApiClient,
     turn_id: &str,
 ) -> Result<Vec<AgentInteractionInfo>> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::ListAgentProviderInteractionsRequest {
         turn_id: turn_id.to_string(),
         ..Default::default()
@@ -378,7 +378,7 @@ pub(crate) fn resolve_interaction_info(
     interaction_id: &str,
     resolution: Map<String, Value>,
 ) -> Result<AgentInteractionInfo> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let request = gestalt_sdk::public::generated::agent::ResolveAgentProviderInteractionRequest {
         interaction_id: interaction_id.to_string(),
         turn_id: turn_id.to_string(),
@@ -397,7 +397,7 @@ pub(crate) fn list_turn_event_values(
     turn_id: &str,
     after_seq: u64,
 ) -> Result<Vec<Value>> {
-    let agent = agent_client(client)?;
+    let agent = agent_client(client);
     let mut events = Vec::new();
     let mut after_seq = after_seq as i64;
     loop {

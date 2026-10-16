@@ -78,7 +78,8 @@ pub fn run(
             match resolved {
                 ResolvedOperation::All(ops) => {
                     warn_ignored_params(params, "no operation specified");
-                    display_operations(ops, format, options.connection, options.instance)
+                    display_operations(ops, format, options.connection, options.instance);
+                    Ok(())
                 }
                 ResolvedOperation::Exact(_) => {
                     execute(client, Some(cat), plugin, &query, params, options, format)
@@ -91,7 +92,8 @@ pub fn run(
                         if n == 1 { "" } else { "s" }
                     );
                     warn_ignored_params(params, &reason);
-                    display_operations(matches, format, options.connection, options.instance)
+                    display_operations(matches, format, options.connection, options.instance);
+                    Ok(())
                 }
             }
         };
@@ -195,7 +197,8 @@ pub fn list_operations_with_selector(
         app_errors::SelectorCommand::Invoke,
         catalog::fetch_catalog(client, plugin, connection, instance),
     )?;
-    display_operations(cat.operations(), format, connection, instance)
+    display_operations(cat.operations(), format, connection, instance);
+    Ok(())
 }
 
 fn execute(
@@ -268,7 +271,7 @@ fn display_operations<'a>(
     format: Format,
     connection: Option<&str>,
     instance: Option<&str>,
-) -> Result<()> {
+) {
     let ops: Vec<&CatalogOperation> = operations.into_iter().collect();
 
     match format {
@@ -299,8 +302,6 @@ fn display_operations<'a>(
             output::print_table(&["Name", "Description", "Method", "Parameters"], &rows);
         }
     }
-
-    Ok(())
 }
 
 fn warn_ignored_params(params: &[ParamEntry], reason: &str) {

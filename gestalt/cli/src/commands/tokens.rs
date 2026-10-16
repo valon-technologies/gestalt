@@ -11,13 +11,13 @@ const GRANT_TYPE_TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:token-
 const SUBJECT_TOKEN_TYPE_ACCESS_TOKEN: &str = "urn:ietf:params:oauth:token-type:access_token";
 const DEFAULT_CLIENT_ID: &str = "gestalt-cli";
 
-fn identity_client(api: &ApiClient) -> Result<IdentityClient<SyncRestTransport>> {
+fn identity_client(api: &ApiClient) -> IdentityClient<SyncRestTransport> {
     let transport = api.sync_rest_transport(std::time::Duration::from_secs(30));
-    Ok(IdentityClient::new(transport))
+    IdentityClient::new(transport)
 }
 
 pub fn create(client: &ApiClient, scopes: &str, expires_in: i64, format: Format) -> Result<()> {
-    let identity = identity_client(client)?;
+    let identity = identity_client(client);
     let request = TokenRequest {
         grant_type: GRANT_TYPE_TOKEN_EXCHANGE.to_string(),
         subject_token: client.token().to_string(),
@@ -33,11 +33,7 @@ pub fn create(client: &ApiClient, scopes: &str, expires_in: i64, format: Format)
 
     let grant_id = resp.grant_id.clone();
     let token = resp.access_token.clone();
-    let scopes_list: Vec<String> = if resp.scope.is_empty() {
-        vec![]
-    } else {
-        resp.scope.split_whitespace().map(String::from).collect()
-    };
+    let scopes_list: Vec<String> = resp.scope.split_whitespace().map(String::from).collect();
 
     let resp_json = serde_json::json!({
         "id": grant_id,
@@ -61,7 +57,7 @@ pub fn create(client: &ApiClient, scopes: &str, expires_in: i64, format: Format)
 }
 
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
-    let identity = identity_client(client)?;
+    let identity = identity_client(client);
     let grants_resp = identity
         .list_grants_sync(ListGrantsRequest::default())
         .context("failed to list tokens")?;
@@ -118,7 +114,7 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
 }
 
 pub fn revoke(client: &ApiClient, id: &str, format: Format) -> Result<()> {
-    let identity = identity_client(client)?;
+    let identity = identity_client(client);
     identity
         .revoke_grant_sync(RevokeGrantRequest {
             grant_id: id.to_string(),
