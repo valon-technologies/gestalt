@@ -2507,7 +2507,7 @@ func normalizeWorkflowSteps(cfg *Config, path string, steps []WorkflowStepConfig
 			}
 		}
 		if step.App != nil {
-			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
+			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App); err != nil {
 				return err
 			}
 			if err := coreworkflow.ValidateValueRefs(stepPath+".app.input", WorkflowValueToCore(step.App.Input), seen); err != nil {
@@ -2551,7 +2551,7 @@ func normalizeWorkflowValueMapConfig(path string, values map[string]WorkflowValu
 	return nil
 }
 
-func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallConfig, allowCredentialMode bool) error {
+func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallConfig) error {
 	if app == nil {
 		return fmt.Errorf("config validation: %s is required", path)
 	}
@@ -2567,11 +2567,7 @@ func normalizeWorkflowStepAppCallConfig(path string, app *WorkflowStepAppCallCon
 		return fmt.Errorf("config validation: %s.operation is required", path)
 	}
 	switch app.CredentialMode {
-	case "":
-	case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeSubject:
-		if !allowCredentialMode {
-			return fmt.Errorf("config validation: %s.credentialMode is not supported", path)
-		}
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeSubject:
 	default:
 		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, app.CredentialMode)
 	}
