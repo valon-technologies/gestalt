@@ -44,12 +44,8 @@ func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[
 		return nil, err
 	}
 	def := StaticDefinition(name, endpoint)
-	if err := addOperations(schema, def, schema.QueryType, false, allowedOps); err != nil {
-		return nil, err
-	}
-	if err := addOperations(schema, def, schema.MutationType, true, allowedOps); err != nil {
-		return nil, err
-	}
+	addOperations(schema, def, schema.QueryType, false, allowedOps)
+	addOperations(schema, def, schema.MutationType, true, allowedOps)
 
 	if len(def.Operations) == 0 {
 		return nil, fmt.Errorf("no operations found for %s", endpoint)
@@ -135,13 +131,13 @@ func SchemaFromResult(result *core.OperationResult) (*Schema, error) {
 	return SchemaFromBody(result.Body)
 }
 
-func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, isMutation bool, allowedOps map[string]*operationexposure.OperationOverride) error {
+func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, isMutation bool, allowedOps map[string]*operationexposure.OperationOverride) {
 	if root == nil {
-		return nil
+		return
 	}
 	rootType := schema.lookupType(root.Name)
 	if rootType == nil {
-		return nil
+		return
 	}
 
 	for _, field := range rootType.Fields {
@@ -189,7 +185,6 @@ func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, 
 
 		def.Operations[opName] = opDef
 	}
-	return nil
 }
 
 func argsToParams(schema *Schema, args []InputValue) []declarative.ParameterDef {

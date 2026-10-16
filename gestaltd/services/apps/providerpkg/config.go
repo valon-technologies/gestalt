@@ -11,13 +11,11 @@ import (
 )
 
 func ValidateConfigForManifest(manifestPath string, manifest *providermanifestv1.Manifest, kind string, config map[string]any) error {
-	schemaPath, schemaName, ok, err := configSchemaForManifest(manifestPath, manifest, kind)
-	if err != nil {
-		return err
-	}
-	if !ok {
+	if manifest == nil || manifest.Spec == nil || manifest.Spec.ConfigSchemaPath == "" {
 		return nil
 	}
+	schemaName := manifest.Spec.ConfigSchemaPath
+	schemaPath := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(schemaName))
 	data, err := os.ReadFile(schemaPath)
 	if err != nil {
 		return fmt.Errorf("read config schema %q: %w", schemaName, err)
@@ -27,14 +25,6 @@ func ValidateConfigForManifest(manifestPath string, manifest *providermanifestv1
 		config = map[string]any{}
 	}
 	return validateConfigSchema(config, string(data))
-}
-
-func configSchemaForManifest(manifestPath string, manifest *providermanifestv1.Manifest, _ string) (path string, name string, ok bool, err error) {
-	if manifest == nil || manifest.Spec == nil || manifest.Spec.ConfigSchemaPath == "" {
-		return "", "", false, nil
-	}
-	schemaPath := manifest.Spec.ConfigSchemaPath
-	return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(schemaPath)), schemaPath, true, nil
 }
 
 func validateConfigSchema(config map[string]any, schemaText string) error {
