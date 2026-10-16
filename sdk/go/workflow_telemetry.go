@@ -295,10 +295,6 @@ func workflowTelemetryErrorType(err error) string {
 
 func workflowTelemetryGRPCCodeName(code grpccodes.Code) string {
 	switch code {
-	case grpccodes.Canceled:
-		return "canceled"
-	case grpccodes.Unknown:
-		return "unknown"
 	case grpccodes.InvalidArgument:
 		return "invalid_argument"
 	case grpccodes.DeadlineExceeded:
@@ -313,20 +309,10 @@ func workflowTelemetryGRPCCodeName(code grpccodes.Code) string {
 		return "resource_exhausted"
 	case grpccodes.FailedPrecondition:
 		return "failed_precondition"
-	case grpccodes.Aborted:
-		return "aborted"
 	case grpccodes.OutOfRange:
 		return "out_of_range"
-	case grpccodes.Unimplemented:
-		return "unimplemented"
-	case grpccodes.Internal:
-		return "internal"
-	case grpccodes.Unavailable:
-		return "unavailable"
 	case grpccodes.DataLoss:
 		return "data_loss"
-	case grpccodes.Unauthenticated:
-		return "unauthenticated"
 	default:
 		return strings.ToLower(code.String())
 	}
