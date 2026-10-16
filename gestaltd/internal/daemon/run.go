@@ -34,11 +34,7 @@ func (f *repeatedStringFlag) Set(value string) error {
 }
 
 func Run(opts Options) error {
-	version := opts.Version
-	if version == "" {
-		version = "dev"
-	}
-	return run(opts.Args, version)
+	return run(opts.Args, opts.Version)
 }
 
 type serveCommandOptions struct {

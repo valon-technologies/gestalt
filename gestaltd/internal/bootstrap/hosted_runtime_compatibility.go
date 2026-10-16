@@ -17,9 +17,6 @@ const (
 )
 
 func hostedRuntimeSessionCompatibilityReason(session *proto.RuntimeSession) string {
-	if session == nil || len(session.GetMetadata()) == 0 {
-		return ""
-	}
 	metadata := session.GetMetadata()
 	actual := strings.TrimSpace(metadata[hostedRuntimeMetadataActualImage])
 	current := strings.TrimSpace(metadata[hostedRuntimeMetadataCurrentImage])
@@ -39,15 +36,8 @@ func hostedRuntimeSessionCompatibilityReason(session *proto.RuntimeSession) stri
 }
 
 func parseRuntimeImageMatch(raw string) (bool, bool) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return false, false
-	}
-	parsed, err := strconv.ParseBool(raw)
-	if err != nil {
-		return false, false
-	}
-	return parsed, true
+	parsed, err := strconv.ParseBool(strings.TrimSpace(raw))
+	return parsed, err == nil
 }
 
 func hostedRuntimeImageMismatchReason(template, expected, actual string) string {

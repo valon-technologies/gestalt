@@ -14,9 +14,6 @@ func objectRefToProto(ref s3sdk.ObjectRef) *proto.S3ObjectRef {
 }
 
 func objectRefFromProto(ref *proto.S3ObjectRef) s3sdk.ObjectRef {
-	if ref == nil {
-		return s3sdk.ObjectRef{}
-	}
 	return s3sdk.ObjectRef{
 		Key:       ref.GetKey(),
 		VersionID: ref.GetVersionId(),

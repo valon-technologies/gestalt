@@ -21,9 +21,6 @@ func TargetToProto(target coreworkflow.Target) (*proto.BoundWorkflowTarget, erro
 }
 
 func TargetFromProto(target *proto.BoundWorkflowTarget) coreworkflow.Target {
-	if target == nil {
-		return coreworkflow.Target{}
-	}
 	return coreworkflow.Target{Steps: workflowStepsFromProto(target.GetSteps())}
 }
 
@@ -272,9 +269,6 @@ func workflowTextToProto(text coreworkflow.Text) *proto.WorkflowText {
 }
 
 func workflowTextFromProto(text *proto.WorkflowText) coreworkflow.Text {
-	if text == nil {
-		return coreworkflow.Text{}
-	}
 	return coreworkflow.Text{Template: text.GetTemplate()}
 }
 
