@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/ptrutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -595,7 +596,7 @@ func ResolveNamedConnectionDef(app *ProviderEntry, manifestApp *providermanifest
 				conn.ConnectionParams = maps.Clone(def.Params)
 			}
 			if def.CredentialRefresh != nil {
-				conn.CredentialRefresh = cloneCredentialRefreshDef(def.CredentialRefresh)
+				conn.CredentialRefresh = ptrutil.Clone(def.CredentialRefresh)
 			}
 			if def.Discovery != nil {
 				conn.Discovery = def.Discovery

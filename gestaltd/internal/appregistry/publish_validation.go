@@ -23,14 +23,6 @@ type LocalSourceState struct {
 	Untracked bool   `json:"untracked,omitempty"`
 }
 
-func cloneLocalSourceState(value *LocalSourceState) *LocalSourceState {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	return &out
-}
-
 func normalizeLocalSourceState(value *LocalSourceState) *LocalSourceState {
 	if value == nil {
 		return nil
