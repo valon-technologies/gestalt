@@ -2425,9 +2425,6 @@ func mergeCredentialFields(base, override []CredentialFieldDef) []CredentialFiel
 }
 
 func mergeCredentialField(dst *CredentialFieldDef, src CredentialFieldDef) {
-	if dst == nil {
-		return
-	}
 	if dst.Name == "" {
 		dst.Name = src.Name
 	}
@@ -3585,9 +3582,6 @@ func normalizeProviderSourceShapes(cfg *Config) {
 }
 
 func normalizeProviderSource(kind string, source *ProviderSource) {
-	if source == nil {
-		return
-	}
 	source.scalar = strings.TrimSpace(source.scalar)
 	source.Path = strings.TrimSpace(source.Path)
 	source.metadataURL = strings.TrimSpace(source.metadataURL)
