@@ -3968,40 +3968,33 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 		baseDir = filepath.Dir(absPath)
 	}
 
-	if server := nestedMap(root, "server"); server != nil {
-		resolveRelativeStringField(server, "artifactsDir", baseDir)
-	}
+	resolveRelativeStringField(nestedMap(root, "server"), "artifactsDir", baseDir)
+	resolveRelativeStringField(nestedMap(root, "authorization"), "seedFile", baseDir)
 
-	if authorization := nestedMap(root, "authorization"); authorization != nil {
-		resolveRelativeStringField(authorization, "seedFile", baseDir)
-	}
-
-	if providers := nestedMap(root, "providers"); providers != nil {
-		for _, section := range []struct {
-			key  string
-			kind string
-		}{
-			{key: "identity", kind: providermanifestv1.KindIdentity},
-			{key: "authorization", kind: providermanifestv1.KindAuthorization},
-			{key: "externalCredentials", kind: providermanifestv1.KindExternalCredentials},
-			{key: "secrets", kind: providermanifestv1.KindSecrets},
-			{key: "telemetry", kind: string(HostProviderKindTelemetry)},
-			{key: "audit", kind: string(HostProviderKindAudit)},
-			{key: "indexeddb", kind: providermanifestv1.KindIndexedDB},
-			{key: "cache", kind: providermanifestv1.KindCache},
-			{key: "s3", kind: providermanifestv1.KindS3},
-			{key: "workflow", kind: string(HostProviderKindWorkflow)},
-			{key: "agent", kind: string(HostProviderKindAgent)},
-		} {
-			for _, entry := range mapValues(nestedMap(providers, section.key)) {
-				resolveRelativePathsInEntry(section.kind, entry, baseDir)
-			}
+	providers := nestedMap(root, "providers")
+	for _, section := range []struct {
+		key  string
+		kind string
+	}{
+		{key: "identity", kind: providermanifestv1.KindIdentity},
+		{key: "authorization", kind: providermanifestv1.KindAuthorization},
+		{key: "externalCredentials", kind: providermanifestv1.KindExternalCredentials},
+		{key: "secrets", kind: providermanifestv1.KindSecrets},
+		{key: "telemetry", kind: string(HostProviderKindTelemetry)},
+		{key: "audit", kind: string(HostProviderKindAudit)},
+		{key: "indexeddb", kind: providermanifestv1.KindIndexedDB},
+		{key: "cache", kind: providermanifestv1.KindCache},
+		{key: "s3", kind: providermanifestv1.KindS3},
+		{key: "workflow", kind: string(HostProviderKindWorkflow)},
+		{key: "agent", kind: string(HostProviderKindAgent)},
+	} {
+		for _, entry := range mapValues(nestedMap(providers, section.key)) {
+			resolveRelativePathsInEntry(section.kind, entry, baseDir)
 		}
 	}
-	if runtimeConfig := nestedMap(root, "runtime"); runtimeConfig != nil {
-		for _, entry := range mapValues(nestedMap(runtimeConfig, "providers")) {
-			resolveRelativePathsInEntry(providermanifestv1.KindRuntime, entry, baseDir)
-		}
+	runtimeConfig := nestedMap(root, "runtime")
+	for _, entry := range mapValues(nestedMap(runtimeConfig, "providers")) {
+		resolveRelativePathsInEntry(providermanifestv1.KindRuntime, entry, baseDir)
 	}
 
 	for _, entry := range mapValues(nestedMap(root, "apps")) {
@@ -4010,32 +4003,18 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 }
 
 func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir string) {
-	if entry == nil {
-		return
-	}
 	resolveRelativeStringField(entry, "iconFile", baseDir)
-	if harnesses, ok := entry["harnesses"].(map[string]any); ok {
-		for _, harness := range mapValues(harnesses) {
-			resolveRelativeStringField(harness, "workingDirectory", baseDir)
-		}
+	for _, harness := range mapValues(nestedMap(entry, "harnesses")) {
+		resolveRelativeStringField(harness, "workingDirectory", baseDir)
 	}
-	if lifecycle, ok := entry["lifecycle"].(map[string]any); ok {
-		if hooks, ok := lifecycle["sessionStart"].([]any); ok {
-			for _, value := range hooks {
-				if hook, ok := value.(map[string]any); ok {
-					resolveRelativeStringField(hook, "cwd", baseDir)
-				}
-			}
-		}
+	lifecycle := nestedMap(entry, "lifecycle")
+	hooks, _ := lifecycle["sessionStart"].([]any)
+	for _, value := range hooks {
+		hook, _ := value.(map[string]any)
+		resolveRelativeStringField(hook, "cwd", baseDir)
 	}
-	if source, ok := entry["source"].(map[string]any); ok {
-		resolveRelativeStringField(source, "path", baseDir)
-		return
-	}
-	sourceValue, ok := entry["source"].(string)
-	if !ok {
-		return
-	}
+	resolveRelativeStringField(nestedMap(entry, "source"), "path", baseDir)
+	sourceValue, _ := entry["source"].(string)
 	sourceValue = strings.TrimSpace(sourceValue)
 	if sourceValue == "" || isBuiltinScalarSource(kind, sourceValue) || looksLikeMetadataURL(sourceValue) || looksLikeUnsupportedScalarSource(sourceValue) {
 		return
