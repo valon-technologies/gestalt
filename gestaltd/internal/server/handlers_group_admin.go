@@ -132,33 +132,22 @@ func (s *Server) hasExplicitGroupAdmin(ctx context.Context, subjectID, groupID s
 }
 
 func (s *Server) hasAuthorizationViewer(ctx context.Context, subjectID string) (bool, error) {
-	if s == nil || s.authorization == nil {
-		return false, errors.New("authorization is unavailable")
-	}
-	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, invocation.SubjectAccessRequest(
-		subjectID,
-		"viewer",
-		&proto.Resource{Type: "authorization", Id: "authorization"},
-	))
-	if err != nil {
-		return false, err
-	}
-	return allowed, nil
+	return s.hasGlobalRole(ctx, subjectID, "authorization", "viewer")
 }
 
 func (s *Server) hasGestaltAdmin(ctx context.Context, subjectID string) (bool, error) {
+	return s.hasGlobalRole(ctx, subjectID, "gestalt", "admin")
+}
+
+func (s *Server) hasGlobalRole(ctx context.Context, subjectID, resource, role string) (bool, error) {
 	if s == nil || s.authorization == nil {
 		return false, errors.New("authorization is unavailable")
 	}
-	allowed, err := invocation.CheckSubjectAccess(ctx, s.authorization, invocation.SubjectAccessRequest(
+	return invocation.CheckSubjectAccess(ctx, s.authorization, invocation.SubjectAccessRequest(
 		subjectID,
-		"admin",
-		&proto.Resource{Type: "gestalt", Id: "gestalt"},
+		role,
+		&proto.Resource{Type: resource, Id: resource},
 	))
-	if err != nil {
-		return false, err
-	}
-	return allowed, nil
 }
 
 func (s *Server) hasAuthorizationAdmin(ctx context.Context, subjectID string) (bool, error) {
