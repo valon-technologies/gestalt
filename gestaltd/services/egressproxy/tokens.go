@@ -139,10 +139,7 @@ func (m *TokenManager) tokenTTL(ttl time.Duration) time.Duration {
 	if ttl <= 0 {
 		return m.defaultTTL
 	}
-	if ttl > m.maxTTL {
-		return m.maxTTL
-	}
-	return ttl
+	return min(ttl, m.maxTTL)
 }
 
 func normalizeAllowedHosts(hosts []string) []string {

@@ -23,9 +23,6 @@ func (h ManualAuthHandler) ExchangeCode(_ context.Context, code string) (*core.O
 	return &core.OAuthTokenResponse{AccessToken: code, TokenType: "Bearer"}, nil
 }
 
-func (h ManualAuthHandler) RefreshToken(_ context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
-	if refreshToken == "" {
-		return nil, fmt.Errorf("token is required")
-	}
-	return &core.OAuthTokenResponse{AccessToken: refreshToken, TokenType: "Bearer"}, nil
+func (h ManualAuthHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
+	return h.ExchangeCode(ctx, refreshToken)
 }

@@ -163,10 +163,7 @@ func (m *ObjectAccessURLManager) tokenTTL(ttl time.Duration) time.Duration {
 	if ttl <= 0 {
 		return m.defaultTTL
 	}
-	if ttl > m.maxTTL {
-		return m.maxTTL
-	}
-	return ttl
+	return min(ttl, m.maxTTL)
 }
 
 func normalizeS3ObjectAccessRequest(req ObjectAccessURLRequest, expiresAt time.Time) (ObjectAccessTarget, error) {
