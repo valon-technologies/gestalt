@@ -122,10 +122,7 @@ func DevProviderSessionID(providerName string) string {
 }
 
 func relayTokenFromIncomingMetadata(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	for _, value := range md.Get(HostServiceRelayTokenHeader) {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed

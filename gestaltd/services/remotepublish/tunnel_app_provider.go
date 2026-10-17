@@ -50,10 +50,7 @@ const tunnelAppMetadataKey = "x-gestalt-app"
 const tunnelHeaderOverridesMetadataKey = "x-gestalt-header-overrides-bin"
 
 func appFromContext(ctx context.Context) (string, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", status.Error(codes.InvalidArgument, "app metadata is required")
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	values := md.Get(tunnelAppMetadataKey)
 	if len(values) == 0 || strings.TrimSpace(values[0]) == "" {
 		return "", status.Error(codes.InvalidArgument, "app metadata is required")
@@ -144,10 +141,7 @@ type tunnelExecuteStreamServer struct {
 func (s *tunnelExecuteStreamServer) Context() context.Context { return s.ctx }
 
 func (s *TunnelAppProviderServer) applyHeaderOverrides(ctx context.Context) (context.Context, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ctx, nil
-	}
+	md, _ := metadata.FromIncomingContext(ctx)
 	values := md.Get(tunnelHeaderOverridesMetadataKey)
 	if len(values) == 0 {
 		return ctx, nil
