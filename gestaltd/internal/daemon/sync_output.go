@@ -59,7 +59,7 @@ func normalizeSyncMetricsForJSON(metrics operator.SyncMetrics) operator.SyncMetr
 	return metrics
 }
 
-func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) error {
+func writeSyncText(w io.Writer, metrics operator.SyncMetrics) error {
 	action := "Prepared"
 	if metrics.Sync.Action == "check" {
 		action = "Checked"
@@ -70,99 +70,97 @@ func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) erro
 	if _, err := fmt.Fprintf(w, "Fetched %d archives: %d downloads.\n", metrics.Archives.Requests, metrics.Archives.Downloads.Count); err != nil {
 		return err
 	}
-	if verbose {
-		cacheState := "disabled"
-		if metrics.Cache.Enabled {
-			cacheState = "enabled"
+	cacheState := "disabled"
+	if metrics.Cache.Enabled {
+		cacheState = "enabled"
+	}
+	if metrics.Cache.Configured {
+		if _, err := fmt.Fprintf(w, "Cache: %s materialized cache at %s.\n", cacheState, metrics.Cache.Dir); err != nil {
+			return err
 		}
-		if metrics.Cache.Configured {
-			if _, err := fmt.Fprintf(w, "Cache: %s materialized cache at %s.\n", cacheState, metrics.Cache.Dir); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintln(w, "Cache: disabled."); err != nil {
-				return err
-			}
+	} else {
+		if _, err := fmt.Fprintln(w, "Cache: disabled."); err != nil {
+			return err
 		}
-		if _, err := fmt.Fprintf(w, "Cache: %d eligible, %d disabled, %d uncacheable, %d hits, %d misses, %d invalid, %d put successes, %d put failures.\n",
-			metrics.Cache.Eligible,
-			metrics.Cache.Disabled,
-			metrics.Cache.Uncacheable,
-			metrics.Cache.Hits,
-			metrics.Cache.Misses,
-			metrics.Cache.Invalid,
-			metrics.Cache.Put.Successes,
-			metrics.Cache.Put.Failures,
+	}
+	if _, err := fmt.Fprintf(w, "Cache: %d eligible, %d disabled, %d uncacheable, %d hits, %d misses, %d invalid, %d put successes, %d put failures.\n",
+		metrics.Cache.Eligible,
+		metrics.Cache.Disabled,
+		metrics.Cache.Uncacheable,
+		metrics.Cache.Hits,
+		metrics.Cache.Misses,
+		metrics.Cache.Invalid,
+		metrics.Cache.Put.Successes,
+		metrics.Cache.Put.Failures,
+	); err != nil {
+		return err
+	}
+	if metrics.Cache.Put.Successes > 0 || metrics.Cache.Put.Failures > 0 {
+		if _, err := fmt.Fprintf(w, "Cache put timing: inspect %.3fs, local write %.3fs, remote exists %.3fs, archive %.3fs, upload %.3fs, skipped existing %d.\n",
+			metrics.Cache.Put.LocalInspectSeconds,
+			metrics.Cache.Put.LocalWriteSeconds,
+			metrics.Cache.Put.RemoteExistsSeconds,
+			metrics.Cache.Put.RemoteArchiveSeconds,
+			metrics.Cache.Put.RemoteUploadSeconds,
+			metrics.Cache.Put.RemoteSkippedExisting,
 		); err != nil {
 			return err
 		}
-		if metrics.Cache.Put.Successes > 0 || metrics.Cache.Put.Failures > 0 {
-			if _, err := fmt.Fprintf(w, "Cache put timing: inspect %.3fs, local write %.3fs, remote exists %.3fs, archive %.3fs, upload %.3fs, skipped existing %d.\n",
-				metrics.Cache.Put.LocalInspectSeconds,
-				metrics.Cache.Put.LocalWriteSeconds,
-				metrics.Cache.Put.RemoteExistsSeconds,
-				metrics.Cache.Put.RemoteArchiveSeconds,
-				metrics.Cache.Put.RemoteUploadSeconds,
-				metrics.Cache.Put.RemoteSkippedExisting,
-			); err != nil {
-				return err
-			}
-		}
-		if _, err := fmt.Fprintf(w, "Downloads: %d archives, %s, cumulative download time %.3fs.\n", metrics.Archives.Downloads.Count, formatIECBytes(metrics.Archives.Downloads.Bytes), metrics.Archives.Downloads.DurationSeconds); err != nil {
+	}
+	if _, err := fmt.Fprintf(w, "Downloads: %d archives, %s, cumulative download time %.3fs.\n", metrics.Archives.Downloads.Count, formatIECBytes(metrics.Archives.Downloads.Bytes), metrics.Archives.Downloads.DurationSeconds); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "Phases: load %.3fs, materialize %.3fs, validate %.3fs, output measure %.3fs.\n", metrics.Phases.LoadSeconds, metrics.Phases.MaterializeSeconds, metrics.Phases.ValidateSeconds, metrics.Phases.OutputMeasureSeconds); err != nil {
+		return err
+	}
+	if metrics.Output.Measured {
+		if _, err := fmt.Fprintf(w, "Prepared output: %d files, %s.\n", metrics.Output.Files, formatIECBytes(metrics.Output.Bytes)); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(w, "Phases: load %.3fs, materialize %.3fs, validate %.3fs, output measure %.3fs.\n", metrics.Phases.LoadSeconds, metrics.Phases.MaterializeSeconds, metrics.Phases.ValidateSeconds, metrics.Phases.OutputMeasureSeconds); err != nil {
+	} else {
+		if _, err := fmt.Fprintln(w, "Prepared output: not measured."); err != nil {
 			return err
 		}
-		if metrics.Output.Measured {
-			if _, err := fmt.Fprintf(w, "Prepared output: %d files, %s.\n", metrics.Output.Files, formatIECBytes(metrics.Output.Bytes)); err != nil {
-				return err
-			}
-		} else {
-			if _, err := fmt.Fprintln(w, "Prepared output: not measured."); err != nil {
+	}
+	if len(metrics.Archives.Fetches) > 0 {
+		if _, err := fmt.Fprintln(w, "Archive fetches:"); err != nil {
+			return err
+		}
+		for _, fetch := range metrics.Archives.Fetches {
+			if _, err := fmt.Fprintf(w, "  %s: downloaded=%t, %s, %.3fs\n", fetch.Subject, fetch.Downloaded, formatIECBytes(fetch.Bytes), fetch.DurationSeconds); err != nil {
 				return err
 			}
 		}
-		if len(metrics.Archives.Fetches) > 0 {
-			if _, err := fmt.Fprintln(w, "Archive fetches:"); err != nil {
+	}
+	if len(metrics.Cache.Entries) > 0 {
+		if _, err := fmt.Fprintln(w, "Cache entries:"); err != nil {
+			return err
+		}
+		for i := range metrics.Cache.Entries {
+			entry := &metrics.Cache.Entries[i]
+			if _, err := fmt.Fprintf(w, "  %s: %s, put=%s, %d files, %s, %.3fs\n", entry.Subject, entry.Result, entry.Put, entry.Files, formatIECBytes(entry.Bytes), entry.DurationSeconds); err != nil {
 				return err
-			}
-			for _, fetch := range metrics.Archives.Fetches {
-				if _, err := fmt.Fprintf(w, "  %s: downloaded=%t, %s, %.3fs\n", fetch.Subject, fetch.Downloaded, formatIECBytes(fetch.Bytes), fetch.DurationSeconds); err != nil {
-					return err
-				}
 			}
 		}
-		if len(metrics.Cache.Entries) > 0 {
-			if _, err := fmt.Fprintln(w, "Cache entries:"); err != nil {
+	}
+	if len(metrics.Artifacts.Items) > 0 {
+		if _, err := fmt.Fprintln(w, "Artifacts:"); err != nil {
+			return err
+		}
+		for i := range metrics.Artifacts.Items {
+			artifact := &metrics.Artifacts.Items[i]
+			if _, err := fmt.Fprintf(w, "  %s: %s %s, reason=%s, prepare %.3fs, activate %.3fs, total %.3fs\n", artifact.Subject, artifact.SourceKind, artifact.Result, artifact.Reason, artifact.PrepareDurationSeconds, artifact.ActivateDurationSeconds, artifact.DurationSeconds); err != nil {
 				return err
-			}
-			for i := range metrics.Cache.Entries {
-				entry := &metrics.Cache.Entries[i]
-				if _, err := fmt.Fprintf(w, "  %s: %s, put=%s, %d files, %s, %.3fs\n", entry.Subject, entry.Result, entry.Put, entry.Files, formatIECBytes(entry.Bytes), entry.DurationSeconds); err != nil {
-					return err
-				}
 			}
 		}
-		if len(metrics.Artifacts.Items) > 0 {
-			if _, err := fmt.Fprintln(w, "Artifacts:"); err != nil {
-				return err
-			}
-			for i := range metrics.Artifacts.Items {
-				artifact := &metrics.Artifacts.Items[i]
-				if _, err := fmt.Fprintf(w, "  %s: %s %s, reason=%s, prepare %.3fs, activate %.3fs, total %.3fs\n", artifact.Subject, artifact.SourceKind, artifact.Result, artifact.Reason, artifact.PrepareDurationSeconds, artifact.ActivateDurationSeconds, artifact.DurationSeconds); err != nil {
-					return err
-				}
-			}
+	}
+	if len(metrics.Output.Roots) > 0 {
+		if _, err := fmt.Fprintln(w, "Prepared output roots:"); err != nil {
+			return err
 		}
-		if len(metrics.Output.Roots) > 0 {
-			if _, err := fmt.Fprintln(w, "Prepared output roots:"); err != nil {
+		for _, root := range metrics.Output.Roots {
+			if _, err := fmt.Fprintf(w, "  %s: %d files, %s, %s\n", root.Subject, root.Files, formatIECBytes(root.Bytes), root.RelativePath); err != nil {
 				return err
-			}
-			for _, root := range metrics.Output.Roots {
-				if _, err := fmt.Fprintf(w, "  %s: %d files, %s, %s\n", root.Subject, root.Files, formatIECBytes(root.Bytes), root.RelativePath); err != nil {
-					return err
-				}
 			}
 		}
 	}
