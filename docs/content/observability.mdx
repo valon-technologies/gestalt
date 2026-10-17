@@ -300,6 +300,33 @@ failures.
 When a request references an unknown provider or operation, `gestaltd` records
 `unknown` for the missing metric attributes instead of using raw user input.
 
+### Per-App Request Statistics
+
+`GET /api/v1/apps/{app}/admin/metrics` returns request counts, errors, latency,
+per-operation totals, and the 32 most recent requests for one app. App admins
+use it from the admin UI.
+
+When several `gestaltd` servers share one datastore, the numbers cover all of
+them. Each server tallies its own completed invocations in five-minute buckets
+and publishes the changed buckets to the datastore every 15 seconds and on
+shutdown. The endpoint sums every server's buckets over the last 24 hours, so
+any server can answer for the whole fleet and a restart does not reset the
+totals. Buckets are kept for 72 hours.
+
+The response says what it covers:
+
+| Field | Meaning |
+| --- | --- |
+| `scope` | `fleet` when read from the shared datastore. `instance` when no shared datastore is configured: the numbers then come from this process's Prometheus counters and in-memory list, and reset when it restarts. |
+| `windowSeconds` | The span the fleet totals cover. Omitted for `instance` scope. |
+| `instancesReporting` | How many servers recorded requests in the window. Omitted for `instance` scope. |
+
+Each server writes only its own rows, so servers never contend and a repeated
+write is idempotent. Requests are counted in the bucket where they complete,
+and a streaming invocation counts once, when it finishes. This endpoint is a
+product view; the Prometheus and OTLP metrics above remain the source for
+operational dashboards and alerts.
+
 ### Connection Authentication Metrics
 
 These metrics are recorded around app connection authentication flows including

@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net"
@@ -25,6 +27,7 @@ import (
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 )
 
@@ -152,6 +155,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		Invoker:               httpInvoker,
 		AppInvocation:         result.AppInvocation,
 		InvocationRecords:     result.InvocationRecords,
+		AppInvocationStats:    appInvocationStatsSource(result),
 		DefaultConnection:     connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations via the API surface catalog map.
 		// Dynamic session/MCP operation resolution uses MCPConnection below.
@@ -249,6 +253,9 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	}
 	if heartbeatWriter != nil {
 		defer heartbeatWriter.Stop()
+	}
+	if flusher := startAppInvocationStatsFlusher(ctx, result); flusher != nil {
+		defer flusher.Stop()
 	}
 	recoveryObserver, err := startAppRegistryRecoveryObserver(ctx, cfg, result)
 	if err != nil {
@@ -771,6 +778,49 @@ func startAppRegistryHeartbeatWriter(
 	})
 	writer.Start(ctx)
 	return writer, nil
+}
+
+// appInvocationStatsSource returns the fleet-wide statistics reader, or nil
+// when the shared datastore is not available.
+func appInvocationStatsSource(result *bootstrap.Result) observability.AppInvocationStatsSource {
+	if result == nil || result.Services == nil || result.Services.AppInvocationStats == nil {
+		return nil
+	}
+	return result.Services.AppInvocationStats
+}
+
+// startAppInvocationStatsFlusher publishes this process's request statistics
+// to the shared datastore so any server can report for the whole fleet.
+func startAppInvocationStatsFlusher(
+	ctx context.Context,
+	result *bootstrap.Result,
+) *observability.AppInvocationFlusher {
+	if result == nil || result.Services == nil ||
+		result.Services.AppInvocationStats == nil ||
+		result.InvocationStats == nil {
+		return nil
+	}
+	flusher := &observability.AppInvocationFlusher{
+		Accumulator: result.InvocationStats,
+		Recent:      result.InvocationRecords,
+		Sink:        result.Services.AppInvocationStats,
+		Writer: observability.AppInvocationWriter{
+			InstanceID: appregistry.ResolveInstanceID(),
+			BootID:     newBootID(),
+		},
+	}
+	flusher.Start(ctx)
+	return flusher
+}
+
+// newBootID identifies this process start, so a restarted instance never
+// overwrites the statistics its previous process published.
+func newBootID() string {
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(raw[:])
 }
 
 func startAppRegistryRecoveryObserver(

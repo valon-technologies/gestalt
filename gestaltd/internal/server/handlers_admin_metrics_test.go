@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -386,5 +387,141 @@ func TestAppAdminMetricsRejectsMalformedPrometheus(t *testing.T) {
 	if response.StatusCode != http.StatusServiceUnavailable {
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("status = %d, want 503: %s", response.StatusCode, body)
+	}
+}
+
+func TestAppAdminMetricsReportsTheWholeFleetNotOnlyTheAnsweringServer(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+		},
+	}
+	// Two servers share one datastore. Each records only its own traffic.
+	stats := testutil.NewStubServices(t).AppInvocationStats
+	now := time.Now().UTC()
+	flushReplica := func(instance string, passed, failed int) {
+		acc := observability.NewAppInvocationAccumulator()
+		store := observability.NewInvocationRecordStore(0)
+		recorder := observability.NewMultiInvocationRecorder(store, acc)
+		for range passed {
+			recorder.RecordInvocation(observability.InvocationRecord{
+				Provider: "g-issues", Operation: "list", Outcome: observability.InvocationPassed,
+				Status: http.StatusOK, Duration: 100 * time.Millisecond, Timestamp: now,
+			})
+		}
+		for range failed {
+			recorder.RecordInvocation(observability.InvocationRecord{
+				Provider: "g-issues", Operation: "update", Outcome: observability.InvocationFailed,
+				Status: http.StatusInternalServerError, Duration: 300 * time.Millisecond, Timestamp: now,
+			})
+		}
+		flusher := &observability.AppInvocationFlusher{
+			Accumulator: acc,
+			Recent:      store,
+			Sink:        stats,
+			Writer:      observability.AppInvocationWriter{InstanceID: instance, BootID: "boot-1"},
+		}
+		if err := flusher.FlushOnce(context.Background()); err != nil {
+			t.Fatalf("flush %s: %v", instance, err)
+		}
+	}
+	flushReplica("replica-a", 3, 0)
+	flushReplica("replica-b", 2, 1)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.AppInvocationStats = stats
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/metrics", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET metrics: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	body, _ := io.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d: %s", response.StatusCode, body)
+	}
+	var payload struct {
+		Scope              string  `json:"scope"`
+		WindowSeconds      int64   `json:"windowSeconds"`
+		InstancesReporting int     `json:"instancesReporting"`
+		Requests           float64 `json:"requests"`
+		Errors             float64 `json:"errors"`
+		Operations         []struct {
+			Operation string  `json:"operation"`
+			Requests  float64 `json:"requests"`
+		} `json:"operations"`
+		RecentRequests []struct {
+			ID        uint64 `json:"id"`
+			Operation string `json:"operation"`
+		} `json:"recentRequests"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Scope != "fleet" || payload.WindowSeconds != int64(24*60*60) || payload.InstancesReporting != 2 {
+		t.Fatalf("scope=%q window=%d instances=%d, want fleet over 24h from 2 servers", payload.Scope, payload.WindowSeconds, payload.InstancesReporting)
+	}
+	if payload.Requests != 6 || payload.Errors != 1 {
+		t.Fatalf("requests=%v errors=%v, want the sum 6 and 1", payload.Requests, payload.Errors)
+	}
+	if len(payload.Operations) != 2 || payload.Operations[0].Operation != "list" || payload.Operations[0].Requests != 5 {
+		t.Fatalf("operations = %+v", payload.Operations)
+	}
+	if len(payload.RecentRequests) != 6 {
+		t.Fatalf("recentRequests = %d, want all 6 merged across servers", len(payload.RecentRequests))
+	}
+	seen := map[uint64]bool{}
+	for _, item := range payload.RecentRequests {
+		if seen[item.ID] {
+			t.Fatalf("duplicate recent request id %d", item.ID)
+		}
+		seen[item.ID] = true
+	}
+}
+
+func TestAppAdminMetricsWithoutFleetStoreReportsInstanceScope(t *testing.T) {
+	t.Parallel()
+
+	adminID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(adminID, "admin", "app", "g-issues"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", adminID, "")
+		cfg.Authorization = authz
+		cfg.AppDefs = appAdminTestAppDefs()
+		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("gestaltd_operation_count_total{gestalt_provider=\"g-issues\",gestalt_operation=\"list\"} 4\n"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	request, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/g-issues/admin/metrics", nil)
+	request.Header.Set("Authorization", "Bearer alice-token")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET metrics: %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	var payload struct {
+		Scope string `json:"scope"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Scope != "instance" {
+		t.Fatalf("scope = %q, want instance when no fleet store is configured", payload.Scope)
 	}
 }
