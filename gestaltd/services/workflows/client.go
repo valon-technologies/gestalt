@@ -289,7 +289,7 @@ func (r *remoteWorkflow) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	if err != nil {
 		return nil, err
 	}
-	if out != nil && out.GetStartedRun() {
+	if out.GetStartedRun() {
 		dims := r.workflowMetricDims(observability.WorkflowOperationSignalOrStartRun, workflowDims{
 			triggerKind: observability.WorkflowTriggerKindSignal,
 			targetKind:  workflowProtoTargetKind(out.GetRun().GetTarget()),
@@ -381,7 +381,7 @@ func (r *remoteWorkflow) workflowMetricDims(operation string, dims workflowDims)
 }
 
 func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
-	if target != nil && len(target.GetSteps()) > 0 {
+	if len(target.GetSteps()) > 0 {
 		return observability.WorkflowTargetKindSteps
 	}
 	return observability.WorkflowTargetKindUnknown

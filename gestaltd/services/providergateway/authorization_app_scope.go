@@ -144,7 +144,7 @@ func relationshipTuplesFromAuthorizationRequest(fullMethod string, req gproto.Me
 		}
 		tuples := make([]*proto.RelationshipTuple, 0, len(writeReq.GetUpdates()))
 		for _, update := range writeReq.GetUpdates() {
-			if update == nil || update.GetRelationship() == nil || update.GetRelationship().GetTuple() == nil {
+			if update.GetRelationship().GetTuple() == nil {
 				continue
 			}
 			tuples = append(tuples, update.GetRelationship().GetTuple())
@@ -263,5 +263,5 @@ func relationshipTupleHasDelegableTarget(tuple *proto.RelationshipTuple) bool {
 
 func relationshipTupleHasDirectSubjectTarget(tuple *proto.RelationshipTuple) bool {
 	subject := tuple.GetTarget().GetSubject()
-	return subject != nil && strings.TrimSpace(subject.GetId()) != ""
+	return strings.TrimSpace(subject.GetId()) != ""
 }

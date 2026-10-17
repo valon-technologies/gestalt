@@ -65,7 +65,7 @@ func ensureRelationships(ctx context.Context, provider core.AuthorizationProvide
 		existingKeys[key] = struct{}{}
 	}
 	for _, relationship := range desired {
-		if relationship == nil || relationship.GetTuple() == nil {
+		if relationship.GetTuple() == nil {
 			continue
 		}
 		key, err := relationshipTupleKey(relationship.GetTuple())

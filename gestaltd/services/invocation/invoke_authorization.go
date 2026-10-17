@@ -67,7 +67,7 @@ func (b *Broker) evaluateInvokeAuthorization(
 		denyReason = invokeAuthorizationDenyReasonAuthorizationError
 		return "", fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
 	}
-	if decision == nil || !decision.GetAllowed() {
+	if !decision.GetAllowed() {
 		denyReason = invokeAuthorizationDenyReasonRelationDenied
 		return "", fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
 	}

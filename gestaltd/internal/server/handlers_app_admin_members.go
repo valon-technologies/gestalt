@@ -293,7 +293,7 @@ func (s *Server) listAppAuthorizationMemberRows(ctx context.Context, appName str
 }
 
 func (s *Server) listAuthorizationMemberRows(ctx context.Context, resource *proto.Resource) ([]appAdminMemberRow, error) {
-	if resource == nil || strings.TrimSpace(resource.GetId()) == "" {
+	if strings.TrimSpace(resource.GetId()) == "" {
 		return nil, fmt.Errorf("authorization resource is required")
 	}
 	rows := make([]appAdminMemberRow, 0)
@@ -457,7 +457,7 @@ func projectAppAdminMemberRoster(rows []appAdminMemberRow) []appAdminMemberRow {
 }
 
 func (s *Server) appAdminMemberRowFromRelationship(ctx context.Context, relationship *proto.Relationship) (appAdminMemberRow, bool) {
-	if relationship == nil || relationship.GetTuple() == nil {
+	if relationship.GetTuple() == nil {
 		return appAdminMemberRow{}, false
 	}
 	tuple := relationship.GetTuple()
@@ -525,7 +525,7 @@ func projectAppAdminMemberResponses(rows []appAdminMemberRow) []appAdminMemberRe
 // resource ID stable; the resource's display name is presentation data and may
 // change independently.
 func (s *Server) authorizationResourceDisplayName(ctx context.Context, resource *proto.Resource) string {
-	if resource == nil || resource.GetProperties() == nil {
+	if resource.GetProperties() == nil {
 		if s.displayNameResolver != nil {
 			name, err := s.displayNameResolver(ctx, resource)
 			if err == nil {

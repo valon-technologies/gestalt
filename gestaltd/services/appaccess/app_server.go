@@ -378,7 +378,7 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *
 }
 
 func rejectRequestRunAsForSpecialCallers(callCtx requestInvocationContext, requestRunAs *proto.SubjectContext) error {
-	if requestRunAs == nil || strings.TrimSpace(requestRunAs.GetId()) == "" {
+	if strings.TrimSpace(requestRunAs.GetId()) == "" {
 		return nil
 	}
 	switch callCtx.callerProviderKind {
@@ -582,7 +582,7 @@ func workflowFromRequestContext(reqCtx *proto.RequestContext) map[string]any {
 }
 
 func agentFromRequestContext(reqCtx *proto.RequestContext) invocation.AgentInvocationContext {
-	if reqCtx == nil || reqCtx.GetAgent() == nil {
+	if reqCtx.GetAgent() == nil {
 		return invocation.AgentInvocationContext{}
 	}
 	return invocation.AgentInvocationContext{
