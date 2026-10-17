@@ -88,26 +88,30 @@ func runAppRegistryPendingSet(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", manifestPath, err)
 	}
-	manifestApp, err := appregistry.AppNameFromManifestSource(sourceManifest.Source)
+	appSource, err := appregistry.ParseAppSource(sourceManifest.Source)
 	if err != nil {
 		return fmt.Errorf("%s: invalid manifest source: %w", manifestPath, err)
 	}
-	if manifestApp != appName {
-		return fmt.Errorf("%s: manifest source app %q does not match --app %q", manifestPath, manifestApp, appName)
+	if appSource.App != appName {
+		return fmt.Errorf("%s: manifest source app %q does not match --app %q", manifestPath, appSource.App, appName)
 	}
 	if err := appregistry.ValidatePublishInput(sourceManifest, *flags.version, sourceRef); err != nil {
 		return err
 	}
-	repository, err := appregistry.RepositoryFromManifestSource(sourceManifest.Source)
+	relManifestPath, err := gitRelativePath(manifestPath)
 	if err != nil {
-		return fmt.Errorf("%s: invalid manifest source: %w", manifestPath, err)
+		return err
+	}
+	if err := appregistry.ValidateManifestLocation(sourceManifest.Source, relManifestPath); err != nil {
+		return fmt.Errorf("%s: %w", manifestPath, err)
 	}
 
 	now := time.Now().UTC()
 	pendingVersion := appregistry.PendingVersion{
 		Version:     *flags.version,
 		SourceRef:   sourceRef,
-		Repository:  repository,
+		Repository:  appSource.Repository,
+		SourceDir:   appSource.SourceDir,
 		Publication: publication,
 	}
 

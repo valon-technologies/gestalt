@@ -348,6 +348,26 @@ func appPublishManifestNotFoundHint(gitRoot, appName string) string {
 	}
 }
 
+// gitRelativePath is path relative to the enclosing git root, with forward slashes.
+func gitRelativePath(path string) (string, error) {
+	gitRoot, err := gitRootFromWorkingDirectory()
+	if err != nil {
+		return "", err
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if evaluated, err := filepath.EvalSymlinks(absPath); err == nil {
+		absPath = evaluated
+	}
+	rel, err := filepath.Rel(gitRoot, absPath)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
 func gitRootFromWorkingDirectory() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {

@@ -470,3 +470,35 @@ func TestInstallerSelectAllowsRevertingToKnownVersion(t *testing.T) {
 		t.Fatalf("requests = %#v", requests)
 	}
 }
+
+func TestInstaller_records_source_dir_of_an_app_in_a_repository_subdirectory(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := testutil.NewStubServices(t)
+	fixture := registrytest.NewInstallFixtureInSourceDir(t, "github.com/valon-technologies/toolshed", "valon-tools/apps/g-issues")
+
+	installer := &appregistry.Installer{
+		Registries:     map[string]config.AppRegistryConfig{"toolshed": fixture.Registry},
+		ConfigApps:     map[string]*config.ProviderEntry{"g-issues": configEntryWithResolvedVersion("0.0.0-config")},
+		Reader:         fixture.Reader,
+		ChangeRequests: svc.AppVersionChangeRequests,
+		Locks:          svc.AppVersionInstallLocks,
+		Rollouts:       svc.AppRollouts,
+	}
+	if _, err := installer.Install(ctx, appregistry.InstallInput{
+		Registry: "toolshed",
+		App:      "g-issues",
+		Version:  fixture.Version,
+		Actor:    "user:alice",
+	}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	known, err := svc.AppVersionChangeRequests.ListKnownVersionsByApp(ctx, "g-issues")
+	if err != nil {
+		t.Fatalf("ListKnownVersionsByApp: %v", err)
+	}
+	if len(known) != 1 || known[0].SourceDir != "valon-tools/apps/g-issues" {
+		t.Fatalf("known installations = %#v, want sourceDir valon-tools/apps/g-issues", known)
+	}
+}

@@ -36,6 +36,7 @@ type PendingVersion struct {
 	Version     string       `json:"version"`
 	SourceRef   string       `json:"sourceRef"`
 	Repository  string       `json:"repository,omitempty"`
+	SourceDir   string       `json:"sourceDir,omitempty"`
 	StartedAt   time.Time    `json:"startedAt"`
 	UpdatedAt   time.Time    `json:"updatedAt"`
 	Phase       string       `json:"phase"`
@@ -52,6 +53,7 @@ type FailedVersion struct {
 	Version     string       `json:"version"`
 	SourceRef   string       `json:"sourceRef"`
 	Repository  string       `json:"repository,omitempty"`
+	SourceDir   string       `json:"sourceDir,omitempty"`
 	StartedAt   time.Time    `json:"startedAt"`
 	FailedAt    time.Time    `json:"failedAt"`
 	Reason      string       `json:"reason"`
@@ -117,8 +119,8 @@ func validatePendingIndex(index *PendingIndex) error {
 	if index.Pending == nil {
 		return fmt.Errorf("pending index pending map is required")
 	}
-	for version, entry := range index.Pending {
-		if err := validatePendingVersion(index.App, version, entry); err != nil {
+	for version := range index.Pending {
+		if err := validatePendingVersion(index.App, version, index.Pending[version]); err != nil {
 			return fmt.Errorf("pending index version %q: %w", version, err)
 		}
 	}
@@ -138,7 +140,8 @@ func validateFailedIndex(index *FailedIndex) error {
 	if index.Failed == nil {
 		return fmt.Errorf("failed index failed map is required")
 	}
-	for version, entry := range index.Failed {
+	for version := range index.Failed {
+		entry := index.Failed[version]
 		if err := validateFailedVersion(index.App, version, entry); err != nil {
 			return fmt.Errorf("failed index version %q: %w", version, err)
 		}
@@ -164,6 +167,9 @@ func validatePendingVersion(appName, mapKey string, entry PendingVersion) error 
 		if err := validateEntryRepository(repository, appName); err != nil {
 			return fmt.Errorf("repository: %w", err)
 		}
+	}
+	if err := validateSourceDir(entry.Repository, appName, entry.SourceDir); err != nil {
+		return fmt.Errorf("sourceDir: %w", err)
 	}
 	if entry.StartedAt.IsZero() {
 		return fmt.Errorf("startedAt is required")
@@ -198,6 +204,9 @@ func validateFailedVersion(appName, mapKey string, entry FailedVersion) error {
 		if err := validateEntryRepository(repository, appName); err != nil {
 			return fmt.Errorf("repository: %w", err)
 		}
+	}
+	if err := validateSourceDir(entry.Repository, appName, entry.SourceDir); err != nil {
+		return fmt.Errorf("sourceDir: %w", err)
 	}
 	if entry.StartedAt.IsZero() {
 		return fmt.Errorf("startedAt is required")
@@ -246,7 +255,8 @@ func PrunePendingIndex(pending *PendingIndex, failed *FailedIndex, published *In
 	now = now.UTC()
 	pendingChanged := false
 	failedChanged := false
-	for version, entry := range pending.Pending {
+	for version := range pending.Pending {
+		entry := pending.Pending[version]
 		if version == exceptVersion {
 			continue
 		}
@@ -272,7 +282,8 @@ func PruneFailedIndex(failed *FailedIndex, published *Index, now time.Time) bool
 	}
 	now = now.UTC()
 	changed := false
-	for version, entry := range failed.Failed {
+	for version := range failed.Failed {
+		entry := failed.Failed[version]
 		if IndexContainsVersion(published, failed.App, version) {
 			delete(failed.Failed, version)
 			changed = true
@@ -291,6 +302,7 @@ func failedVersionFromPending(entry PendingVersion, failedAt time.Time, reason s
 		Version:     entry.Version,
 		SourceRef:   entry.SourceRef,
 		Repository:  entry.Repository,
+		SourceDir:   entry.SourceDir,
 		StartedAt:   entry.StartedAt.UTC(),
 		FailedAt:    failedAt.UTC(),
 		Reason:      reason,

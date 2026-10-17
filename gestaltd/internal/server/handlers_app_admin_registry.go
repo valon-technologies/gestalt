@@ -326,12 +326,14 @@ func (s *Server) getAppAdminRegistry(w http.ResponseWriter, r *http.Request) {
 		published = append(published, appAdminPublishedVersionFromSummary(summaries[i], desiredVersion, retentionIndex, policy, now))
 	}
 	pendingVersions := make([]appAdminPendingVersion, 0)
-	for _, entry := range appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys) {
-		pendingVersions = append(pendingVersions, appAdminPendingVersionFromEntry(entry, now))
+	pendingEntries := appregistry.PendingVersionsForAdmin(pendingIndex, publishedKeys)
+	for i := range pendingEntries {
+		pendingVersions = append(pendingVersions, appAdminPendingVersionFromEntry(pendingEntries[i], now))
 	}
 	failedVersions := make([]appAdminFailedVersion, 0)
-	for _, entry := range appregistry.FailedVersionsForAdmin(failedIndex, publishedKeys, pendingKeys) {
-		failedVersions = append(failedVersions, appAdminFailedVersionFromEntry(entry))
+	failedEntries := appregistry.FailedVersionsForAdmin(failedIndex, publishedKeys, pendingKeys)
+	for i := range failedEntries {
+		failedVersions = append(failedVersions, appAdminFailedVersionFromEntry(failedEntries[i]))
 	}
 	knownVersions := make([]adminAppInstallationInfo, 0, len(known))
 	for _, installation := range known {
