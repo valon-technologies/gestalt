@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -34,6 +35,37 @@ type ProviderRequestContext struct {
 	host               invocation.HostContext
 	toolRefs           []coreagent.ToolRef
 	toolRefsSet        bool
+}
+
+// AttachProviderRequestContext fills the provider name and merges the caller context into a request.
+func AttachProviderRequestContext(ctx context.Context, req gproto.Message, providerName string) error {
+	if req == nil {
+		return nil
+	}
+	protoutil.SetProviderNameIfEmpty(req, providerName)
+	reqCtx, err := RequestContextProto(ctx, "", invocation.CallerProvider{})
+	if err != nil {
+		return err
+	}
+	if reqCtx == nil {
+		return nil
+	}
+	msg := req.ProtoReflect()
+	field := msg.Descriptor().Fields().ByName(protoreflect.Name("context"))
+	if field == nil || field.Kind() != protoreflect.MessageKind {
+		return nil
+	}
+	if msg.Has(field) {
+		existing, ok := msg.Get(field).Message().Interface().(*proto.RequestContext)
+		if !ok {
+			return nil
+		}
+		merged := MergeRequestContext(existing, reqCtx)
+		msg.Set(field, protoreflect.ValueOfMessage(merged.ProtoReflect()))
+		return nil
+	}
+	msg.Set(field, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
+	return nil
 }
 
 func RequestContextProto(ctx context.Context, publicBaseURL string, caller invocation.CallerProvider) (*proto.RequestContext, error) {
