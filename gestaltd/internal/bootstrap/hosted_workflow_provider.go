@@ -13,7 +13,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
@@ -25,18 +24,6 @@ const hostedWorkflowRuntimeLifecycleSafetyMargin = 5 * time.Second
 
 var errHostedWorkflowWorkerPoolClosed = errors.New("hosted workflow worker pool closed")
 
-type hostedWorkflowProviderLaunch struct {
-	name            string
-	runtimeConfig   config.EffectiveRuntimePlacement
-	runtimeProvider runtimeprovider.Provider
-	runtimeOwned    bool
-	runtimePlan     RuntimePlacementPlan
-	cfg             componentprovider.YAMLConfig
-	allowedHosts    []string
-	launch          hostedProcessLaunch
-	cleanup         func()
-}
-
 type hostedWorkflowProviderInstance struct {
 	provider         coreworkflow.Provider
 	runtimeProvider  runtimeprovider.Provider
@@ -45,7 +32,7 @@ type hostedWorkflowProviderInstance struct {
 }
 
 func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (*hostedWorkflowWorkerPool, error) {
-	launch, err := prepareHostedWorkflowProviderLaunch(ctx, name, entry, node, deps)
+	launch, err := prepareHostedProviderLaunch(ctx, providermanifestv1.KindWorkflow, name, entry, node, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -69,97 +56,7 @@ func buildHostedWorkflowWorkerPool(ctx context.Context, name string, entry *conf
 	return newHostedWorkflowWorkerPool(launch, hostServices, deps, policy)
 }
 
-func (p *hostedWorkflowProviderLaunch) close() {
-	if p == nil {
-		return
-	}
-	if p.runtimeOwned && p.runtimeProvider != nil {
-		_ = p.runtimeProvider.Close()
-	}
-	if p.cleanup != nil {
-		p.cleanup()
-		p.cleanup = nil
-	}
-}
-
-func prepareHostedWorkflowProviderLaunch(ctx context.Context, name string, entry *config.ProviderEntry, node yaml.Node, deps Deps) (*hostedWorkflowProviderLaunch, error) {
-	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveConfiguredHostedRuntime(ctx, "providers.workflow."+name, entry, deps)
-	if err != nil {
-		return nil, err
-	}
-	if runtimeProvider == nil {
-		return nil, fmt.Errorf("workflow provider: runtime is required")
-	}
-	runtimeSupport, err := runtimeProvider.Support(ctx)
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
-	}
-	runtimePlan := buildRuntimePlacementPlan(runtimeSupport, deps, runtimeRequiresHostnameEgress(entry, deps))
-	if err := runtimePlan.Validate(hostedRuntimeLabel(runtimeConfig), deps); err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-
-	cfg, err := componentprovider.DecodeYAMLConfig(node, "workflow provider")
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-	cleanup := func() {}
-	if !hostedRuntimeUsesImageEntrypoint(runtimeConfig) {
-		prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
-			Kind:                 providermanifestv1.KindWorkflow,
-			Subject:              "workflow provider",
-			SourceMissingMessage: "no Go, Rust, Python, or TypeScript workflow provider source package found",
-			Config:               cfg,
-		})
-		if err != nil {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
-			return nil, err
-		}
-		cfg = prepared.YAMLConfig
-		cleanup = prepared.Cleanup
-	}
-	defer func() {
-		if cleanup != nil {
-			cleanup()
-		}
-	}()
-
-	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindWorkflow, name, entry, cfg.Command, cfg.Args, cleanup, runtimeConfig)
-	if err != nil {
-		if runtimeOwned {
-			_ = runtimeProvider.Close()
-		}
-		return nil, err
-	}
-	cleanup = launch.cleanup
-
-	preparedLaunch := &hostedWorkflowProviderLaunch{
-		name:            name,
-		runtimeConfig:   runtimeConfig,
-		runtimeProvider: runtimeProvider,
-		runtimeOwned:    runtimeOwned,
-		runtimePlan:     runtimePlan,
-		cfg:             cfg,
-		allowedHosts:    entry.EffectiveAllowedHosts(),
-		launch:          launch,
-		cleanup:         cleanup,
-	}
-	cleanup = nil
-	return preparedLaunch, nil
-}
-
-func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func(), stopTimeout time.Duration) (*hostedWorkflowProviderInstance, error) {
+func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, closeRuntime bool, cleanup func(), stopTimeout time.Duration) (*hostedWorkflowProviderInstance, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted workflow launch is required")
 	}
@@ -332,7 +229,7 @@ func (p *workflowProviderWithRuntimeWorkers) Close() error {
 
 type hostedWorkflowWorkerPool struct {
 	name         string
-	launch       *hostedWorkflowProviderLaunch
+	launch       *hostedProviderLaunch
 	hostServices []runtimehost.HostService
 	deps         Deps
 	policy       config.RuntimePlacementLifecyclePolicy
@@ -366,7 +263,7 @@ type hostedWorkflowWorker struct {
 	closed           bool
 }
 
-func newHostedWorkflowWorkerPool(launch *hostedWorkflowProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.RuntimePlacementLifecyclePolicy) (*hostedWorkflowWorkerPool, error) {
+func newHostedWorkflowWorkerPool(launch *hostedProviderLaunch, hostServices []runtimehost.HostService, deps Deps, policy config.RuntimePlacementLifecyclePolicy) (*hostedWorkflowWorkerPool, error) {
 	if launch == nil {
 		return nil, fmt.Errorf("hosted workflow launch is required")
 	}
