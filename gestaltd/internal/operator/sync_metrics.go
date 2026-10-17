@@ -383,13 +383,11 @@ func (r *SyncMetricsRecorder) RecordArchiveFetch(event syncArchiveMetricsEvent) 
 		case a.DurationSeconds < b.DurationSeconds:
 			return 1
 		default:
-			if n := cmp.Compare(a.Subject, b.Subject); n != 0 {
-				return n
-			}
-			if n := cmp.Compare(a.SourceKind, b.SourceKind); n != 0 {
-				return n
-			}
-			return cmp.Compare(a.SHA256, b.SHA256)
+			return cmp.Or(
+				cmp.Compare(a.Subject, b.Subject),
+				cmp.Compare(a.SourceKind, b.SourceKind),
+				cmp.Compare(a.SHA256, b.SHA256),
+			)
 		}
 	})
 }
@@ -450,13 +448,11 @@ func (r *SyncMetricsRecorder) RecordCacheEntry(event syncCacheMetricsEvent) {
 	}
 	r.cache = append(r.cache, entry)
 	slices.SortFunc(r.cache, func(a, b SyncMetricsCacheEntry) int {
-		if n := cmp.Compare(a.Subject, b.Subject); n != 0 {
-			return n
-		}
-		if n := cmp.Compare(a.SourceKind, b.SourceKind); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Key, b.Key)
+		return cmp.Or(
+			cmp.Compare(a.Subject, b.Subject),
+			cmp.Compare(a.SourceKind, b.SourceKind),
+			cmp.Compare(a.Key, b.Key),
+		)
 	})
 	r.metrics.Cache.Entries = append([]SyncMetricsCacheEntry(nil), r.cache...)
 }
@@ -636,13 +632,11 @@ func dedupePreparedArtifactRoots(roots []PreparedArtifactRoot) []PreparedArtifac
 		cleaned = append(cleaned, root)
 	}
 	slices.SortFunc(cleaned, func(a, b PreparedArtifactRoot) int {
-		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
-			return n
-		}
-		if n := cmp.Compare(a.Name, b.Name); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Subject, b.Subject)
+		return cmp.Or(
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Subject, b.Subject),
+		)
 	})
 	return cleaned
 }
@@ -655,31 +649,22 @@ func sortArtifactRecords(records []SyncMetricsArtifactRecord) {
 		case a.DurationSeconds < b.DurationSeconds:
 			return 1
 		}
-		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
-			return n
-		}
-		if n := cmp.Compare(a.Name, b.Name); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Subject, b.Subject)
+		return cmp.Or(
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Subject, b.Subject),
+		)
 	})
 }
 
 func sortOutputRoots(roots []SyncMetricsOutputRoot) {
 	slices.SortFunc(roots, func(a, b SyncMetricsOutputRoot) int {
-		switch {
-		case a.Bytes > b.Bytes:
-			return -1
-		case a.Bytes < b.Bytes:
-			return 1
-		}
-		if n := cmp.Compare(a.Kind, b.Kind); n != 0 {
-			return n
-		}
-		if n := cmp.Compare(a.Name, b.Name); n != 0 {
-			return n
-		}
-		return cmp.Compare(a.Subject, b.Subject)
+		return cmp.Or(
+			cmp.Compare(b.Bytes, a.Bytes),
+			cmp.Compare(a.Kind, b.Kind),
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.Subject, b.Subject),
+		)
 	})
 }
 
