@@ -43,10 +43,7 @@ func WithAppScopedRelationshipMutationAuth(ctx context.Context, appID, action st
 }
 
 func AppScopedRelationshipMutationFromContext(ctx context.Context) (appID, action, targetSubjectKind, targetSubjectID string, ok bool) {
-	value, ok := ctx.Value(appScopedRelationshipMutationKey{}).(appScopedRelationshipMutationContext)
-	if !ok {
-		return "", "", "", "", false
-	}
+	value, _ := ctx.Value(appScopedRelationshipMutationKey{}).(appScopedRelationshipMutationContext)
 	appID = strings.TrimSpace(value.appID)
 	action = strings.TrimSpace(value.action)
 	if appID == "" || action == "" {
@@ -56,13 +53,10 @@ func AppScopedRelationshipMutationFromContext(ctx context.Context) (appID, actio
 }
 
 func relationshipTupleTargetSubjectMetric(tuple *proto.RelationshipTuple) (kind, id string) {
-	if tuple == nil {
-		return "", ""
-	}
 	switch target := tuple.GetTarget().GetKind().(type) {
 	case *proto.RelationshipTarget_Subject:
 		subjectID := strings.TrimSpace(target.Subject.GetId())
-		if subjectKind, parsedID, ok := core.ParseSubjectID(subjectID); ok && parsedID != "" {
+		if subjectKind, parsedID, ok := core.ParseSubjectID(subjectID); ok {
 			return subjectKind, parsedID
 		}
 		if subjectID != "" {

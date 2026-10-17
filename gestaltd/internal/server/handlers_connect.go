@@ -253,7 +253,7 @@ func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided 
 		if def.From != "" {
 			continue
 		}
-		if v, ok := provided[name]; ok && v != "" {
+		if v := provided[name]; v != "" {
 			if !safeParamValue.MatchString(v) {
 				return nil, fmt.Errorf("connection parameter %q contains invalid characters (allowed: letters, digits, hyphens, dots, underscores)", name)
 			}

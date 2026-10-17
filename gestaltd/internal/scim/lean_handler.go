@@ -415,10 +415,8 @@ func projectObject(object any, attributes, excluded string) any {
 	if !ok {
 		return object
 	}
-	resourceType := ""
-	if meta, ok := value["meta"].(map[string]any); ok {
-		resourceType, _ = meta["resourceType"].(string)
-	}
+	meta, _ := value["meta"].(map[string]any)
+	resourceType, _ := meta["resourceType"].(string)
 	if strings.TrimSpace(attributes) != "" {
 		selected := map[string]map[string]struct{}{"schemas": nil, "id": nil}
 		for _, raw := range strings.Split(attributes, ",") {
