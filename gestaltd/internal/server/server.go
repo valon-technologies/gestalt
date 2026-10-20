@@ -68,9 +68,12 @@ type MountedUI struct {
 	// <mount>/theme/ respectively. Both are optional.
 	ThemeStylesheet string
 	ThemeAssetsDir  string
-	IsDev           bool
-	AppLevelAuth    bool
-	builtInAdmin    bool
+	// ConnectSrc lists extra validated origins appended to the
+	// Content-Security-Policy connect-src directive for this mount only.
+	ConnectSrc   []string
+	IsDev        bool
+	AppLevelAuth bool
+	builtInAdmin bool
 }
 
 type MountedHTTPBinding struct {

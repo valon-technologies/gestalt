@@ -582,10 +582,20 @@ type ProviderEntry struct {
 // AppStaticConfig configures a packaged app's static bundle mount.
 // TODO(hughhan1): static.theme is a deployer workaround and should not be supported long-term.
 type AppStaticConfig struct {
-	Mount         string         `yaml:"mount,omitempty"`
-	Theme         *UIThemeConfig `yaml:"theme,omitempty"`
-	Public        bool           `yaml:"public,omitempty"`
-	CatalogHidden bool           `yaml:"catalogHidden,omitempty"`
+	Mount                 string                          `yaml:"mount,omitempty"`
+	Theme                 *UIThemeConfig                  `yaml:"theme,omitempty"`
+	Public                bool                            `yaml:"public,omitempty"`
+	CatalogHidden         bool                            `yaml:"catalogHidden,omitempty"`
+	ContentSecurityPolicy *AppStaticContentSecurityPolicy `yaml:"contentSecurityPolicy,omitempty"`
+}
+
+// AppStaticContentSecurityPolicy extends the Content-Security-Policy that
+// Gestalt sends with one app's static pages. It is operator config, so an app
+// package cannot widen its own policy.
+type AppStaticContentSecurityPolicy struct {
+	// ConnectSrc lists extra https:// or wss:// origins the app's pages may
+	// fetch from, such as a browser monitoring SDK's intake host.
+	ConnectSrc []string `yaml:"connectSrc,omitempty"`
 }
 
 type providerEntryFields ProviderEntry

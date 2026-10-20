@@ -126,14 +126,19 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		}
 		inner = mountedUITelemetryHandler(mounted, inner)
-		return withDevContentSecurityPolicy(s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
+		policy := policyWithConnectSrc(devContentSecurityPolicy, mounted.ConnectSrc)
+		return withContentSecurityPolicy(policy, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
 	inner = mountedUIThemeHandler(mounted, inner)
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
 	inner = mountedUITelemetryHandler(mounted, inner)
-	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
+	handler := s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
+	if len(mounted.ConnectSrc) == 0 {
+		return handler
+	}
+	return withContentSecurityPolicy(policyWithConnectSrc(contentSecurityPolicy, mounted.ConnectSrc), handler)
 }
 
 func (s *Server) adminAPIAuthTarget() MountedUI {

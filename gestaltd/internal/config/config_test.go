@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -2323,6 +2324,74 @@ server:
 		}
 		if got := theme.AssetsDir; got != "./theme-assets" {
 			t.Fatalf(`theme.assetsDir = %q, want %q`, got, "./theme-assets")
+		}
+	})
+
+	staticConnectSrcConfig := func(origin string) string {
+		return `
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/indexeddb/sqlite
+apps:
+  roadmap:
+    source:
+      path: ./app/manifest.yaml
+    static:
+      mount: /roadmap
+      contentSecurityPolicy:
+        connectSrc:
+          - ` + strconv.Quote(origin) + `
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`
+	}
+
+	t.Run("static connectSrc origins are normalized", func(t *testing.T) {
+		t.Parallel()
+
+		for raw, want := range map[string]string{
+			"https://Browser-Intake.Example.com/": "https://browser-intake.example.com",
+			" wss://events.example.com:8443 ":     "wss://events.example.com:8443",
+		} {
+			cfg, err := Load(mustWriteConfigFile(t, staticConnectSrcConfig(raw)))
+			if err != nil {
+				t.Fatalf("Load(%q): %v", raw, err)
+			}
+			got := cfg.Apps["roadmap"].Static.ContentSecurityPolicy.ConnectSrc
+			if len(got) != 1 || got[0] != want {
+				t.Fatalf("connectSrc for %q = %q, want [%q]", raw, got, want)
+			}
+		}
+	})
+
+	t.Run("static connectSrc rejects values that are not a single origin", func(t *testing.T) {
+		t.Parallel()
+
+		for _, raw := range []string{
+			"",
+			"*",
+			"https:",
+			"example.com",
+			"http://example.com",
+			"https://*.example.com",
+			"https://example.com/collect",
+			"https://example.com?x=1",
+			"https://user@example.com",
+			"'unsafe-inline'",
+			"https://example.com; script-src *",
+			"https://a.example.com https://b.example.com",
+		} {
+			_, err := Load(mustWriteConfigFile(t, staticConnectSrcConfig(raw)))
+			if err == nil {
+				t.Fatalf("Load(%q) succeeded, want validation error", raw)
+			}
+			if !strings.Contains(err.Error(), "apps.roadmap.static.contentSecurityPolicy.connectSrc[0]") {
+				t.Fatalf("Load(%q) error = %v, want connectSrc validation error", raw, err)
+			}
 		}
 	})
 

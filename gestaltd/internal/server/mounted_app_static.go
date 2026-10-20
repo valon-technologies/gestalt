@@ -47,6 +47,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				Handler:             handler,
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				ConnectSrc:          staticConnectSrc(entry.Static),
 				IsDev:               true,
 			})
 			continue
@@ -61,6 +62,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				Handler:             registryAppStaticHandler(name, mount, entry, providers, artifactsDir, runtimeState),
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				ConnectSrc:          staticConnectSrc(entry.Static),
 			})
 			continue
 		}
@@ -87,10 +89,20 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 			Handler:             handler,
 			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+			ConnectSrc:          staticConnectSrc(entry.Static),
 		})
 	}
 
 	return mounted, nil
+}
+
+// staticConnectSrc returns the operator-configured connect-src origins for an
+// app's static mount, already validated by config canonicalization.
+func staticConnectSrc(static *config.AppStaticConfig) []string {
+	if static == nil || static.ContentSecurityPolicy == nil {
+		return nil
+	}
+	return append([]string(nil), static.ContentSecurityPolicy.ConnectSrc...)
 }
 
 func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], artifactsDir string, runtimeState AppRuntimeState) http.Handler {

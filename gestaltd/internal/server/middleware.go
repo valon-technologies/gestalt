@@ -108,11 +108,29 @@ const devContentSecurityPolicy = "default-src 'self'; " +
 	"form-action 'self'; " +
 	"frame-ancestors 'self'"
 
-func withDevContentSecurityPolicy(next http.Handler) http.Handler {
+// withContentSecurityPolicy replaces the policy set by securityHeadersMiddleware
+// for one handler, such as a mounted UI that needs a wider connect-src.
+func withContentSecurityPolicy(policy string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", devContentSecurityPolicy)
+		w.Header().Set("Content-Security-Policy", policy)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// policyWithConnectSrc appends origins to policy's connect-src directive. The
+// origins come from config validation, which only admits single https:// or
+// wss:// origins, so they cannot add or alter other directives.
+func policyWithConnectSrc(policy string, origins []string) string {
+	if len(origins) == 0 {
+		return policy
+	}
+	directives := strings.Split(policy, "; ")
+	for i, directive := range directives {
+		if strings.HasPrefix(directive, "connect-src ") {
+			directives[i] = directive + " " + strings.Join(origins, " ")
+		}
+	}
+	return strings.Join(directives, "; ")
 }
 
 func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {

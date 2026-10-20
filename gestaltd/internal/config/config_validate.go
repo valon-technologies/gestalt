@@ -52,6 +52,9 @@ func CanonicalizeStructure(cfg *Config) error {
 	if err := normalizeAppStaticMounts(cfg); err != nil {
 		return err
 	}
+	if err := normalizeAppStaticConnectSrc(cfg); err != nil {
+		return err
+	}
 	return canonicalizeRemotes(cfg)
 }
 
@@ -2813,6 +2816,48 @@ func normalizeAppStaticMounts(cfg *Config) error {
 		entry.Static.Mount = normalized
 	}
 	return nil
+}
+
+func normalizeAppStaticConnectSrc(cfg *Config) error {
+	if cfg == nil || len(cfg.Apps) == 0 {
+		return nil
+	}
+	for name, entry := range cfg.Apps {
+		if entry == nil || entry.Static == nil || entry.Static.ContentSecurityPolicy == nil {
+			continue
+		}
+		sources := entry.Static.ContentSecurityPolicy.ConnectSrc
+		for i, raw := range sources {
+			origin, err := normalizeConnectSrcOrigin(raw)
+			if err != nil {
+				return fmt.Errorf("config validation: apps.%s.static.contentSecurityPolicy.connectSrc[%d]: %w", name, i, err)
+			}
+			sources[i] = origin
+		}
+	}
+	return nil
+}
+
+// normalizeConnectSrcOrigin accepts exactly one https:// or wss:// origin.
+// Wildcards, paths, CSP keywords, and separators are rejected so a config value
+// can only add one host and cannot inject another directive into the header.
+func normalizeConnectSrcOrigin(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	invalid := fmt.Errorf("%q must be an https:// or wss:// origin without a path, query, or wildcard", raw)
+	if value == "" || strings.ContainsAny(value, " \t;,'\"*") {
+		return "", invalid
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Opaque != "" || parsed.User != nil || parsed.Hostname() == "" {
+		return "", invalid
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "wss" {
+		return "", invalid
+	}
+	if (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return "", invalid
+	}
+	return parsed.Scheme + "://" + strings.ToLower(parsed.Host), nil
 }
 
 func validateStaticMountCollisions(cfg *Config) error {

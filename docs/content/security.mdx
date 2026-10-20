@@ -42,10 +42,17 @@ The resolved token is validated through the identity provider's `Introspect` end
 
 | Header | Value |
 | --- | --- |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'` |
 | `X-Content-Type-Options` | `nosniff` |
-| `X-Frame-Options` | `DENY` |
+| `X-Frame-Options` | `SAMEORIGIN` |
 | `Strict-Transport-Security` | `max-age=63072000; includeSubDomains` (HTTPS only) |
+
+An operator can add origins to `connect-src` for one app's static pages with
+[`apps.<name>.static.contentSecurityPolicy.connectSrc`](/reference/config-file#appsnamestatic),
+for example so a browser monitoring SDK can reach its intake host. Each entry must be a
+single `https://` or `wss://` origin, and the rest of the policy is unchanged. The setting
+lives in deployment config rather than the app package, so an app cannot widen its own
+policy.
 
 ## Provider Isolation
 

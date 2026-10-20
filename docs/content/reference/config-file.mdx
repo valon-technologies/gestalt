@@ -1265,6 +1265,7 @@ apps:
 | `static.public` | `false` | When `true`, serve static assets and theme endpoints without platform authentication or static-mount authorization. API routes for the app still require a session. |
 | `static.theme.stylesheet` | | Optional path to a CSS file served at `{mount}/theme.css` relative to the config directory. |
 | `static.theme.assetsDir` | | Optional directory served under `{mount}/theme/`. |
+| `static.contentSecurityPolicy.connectSrc` | | Optional list of extra `https://` or `wss://` origins appended to the `connect-src` directive of the [Content-Security-Policy](/security#security-headers) for this mount's pages only, for example a browser monitoring SDK's intake host. Each entry must be a single origin with no path, query, or wildcard. Other mounts and API routes keep the default policy. |
 
 When `static` is set, the prepared app archive must include a `static/`
 directory with `index.html`. Omit `static` for API-only apps.
