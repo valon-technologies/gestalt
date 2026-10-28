@@ -88,7 +88,7 @@ jobs:
           targets: ${{ matrix.platform.target }}
 
       - name: Cache cargo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: |
             ~/.cargo/bin/
@@ -191,7 +191,7 @@ jobs:
 
       - name: Upload packaged artifact
         if: ${{ inputs.package }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
           path: |
@@ -201,7 +201,7 @@ jobs:
 
       - name: Upload binary (Unix)
         if: ${{ !inputs.package && !matrix.platform.windows }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
           path: ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}
@@ -209,7 +209,7 @@ jobs:
 
       - name: Upload binary (Windows)
         if: ${{ !inputs.package && matrix.platform.windows }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ${{ inputs.artifact-prefix }}-${{ matrix.platform.suffix }}
           path: ${{ inputs.working-directory }}/target/${{ matrix.platform.target }}/release/${{ inputs.binary-name }}.exe
