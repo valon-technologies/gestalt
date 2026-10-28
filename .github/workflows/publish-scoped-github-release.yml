@@ -54,7 +54,7 @@ jobs:
           fetch-depth: 0
       - name: Download release artifacts
         if: ${{ inputs.download-artifact-pattern != '' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           pattern: ${{ inputs.download-artifact-pattern }}
           path: release
@@ -80,7 +80,7 @@ jobs:
             release-notes.md
       - name: Create GitHub Release with assets
         if: ${{ inputs.download-artifact-pattern != '' }}
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: release/*
           name: ${{ steps.meta.outputs.release_name }}
@@ -89,7 +89,7 @@ jobs:
           prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
       - name: Create GitHub Release
         if: ${{ inputs.download-artifact-pattern == '' }}
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           name: ${{ steps.meta.outputs.release_name }}
           body_path: release-notes.md
