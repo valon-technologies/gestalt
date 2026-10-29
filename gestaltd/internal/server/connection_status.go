@@ -248,7 +248,7 @@ func summarizeReconnectRequiredConnectionStatuses(connections []connectionDefInf
 			Disconnectable:  invalidStatus.disconnectable,
 			Connected:       true,
 			StatusCode:      "reconnect_required",
-			StatusReason:    "one or more stored credentials are expired and refresh has failed; reconnect them",
+			StatusReason:    "one or more stored credentials are expired and cannot be refreshed; reconnect them",
 		}, true
 	}
 	return statusFromConnectionInfo(invalidStatus), true
@@ -324,7 +324,7 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 			status.Connected = false
 			status.Actions = reconnectStatusActions(instances, connectable, true, false)
 			status.StatusCode = "reconnect_required"
-			status.StatusReason = "stored credential is expired and refresh has failed; reconnect it"
+			status.StatusReason = "stored credential is expired and cannot be refreshed; reconnect it"
 		case !chosen:
 			// Accounts exist as credential material, but none is chosen — not connected.
 			status.Status = connectionStatusNeedsInstanceSelection
@@ -350,7 +350,7 @@ func subjectConnectionStatus(instances []instanceInfo, connectable bool, ownerKi
 			status.Connected = true
 			status.Actions = reconnectStatusActions(instances, connectable, true, connectable)
 			status.StatusCode = "reconnect_required"
-			status.StatusReason = "one or more stored credentials are expired and refresh has failed; reconnect them"
+			status.StatusReason = "one or more stored credentials are expired and cannot be refreshed; reconnect them"
 		}
 	}
 	return status
