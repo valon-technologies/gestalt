@@ -301,7 +301,13 @@ func TestDialUnixSocketReceivesLargeProviderResponse(t *testing.T) {
 	// reading the 3,312,204-byte Bradley workbook after encoding and wrapping.
 	const providerResponseBodyBytes = 4_438_910
 
-	socket := filepath.Join(t.TempDir(), "app.sock")
+	// t.TempDir is too long for a unix socket path on macOS (104 bytes).
+	root, err := os.MkdirTemp("/tmp", "gstp-large-response-test-")
+	if err != nil {
+		t.Fatalf("create short temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	socket := filepath.Join(root, "app.sock")
 	lis, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen unix socket: %v", err)
