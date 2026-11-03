@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -62,6 +63,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateServerListeners(cfg.Server); err != nil {
+		return err
+	}
+	if err := validateManagedSecretsConfig(cfg.Server.ManagedSecrets); err != nil {
 		return err
 	}
 	if err := validateAdminConfig(cfg); err != nil {
@@ -3018,6 +3022,19 @@ func validateEgress(cfg *EgressConfig) error {
 	case "", "allow", "deny":
 	default:
 		return fmt.Errorf("config validation: egress.default_action must be \"allow\" or \"deny\", got %q", cfg.DefaultAction)
+	}
+	return nil
+}
+
+var managedSecretsKMSKeyPattern = regexp.MustCompile(`^projects/[^/]+/locations/[^/]+/keyRings/[^/]+/cryptoKeys/[^/]+$`)
+
+func validateManagedSecretsConfig(cfg ManagedSecretsConfig) error {
+	key := strings.TrimSpace(cfg.KMSKey)
+	if key == "" {
+		return nil
+	}
+	if !managedSecretsKMSKeyPattern.MatchString(key) {
+		return fmt.Errorf("config validation: server.managedSecrets.kmsKey must be a Cloud KMS crypto key name like projects/PROJECT/locations/LOCATION/keyRings/RING/cryptoKeys/KEY (not a key version)")
 	}
 	return nil
 }

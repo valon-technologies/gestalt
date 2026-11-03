@@ -2007,23 +2007,35 @@ type UserLookupConfig struct {
 	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
 }
 
+// ManagedSecretsConfig configures encryption for secrets written through
+// `gestaltd secrets create|rotate` and the managed-secrets admin API.
+type ManagedSecretsConfig struct {
+	// KMSKey is the Cloud KMS crypto key resource name used to encrypt managed
+	// secret values, e.g. projects/P/locations/L/keyRings/R/cryptoKeys/K. It
+	// must be the same key the relationaldb secrets provider is configured with
+	// (its `kmsKey`), because that provider decrypts what gestaltd encrypts.
+	// Unset disables managed secret writes (the admin API returns 503).
+	KMSKey string `yaml:"kmsKey,omitempty"`
+}
+
 type ServerConfig struct {
-	Public        ListenerConfig           `yaml:"public"`
-	Management    ManagementListenerConfig `yaml:"management"`
-	BaseURL       string                   `yaml:"baseUrl"`
-	EncryptionKey string                   `yaml:"encryptionKey"`
-	ArtifactsDir  string                   `yaml:"artifactsDir"`
-	Remote        string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
-	RemoteToken   string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
-	Remotes       map[string]*RemoteConfig `yaml:"remotes,omitempty"`
-	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
-	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`
-	Runtime       ServerRuntimeConfig      `yaml:"runtime,omitempty"`
-	Egress        EgressConfig             `yaml:"egress,omitempty"`
-	Admin         AdminConfig              `yaml:"admin,omitempty"`
-	UserLookup    UserLookupConfig         `yaml:"userLookup,omitempty"`
-	AppRegistry   ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
-	AutoActivate  *bool                    `yaml:"autoActivate,omitempty"`
+	Public         ListenerConfig           `yaml:"public"`
+	Management     ManagementListenerConfig `yaml:"management"`
+	BaseURL        string                   `yaml:"baseUrl"`
+	EncryptionKey  string                   `yaml:"encryptionKey"`
+	ArtifactsDir   string                   `yaml:"artifactsDir"`
+	Remote         string                   `yaml:"remote,omitempty" json:"remote,omitempty"`
+	RemoteToken    string                   `yaml:"remoteToken,omitempty" json:"remoteToken,omitempty"`
+	Remotes        map[string]*RemoteConfig `yaml:"remotes,omitempty"`
+	Providers      ServerProvidersConfig    `yaml:"providers,omitempty"`
+	Agent          ServerAgentConfig        `yaml:"agent,omitempty"`
+	Runtime        ServerRuntimeConfig      `yaml:"runtime,omitempty"`
+	Egress         EgressConfig             `yaml:"egress,omitempty"`
+	Admin          AdminConfig              `yaml:"admin,omitempty"`
+	UserLookup     UserLookupConfig         `yaml:"userLookup,omitempty"`
+	ManagedSecrets ManagedSecretsConfig     `yaml:"managedSecrets,omitempty"`
+	AppRegistry    ServerAppRegistryConfig  `yaml:"appRegistry,omitempty"`
+	AutoActivate   *bool                    `yaml:"autoActivate,omitempty"`
 	// PromoteSharedStateOnActivate gates whether POST /activate may promote
 	// shared gestaltd source-version and rollout coordination state. When
 	// false, /activate only prepares local providers; POST /promote performs
