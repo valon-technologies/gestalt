@@ -26,6 +26,7 @@ func (f *fakeKMS) Encrypt(_ context.Context, key string, req *cloudkms.EncryptRe
 }
 
 func TestKMSManagedSecretCipherBindsNameAsAAD(t *testing.T) {
+	t.Parallel()
 	fake := &fakeKMS{}
 	out, err := newKMSManagedSecretCipher(testKMSKey, fake).Encrypt(context.Background(), "my-secret", []byte("value"))
 	if err != nil {
@@ -46,6 +47,7 @@ func TestKMSManagedSecretCipherBindsNameAsAAD(t *testing.T) {
 }
 
 func TestKMSManagedSecretCipherPropagatesErrors(t *testing.T) {
+	t.Parallel()
 	fake := &fakeKMS{err: errors.New("denied")}
 	if _, err := newKMSManagedSecretCipher(testKMSKey, fake).Encrypt(context.Background(), "n", []byte("v")); err == nil {
 		t.Fatal("expected error")
@@ -53,6 +55,7 @@ func TestKMSManagedSecretCipherPropagatesErrors(t *testing.T) {
 }
 
 func TestValidateManagedSecretKMSKey(t *testing.T) {
+	t.Parallel()
 	if err := ValidateManagedSecretKMSKey(testKMSKey); err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -70,7 +71,7 @@ func newKMSManagedSecretCipher(kmsKey string, enc kmsEncryptor) ManagedSecretCip
 			return nil, fmt.Errorf("decode Cloud KMS ciphertext: %w", err)
 		}
 		if len(ciphertext) == 0 {
-			return nil, fmt.Errorf("Cloud KMS returned empty ciphertext")
+			return nil, errors.New("cloud KMS returned empty ciphertext")
 		}
 		return ciphertext, nil
 	})

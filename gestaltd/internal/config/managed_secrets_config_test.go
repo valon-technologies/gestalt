@@ -3,6 +3,7 @@ package config
 import "testing"
 
 func TestValidateManagedSecretsConfig(t *testing.T) {
+	t.Parallel()
 	ok := "projects/p/locations/us-east1/keyRings/r/cryptoKeys/k"
 	for _, key := range []string{"", ok} {
 		if err := validateManagedSecretsConfig(ManagedSecretsConfig{KMSKey: key}); err != nil {
