@@ -361,7 +361,7 @@ func groupInstallationsByApp(known []*core.AppInstallation) map[string][]*core.A
 			if !left.UpdatedAt.Equal(right.UpdatedAt) {
 				return left.UpdatedAt.Before(right.UpdatedAt)
 			}
-			return left.Version < right.Version
+			return coredata.CompareInstallationVersions(left.Version, right.Version) < 0
 		})
 	}
 	return byApp

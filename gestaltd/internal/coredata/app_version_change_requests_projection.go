@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -210,11 +211,28 @@ func LatestKnownInstallation(installations []*core.AppInstallation) *core.AppIns
 		if latest == nil ||
 			installation.UpdatedAt.After(latest.UpdatedAt) ||
 			(installation.UpdatedAt.Equal(latest.UpdatedAt) &&
-				strings.TrimSpace(installation.Version) > strings.TrimSpace(latest.Version)) {
+				CompareInstallationVersions(installation.Version, latest.Version) > 0) {
 			latest = installation
 		}
 	}
 	return latest
+}
+
+// CompareInstallationVersions orders two installation versions for timestamp
+// tie-breaks. A plain string comparison ranks 1.9.0 above 1.10.0 and a
+// prerelease above its release, so versions that are both valid semver use
+// semver precedence. Anything else, or semver-equal versions, falls back to
+// the string comparison so the order stays deterministic.
+func CompareInstallationVersions(left, right string) int {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	leftSemver, rightSemver := "v"+left, "v"+right
+	if semver.IsValid(leftSemver) && semver.IsValid(rightSemver) {
+		if cmp := semver.Compare(leftSemver, rightSemver); cmp != 0 {
+			return cmp
+		}
+	}
+	return strings.Compare(left, right)
 }
 
 func stringMeta(metadata map[string]any, key string) string {
