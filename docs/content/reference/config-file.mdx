@@ -302,6 +302,7 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in admin on split public/management deployments. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
+| `managedSecrets.kmsKey` | | Cloud KMS crypto key (`projects/P/locations/L/keyRings/R/cryptoKeys/K`) used to encrypt values written by `gestaltd secrets create` / `rotate`. Must match the relationaldb secrets provider's `kmsKey`. Unset disables managed secret writes (the admin API returns 503). |
 | `artifactsDir` | config directory | Directory for prepared artifacts produced by `gestaltd sync --locked`. |
 | `agent.defaultToolNarrowingThreshold` | `200` | Visible catalog size above which implicit default agent catalog grants may be narrowed to exactly mentioned providers. Set `0` to narrow whenever a matching provider has any visible tools. |
 | `providers.audit` / `providers.identity` / `providers.authorization` / `providers.indexeddb` / `providers.secrets` / `providers.telemetry` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |

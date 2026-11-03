@@ -220,6 +220,14 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 	if err != nil {
 		return err
 	}
+	if kmsKey := strings.TrimSpace(cfg.Server.ManagedSecrets.KMSKey); kmsKey != "" {
+		cipher, err := NewKMSManagedSecretCipher(ctx, kmsKey)
+		if err != nil {
+			return err
+		}
+		baseConfig.ManagedSecretCipher = cipher
+		slog.Info("managed secrets encryption enabled", "kmsKey", kmsKey)
+	}
 	baseConfig.AppRegistryPublish = publishService
 	baseConfig.AppRegistryPublishAllowedApps = cfg.Server.AppRegistry.Publish.AllowedAppSet()
 	result.RegistryAppStartup = registryAppStartup(cfg, result, appRegistryReader)
