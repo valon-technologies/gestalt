@@ -63,6 +63,7 @@ path configuration and migrating registered webhook URLs from the removed aliase
 | `GET` | `/api/v1/apps` | List apps, aggregate status, icons, and nested connection metadata. Authentication types, instances, credential fields, and connection parameter hints are returned per item in `connections[]`. |
 | `DELETE` | `/api/v1/apps/{name}` | Disconnect a app. Use `?_connection=...` and `?_instance=...` to target one stored connection. |
 | `GET` | `/api/v1/apps/{name}/operations` | List operations for one app. Supports `_connection` and `_instance` selectors. |
+| `GET` | `/api/v1/apps/{name}/admin/check` | App admins only. Lists the app's MCP tools live with the caller's connection and reports, for each MCP upstream, the advertised `tools`, `exposed` tool-to-operation mappings, `unknownAllowedOperations` keys that match no tool, `unexposedTools`, and any `error` listing tools. `ok` is false when any key is unknown or an upstream failed. Returns `400` for apps without an MCP surface. Supports `_connection` and `_instance` selectors. |
 | `GET` or `POST` | `/api/v1/{app}/{operation}` | Invoke a app operation. Supports `_connection` and `_instance`. |
 
 `GET /api/v1/apps` returns one object per app. Use top-level `status`,

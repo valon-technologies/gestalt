@@ -109,6 +109,19 @@ pub enum ConfigCommands {
 
 #[derive(Subcommand)]
 pub enum AppCommands {
+    /// Check an MCP app's allowedOperations against the tools its server advertises (app admins)
+    Check {
+        /// App name
+        name: String,
+
+        /// List tools using this named connection
+        #[arg(long)]
+        connection: Option<String>,
+
+        /// List tools using this stored connection instance
+        #[arg(long)]
+        instance: Option<String>,
+    },
     /// Connect an app via OAuth or interactive manual auth
     Connect {
         /// App name (e.g., github, slack)

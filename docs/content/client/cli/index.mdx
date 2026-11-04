@@ -27,6 +27,7 @@ asIndexPage: true
 | `gestalt app disconnect NAME` | Disconnect a app, removing stored credentials. |
 | `gestalt app invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt app describe NAME OPERATION` | Show one operation's parameter contract. |
+| `gestalt app check NAME` | Check an MCP app's `allowedOperations` against the tools its server advertises. Requires app admin. See [Checking `allowedOperations` for MCP surfaces](/providers/apps#checking-allowedoperations-for-mcp-surfaces). |
 | `gestalt workflow events deliver ...` | Deliver an event into the workflow system. |
 | `gestalt workflow runs ...` | List, inspect, and cancel workflow runs. |
 | `gestalt agent` | Start or resume an interactive agent session. |
