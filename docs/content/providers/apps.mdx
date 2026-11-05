@@ -124,6 +124,28 @@ each decision; it is not a caller-authorization bypass. Caller identity is
 trusted only across host-managed provider hops, so a request routed through
 another Gestalt deployment's public API fails closed.
 
+#### Checking `allowedOperations` for MCP surfaces
+
+An MCP surface's tools are listed live from the upstream server, so Gestalt
+cannot check `allowedOperations` keys against them at startup. If a key names a
+tool the server does not advertise (a typo, or a tool the vendor renamed),
+listing the app's operations fails for every user.
+
+After deploying, an app admin can run:
+
+```sh
+gestalt app check linear
+```
+
+The command lists the MCP server's tools with your connection and reports any
+`allowedOperations` key that matches no tool (with a "did you mean"
+suggestion), the name each allowed tool is exposed as, and the tools that
+`allowedOperations` hides. It exits non-zero when a key matches no tool or the
+MCP server can't be reached, so it can gate a deploy pipeline. Pass
+`--connection` or `--instance` to list tools with a specific connection, and
+`--format json` for machine-readable output. The command calls
+`GET /api/v1/apps/{app}/admin/check`.
+
 ### `allowedHosts`
 
 <ActiveDevelopmentCallout><code>allowedHosts</code></ActiveDevelopmentCallout>

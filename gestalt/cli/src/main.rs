@@ -170,6 +170,17 @@ fn dispatch_app_command(
     let client = ApiClient::from_env(url)?;
     match command {
         AppCommands::List => commands::apps::list(&client, format),
+        AppCommands::Check {
+            name,
+            connection,
+            instance,
+        } => commands::check::check(
+            &client,
+            &name,
+            connection.as_deref(),
+            instance.as_deref(),
+            format,
+        ),
         AppCommands::Connect {
             name,
             connection,
