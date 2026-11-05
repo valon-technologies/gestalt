@@ -17,6 +17,10 @@ const (
 	connectionStatusUnavailable            = "unavailable"
 	connectionStatusUnknown                = "unknown"
 
+	// unavailableReasonNotInstalled: a registry-only app has no version
+	// running on this server (none installed yet, or between versions).
+	unavailableReasonNotInstalled = "not_installed"
+
 	credentialStateNotRequired = "not_required"
 	credentialStateConnected   = "connected"
 	credentialStateConfigured  = "configured"
@@ -488,4 +492,24 @@ func dedupeInstancesByAccount(instances []instanceInfo, preferred string) []inst
 		out = append(out, instances[index])
 	}
 	return out
+}
+
+// markNotInstalled reports a registry-only app with no running version as
+// unavailable rather than needing a connection: nothing on this server can
+// serve it or accept credentials for it until a version starts, whatever
+// connections its config declares. Connection rows keep their schema but
+// lose their actions.
+func markNotInstalled(info *integrationInfo) {
+	info.Status = connectionStatusUnavailable
+	info.UnavailableReason = unavailableReasonNotInstalled
+	info.CredentialState = credentialStateUnknown
+	info.HealthState = healthStateUnknown
+	info.Actions = []string{}
+	info.Connected = false
+	for i := range info.Connections {
+		conn := &info.Connections[i]
+		conn.Status = connectionStatusUnavailable
+		conn.Actions = []string{}
+		conn.Connected = false
+	}
 }

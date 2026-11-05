@@ -119,6 +119,9 @@ type integrationInfo struct {
 	Actions         []string            `json:"actions"`
 	// Connected is true only when this subject has a chosen account.
 	Connected bool `json:"connected"`
+	// UnavailableReason says why Status is "unavailable", when the server
+	// knows. See unavailableReasonNotInstalled.
+	UnavailableReason string `json:"unavailableReason,omitempty"`
 }
 
 type appPromptInfo struct {

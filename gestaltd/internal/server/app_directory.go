@@ -105,6 +105,8 @@ type appConnectionStatus struct {
 	Actions         []string               `json:"actions"`
 	Connected       bool                   `json:"connected"`
 	Connections     []connectionStatusView `json:"connections"`
+	// UnavailableReason mirrors integrationInfo.UnavailableReason.
+	UnavailableReason string `json:"unavailableReason,omitempty"`
 }
 
 type connectionStatusView struct {
@@ -254,6 +256,8 @@ func appConnectionStatusesFrom(infos []integrationInfo) []appConnectionStatus {
 			Actions:         actions,
 			Connected:       info.Connected,
 			Connections:     connectionStatusViews(info.Connections),
+
+			UnavailableReason: info.UnavailableReason,
 		})
 	}
 	return out
@@ -705,6 +709,9 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 		info.Connections = s.connectionInfosFromAdvertised(entry.Name, entry.Advertised, instances, preferences, p)
 		authTypes := resolvedAuthTypesFromConnections(info.Connections)
 		s.applyIntegrationConnectionStatus(&info, entry.ConnectionMode, instances, authTypes, p)
+		if !entry.Loaded {
+			markNotInstalled(&info)
+		}
 		out = append(out, info)
 	}
 	return out, nil

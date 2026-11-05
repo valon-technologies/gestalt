@@ -140,7 +140,7 @@ apps:
 
 Because no package exists during config loading, validation must not require a resolved provider manifest, operation catalog, or static root for a registry-only app.
 
-Until a version starts, a registry-only app advertises only the connections and metadata its YAML entry declares. When the app restarter starts a version, it publishes the mounted entry, with its manifest connections, display metadata, and the connection routing derived from them, to an overlay (`bootstrap.AppDefinitions`). The server, invocation broker, MCP handler, and workflow and agent managers consult that overlay before their boot-time maps. A replacement version republishes the overlay, and stopping the app clears it.
+Until a version starts, a registry-only app advertises only the connections and metadata its YAML entry declares. When the app restarter starts a version, it publishes the mounted entry, with its manifest connections, display metadata, and the connection routing derived from them, to an overlay (`bootstrap.AppDefinitions`). The server, invocation broker, MCP handler, and workflow and agent managers consult that overlay before their boot-time maps. A replacement version republishes the overlay, and stopping the app clears it. While no version is running, the app directory (`/api/v1/apps`, `/api/v1/me/app-connections`) reports the app with `status: unavailable` and `unavailableReason: not_installed`, with no connect actions, so clients do not offer a connection the server cannot accept.
 
 `gestalt lock` and `gestalt sync` skip snapshot resolution and artifact download for registry-only apps. Runtime behavior — bootstrap, `add`, and `upgrade` — is documented in [lifecycle.md](../operations/lifecycle.md).
 
