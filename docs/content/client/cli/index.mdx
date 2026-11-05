@@ -23,7 +23,7 @@ asIndexPage: true
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
 | `gestalt app list` | List apps from the server. |
-| `gestalt app connect NAME` | Connect a app through OAuth or interactive manual authentication. |
+| `gestalt app connect NAME` | Connect an app through OAuth or manual (credential) authentication. |
 | `gestalt app disconnect NAME` | Disconnect a app, removing stored credentials. |
 | `gestalt app invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt app describe NAME OPERATION` | Show one operation's parameter contract. |
@@ -63,12 +63,35 @@ The CLI searches the current directory and then parent directories until it find
 
 ## App connect flags
 
-`gestalt app connect NAME` accepts `--connection`, `--instance`, and
-`--service-account-id`. Pass `--service-account-id` to store the connected
-external credential under a service account subject instead of the invoking
-user, after server-side authorization. When the selected connection uses manual
-authentication instead of OAuth, the CLI prompts for the required credential
-fields and connection parameters.
+`gestalt app connect NAME` accepts `--connection`, `--instance`,
+`--service-account-id`, and `--credential`. Pass `--service-account-id` to store
+the connected external credential under a service account subject instead of the
+invoking user, after server-side authorization. When the selected connection uses
+manual authentication instead of OAuth, the CLI prompts for the required
+credential fields and connection parameters.
+
+To connect a manual-auth app without prompts, pass `--credential FIELD=VALUE`
+once per credential field, where `FIELD` is a credential field name declared by
+the connection. Use `FIELD=-` to read that field's value from stdin (one trailing
+newline is removed); prefer it over a literal value, which exposes the secret in
+shell history and process listings. At most one field may read from stdin.
+Unknown field names are rejected with the list of valid fields. Fields not
+supplied are prompted for only when stdin is a terminal and is not used for a
+value; otherwise they are an error. In that non-interactive mode the CLI also
+does not prompt for anything else: pass `--connection` when the app has more
+than one, and connection parameters take their defaults (a required parameter
+without a default is an error). `--credential` is rejected for OAuth
+connections.
+
+```sh
+printf '%s\n' "$WIDGET_API_KEY" | gestalt app connect widget_metrics --credential api_key=-
+```
+
+If `gestalt app connect` reports that the server advertised no connection
+details for an app that needs a connection, the server is not publishing that
+app's connection metadata. Ask a `gestaltd` administrator to upgrade the server
+or declare the app's connection in the deploy config; it cannot be fixed from
+the CLI.
 
 ## App disconnect flags
 

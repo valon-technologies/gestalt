@@ -48,6 +48,7 @@ fn test_connect_includes_connection_and_instance() {
         Some("workspace"),
         Some("team-a"),
         None,
+        &[],
         |_| Ok(()),
     );
 
@@ -83,6 +84,7 @@ fn test_connect_oauth_includes_service_account_id() {
         Some("workspace"),
         None,
         Some("service_account:nightly-sync"),
+        &[],
         |_| Ok(()),
     );
 
@@ -125,6 +127,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() 
         None,
         None,
         None,
+        &[],
         move |url| {
             *opened_url_handle.lock().unwrap() = Some(url.to_string());
             Ok(())
@@ -170,6 +173,7 @@ fn test_connect_uses_user_facing_app_connection_name_on_the_wire() {
         Some("app"),
         None,
         None,
+        &[],
         |_| Ok(()),
     );
 
@@ -426,6 +430,7 @@ fn test_connect_auto_selects_single_oauth_connection() {
         None,
         None,
         None,
+        &[],
         |_| Ok(()),
     );
 
@@ -551,6 +556,181 @@ fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
         .stderr(predicate::str::contains(
             "stdin closed while waiting for input",
         ));
+}
+
+const VCI_BRAIN_ADVERTISED: &str = r#"[{
+    "name":"vci-brain","displayName":"VCI Brain",
+    "connections":[{"displayName":"MCP","name":"MCP","mode":"subject","authTypes":["manual"],
+        "credentialFields":[{"name":"token","label":"VCI Brain API Token"}],
+        "status":"needs_user_connection","credentialState":"missing","actions":["connect"],
+        "credentialMode":"subject","instances":[],"connected":false}],
+    "surfaces":[{"kind":"mcp","connection":"MCP"}],
+    "status":"needs_user_connection","credentialState":"missing","actions":["connect"],"connected":false
+}]"#;
+
+#[test]
+fn test_manual_connect_reads_credential_from_stdin_as_raw_credential() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(VCI_BRAIN_ADVERTISED)
+        .create();
+    let connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"MCP","credential":"vb-s3cr3t","integration":"vci-brain"}"#.to_string(),
+    ))
+    .with_body(r#"{"status":"connected","integration":"vci-brain"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["app", "connect", "vci-brain", "--credential", "token=-"])
+        .write_stdin("vb-s3cr3t\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("VCI Brain API Token").not())
+        .stderr(predicate::str::contains("vb-s3cr3t").not())
+        .stderr(predicate::str::contains("Connected vci-brain."));
+    connect.assert();
+}
+
+#[test]
+fn test_manual_connect_mixes_literal_and_stdin_credentials_as_map() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
+                "name":"widget_metrics",
+                "connections":[{
+                    "name":"app",
+                    "authTypes":["manual"],
+                    "connectionParams":{"region":{"default":"us-east","required":true}},
+                    "credentialFields":[
+                        {"name":"api_key","label":"API key"},
+                        {"name":"workspace_id","label":"Workspace ID"}
+                    ]
+                }]
+            }]"#,
+        )
+        .create();
+    let connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"app","connectionParams":{"region":"us-east"},"credentials":{"api_key":"wm-key","workspace_id":"workspace-42"},"integration":"widget_metrics"}"#.to_string(),
+    ))
+    .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "app",
+            "connect",
+            "widget_metrics",
+            "--credential",
+            "api_key=-",
+            "--credential",
+            "workspace_id=workspace-42",
+        ])
+        .write_stdin("wm-key\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Connected widget_metrics."));
+    connect.assert();
+}
+
+#[test]
+fn test_manual_connect_with_credential_rejects_missing_fields_without_terminal() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"widget_metrics","connections":[{"name":"app","authTypes":["manual"],
+                "credentialFields":[{"name":"api_key"},{"name":"workspace_id"}]}]}]"#,
+        )
+        .create();
+    let connect = server
+        .mock(Method::POST.as_str(), "/api/v1/auth/connect-manual")
+        .expect(0)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "app",
+            "connect",
+            "widget_metrics",
+            "--credential",
+            "api_key=wm-s3cr3t",
+        ])
+        .write_stdin("workspace-42\n")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "missing credential field(s): workspace_id",
+        ))
+        .stderr(predicate::str::contains("wm-s3cr3t").not());
+    connect.assert();
+}
+
+#[test]
+fn test_connect_rejects_credential_for_oauth_connection() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"acme_crm","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
+        )
+        .create();
+    let oauth = server
+        .mock(Method::POST.as_str(), "/api/v1/auth/start-oauth")
+        .expect(0)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["app", "connect", "acme_crm", "--credential", "token=-"])
+        .write_stdin("s3cr3t\n")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "--credential applies only to manual-auth connections; app 'acme_crm' connection 'workspace' connects through OAuth",
+        ));
+    oauth.assert();
+}
+
+#[test]
+fn test_connect_explains_app_listed_without_connection_metadata() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"vci-brain","displayName":"vci-brain",
+                "sourceTreeUrl":"https://github.com/valon-technologies/valon-tools/tree/b6ae1dd/apps/vci-brain",
+                "connections":[],"surfaces":[],"status":"needs_user_connection",
+                "credentialState":"missing","actions":[],"connected":false}]"#,
+        )
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["app", "connect", "vci-brain", "--connection", "MCP"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "app 'vci-brain' needs a user connection, but the server advertised no connection details",
+        ))
+        .stderr(predicate::str::contains(
+            "App source: https://github.com/valon-technologies/valon-tools/tree/b6ae1dd/apps/vci-brain",
+        ))
+        .stderr(predicate::str::contains("gestalt#3613"));
 }
 
 #[test]
