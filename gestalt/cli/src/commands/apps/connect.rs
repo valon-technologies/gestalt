@@ -29,6 +29,8 @@ struct IntegrationInfo {
     actions: Vec<String>,
     #[serde(default)]
     source_tree_url: Option<String>,
+    #[serde(default)]
+    unavailable_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -178,6 +180,11 @@ impl<'a> ResolvedConnectFlow<'a> {
         requested_connection: Option<&str>,
         interactive: bool,
     ) -> Result<Self> {
+        // Checked first: an app with no running version cannot accept a
+        // connection even when its config declares one.
+        if integration.not_installed() {
+            return Err(not_installed_error(integration));
+        }
         let connection = resolve_connection(integration, requested_connection, interactive)?;
         let definition = connection.as_ref().and_then(|selected| selected.definition);
         let auth_types = definition
@@ -755,8 +762,10 @@ fn resolve_connect_mode(integration: &str, auth_types: &[String]) -> Result<Conn
 
 /// Builds the diagnostic for an app the server reports as needing a user
 /// connection while advertising no connection name, auth type, or credential
-/// fields. The CLI cannot invent a flow for it, and the user cannot fix it
-/// locally, so say who can.
+/// fields. Older servers report this both for registry apps with no running
+/// version and for running registry apps whose manifest connections they do
+/// not advertise, and the listing cannot tell the two apart, so name both
+/// causes. Neither can be fixed locally, so say who can.
 fn missing_connection_metadata_error(integration: &IntegrationInfo) -> anyhow::Error {
     let mut message = format!(
         "app '{}' needs a user connection, but the server advertised no connection details \
@@ -767,9 +776,28 @@ fn missing_connection_metadata_error(integration: &IntegrationInfo) -> anyhow::E
         message.push_str(&format!("\nApp source: {source}"));
     }
     message.push_str(
-        "\nThis cannot be fixed locally: a gestaltd admin must run a gestaltd version that \
-         advertises connection details for registry-installed apps, or declare the app's \
-         connection in the deploy config.",
+        "\nThis cannot be fixed locally. Either no version of the app is running on this server \
+         (a gestaltd admin must deploy one), or the server's gestaltd does not advertise connection \
+         details for registry-installed apps (a gestaltd admin must upgrade gestaltd or declare the \
+         app's connection in the deploy config).",
+    );
+    anyhow!(message)
+}
+
+/// Builds the diagnostic for an app the server reports as not installed: no
+/// version of it is running there, so nothing can accept a connection yet.
+fn not_installed_error(integration: &IntegrationInfo) -> anyhow::Error {
+    let mut message = format!(
+        "app '{}' isn't installed on this server: no version of it is running, so there is \
+         nothing to connect yet.",
+        integration.name
+    );
+    if let Some(source) = non_empty(integration.source_tree_url.as_deref()) {
+        message.push_str(&format!("\nApp source: {source}"));
+    }
+    message.push_str(
+        "\nThis cannot be fixed locally: a gestaltd admin must deploy a version of the app to \
+         this server.",
     );
     anyhow!(message)
 }
@@ -925,6 +953,12 @@ fn needs_user_connection(
 }
 
 impl IntegrationInfo {
+    /// The server reports no version of this app running (registry apps).
+    fn not_installed(&self) -> bool {
+        self.status.as_deref() == Some("unavailable")
+            && self.unavailable_reason.as_deref() == Some("not_installed")
+    }
+
     fn needs_user_connection(&self) -> bool {
         needs_user_connection(
             self.status.as_deref(),
@@ -1047,8 +1081,12 @@ mod tests {
                 "{err}"
             );
             assert!(
+                err.contains("Either no version of the app is running on this server"),
+                "{err}"
+            );
+            assert!(
                 err.contains(
-                    "a gestaltd admin must run a gestaltd version that advertises connection details for registry-installed apps"
+                    "the server's gestaltd does not advertise connection details for registry-installed apps"
                 ),
                 "{err}"
             );
@@ -1056,6 +1094,42 @@ mod tests {
             assert!(err.contains("cannot be fixed locally"), "{err}");
             assert!(!err.contains("supported connection flow"), "{err}");
         }
+    }
+
+    #[test]
+    fn not_installed_app_explains_without_offering_a_flow() {
+        // Declared connections (a deploy-config stopgap, say) must not win:
+        // nothing on the server can accept them while no version runs.
+        let integration = app(
+            r#"{"name":"vci-brain","status":"unavailable","unavailableReason":"not_installed",
+                "sourceTreeUrl":"https://github.com/valon-technologies/berkadia-tools/tree/abc/apps/vci-brain",
+                "connections":[{"name":"MCP","authTypes":["manual"],"status":"unavailable",
+                  "credentialFields":[{"name":"token"}]}],"actions":[]}"#,
+        );
+        for requested in [None, Some("MCP")] {
+            let err = resolve_error(&integration, requested);
+            assert!(
+                err.starts_with(
+                    "app 'vci-brain' isn't installed on this server: no version of it is running"
+                ),
+                "{err}"
+            );
+            assert!(
+                err.contains("App source: https://github.com/valon-technologies/berkadia-tools/tree/abc/apps/vci-brain"),
+                "{err}"
+            );
+            assert!(err.contains("deploy a version of the app"), "{err}");
+            assert!(!err.contains("advertised no connection details"), "{err}");
+        }
+    }
+
+    #[test]
+    fn unavailable_without_not_installed_reason_is_not_reported_as_not_installed() {
+        let integration =
+            app(r#"{"name":"svc","status":"unavailable","connections":[],"actions":[]}"#);
+        assert!(!integration.not_installed());
+        let err = resolve_error(&integration, None);
+        assert!(!err.contains("isn't installed"), "{err}");
     }
 
     #[test]
