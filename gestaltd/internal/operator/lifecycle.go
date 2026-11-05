@@ -2,7 +2,6 @@ package operator
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -3655,11 +3654,7 @@ func (l *Lifecycle) applyStaticValidationProviders(ctx context.Context, paths li
 		}); err != nil {
 			return err
 		}
-		if entry.ResolvedManifest != nil {
-			entry.DisplayName = cmp.Or(entry.DisplayName, entry.ResolvedManifest.DisplayName)
-			entry.Description = cmp.Or(entry.Description, entry.ResolvedManifest.Description)
-		}
-		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
+		entry.ApplyResolvedManifestMetadata()
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		lockEntries := lockEntriesForKind(lock, collection.kind)
@@ -3921,11 +3916,7 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 		return err
 	}
 	for _, work := range ordered {
-		if manifest := work.entry.ResolvedManifest; manifest != nil {
-			work.entry.DisplayName = cmp.Or(work.entry.DisplayName, manifest.DisplayName)
-			work.entry.Description = cmp.Or(work.entry.Description, manifest.Description)
-		}
-		work.entry.IconFile = cmp.Or(work.entry.IconFile, work.entry.ResolvedIconFile)
+		work.entry.ApplyResolvedManifestMetadata()
 	}
 	if err := l.resolveConfiguredAppStaticBindings(paths, ordered); err != nil {
 		return err

@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -1764,6 +1765,19 @@ func (e *ProviderEntry) SourceReleasePath() string {
 
 func (e *ProviderEntry) HasResolvedManifest() bool {
 	return e != nil && e.ResolvedManifest != nil
+}
+
+// ApplyResolvedManifestMetadata fills the display name, description, and
+// icon that config leaves unset from the resolved manifest. Config values win.
+func (e *ProviderEntry) ApplyResolvedManifestMetadata() {
+	if e == nil {
+		return
+	}
+	if manifest := e.ResolvedManifest; manifest != nil {
+		e.DisplayName = cmp.Or(e.DisplayName, manifest.DisplayName)
+		e.Description = cmp.Or(e.Description, manifest.Description)
+	}
+	e.IconFile = cmp.Or(e.IconFile, e.ResolvedIconFile)
 }
 
 func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {

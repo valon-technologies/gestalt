@@ -132,6 +132,10 @@ type Config struct {
 	AppNames []string
 	Now      func() time.Time
 	Logger   *slog.Logger
+
+	// ConnectionOverrides replace the connection maps for apps whose
+	// connection plan is resolved at runtime (registry-installed apps).
+	ConnectionOverrides invocation.ConnectionOverrides
 }
 
 type Manager struct {
@@ -147,6 +151,8 @@ type Manager struct {
 	appNames          []string
 	now               func() time.Time
 	logger            *slog.Logger
+
+	connectionOverrides invocation.ConnectionOverrides
 }
 
 type DefinitionApply struct {
@@ -253,6 +259,8 @@ func New(cfg Config) *Manager {
 		appNames:          append([]string(nil), cfg.AppNames...),
 		now:               now,
 		logger:            cfg.Logger,
+
+		connectionOverrides: cfg.ConnectionOverrides,
 	}
 }
 

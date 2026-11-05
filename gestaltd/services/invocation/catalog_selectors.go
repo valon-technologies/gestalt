@@ -16,6 +16,21 @@ type CatalogSelectorConfig struct {
 	MCPConnection map[string]string
 	// DefaultConnection is the compatibility fallback when no surface-specific map is set.
 	DefaultConnection map[string]string
+	// Overrides replace the static maps for apps whose connection plan is
+	// resolved at runtime (registry-installed apps).
+	Overrides ConnectionOverrides
+}
+
+func (cfg CatalogSelectorConfig) catalogConnection(providerName string) string {
+	return ConnectionNameFor(cfg.Overrides, ConnectionSurfaceAPI, cfg.CatalogConnection, providerName)
+}
+
+func (cfg CatalogSelectorConfig) mcpConnection(providerName string) string {
+	return ConnectionNameFor(cfg.Overrides, ConnectionSurfaceMCP, cfg.MCPConnection, providerName)
+}
+
+func (cfg CatalogSelectorConfig) defaultConnection(providerName string) string {
+	return ConnectionNameFor(cfg.Overrides, ConnectionSurfaceDefault, cfg.DefaultConnection, providerName)
 }
 
 // APICatalogConnections returns connection candidates for API catalog listing.
@@ -24,14 +39,16 @@ func (cfg CatalogSelectorConfig) APICatalogConnections(providerName string, expl
 		return []string{core.ResolveConnectionAlias(explicit)}
 	}
 
+	catalogConn := cfg.catalogConnection(providerName)
+	defaultConn := cfg.defaultConnection(providerName)
 	connections := make([]string, 0, 2)
-	if conn := cfg.CatalogConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
-	} else if conn := cfg.DefaultConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
+	if catalogConn != "" {
+		connections = append(connections, catalogConn)
+	} else if defaultConn != "" {
+		connections = append(connections, defaultConn)
 	}
-	if conn := cfg.DefaultConnection[providerName]; conn != "" && (len(connections) == 0 || connections[0] != conn) && cfg.CatalogConnection[providerName] == "" {
-		connections = append(connections, conn)
+	if defaultConn != "" && (len(connections) == 0 || connections[0] != defaultConn) && catalogConn == "" {
+		connections = append(connections, defaultConn)
 	}
 	if len(connections) == 0 {
 		return []string{""}
@@ -47,7 +64,7 @@ func (cfg CatalogSelectorConfig) SessionCatalogConnections(providerName string, 
 		return []string{core.ResolveConnectionAlias(explicit)}
 	}
 
-	if conn := cfg.MCPConnection[providerName]; conn != "" {
+	if conn := cfg.mcpConnection(providerName); conn != "" {
 		return []string{conn}
 	}
 	if broker, ok := cfg.Invoker.(interface{ MCPConnection(string) string }); ok {
@@ -56,7 +73,7 @@ func (cfg CatalogSelectorConfig) SessionCatalogConnections(providerName string, 
 		}
 	}
 
-	if conn := cfg.DefaultConnection[providerName]; conn != "" {
+	if conn := cfg.defaultConnection(providerName); conn != "" {
 		return []string{conn}
 	}
 	return []string{""}

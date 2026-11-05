@@ -44,6 +44,9 @@ type AppProviderRestarter struct {
 	closeFailures    map[string]error
 	runningVersions  map[string]string
 
+	// appDefinitions receives registry-installed apps' mounted entries.
+	appDefinitions *AppDefinitions
+
 	lifecycleMu sync.RWMutex
 }
 
@@ -56,6 +59,10 @@ type AppProviderRestarterConfig struct {
 	RegistryResolver RegistryInstalledResolver
 	ArtifactsDir     string
 	Fatal            func(error)
+
+	// AppDefinitions, when set, publishes each started registry app's
+	// mounted entry and connection routing. See AppDefinitions.
+	AppDefinitions *AppDefinitions
 }
 
 func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestarter {
@@ -72,6 +79,8 @@ func NewAppProviderRestarter(cfg AppProviderRestarterConfig) *AppProviderRestart
 		closing:          make(map[string]pendingProviderClose),
 		closeFailures:    make(map[string]error),
 		runningVersions:  make(map[string]string),
+
+		appDefinitions: cfg.AppDefinitions,
 	}
 }
 
@@ -223,9 +232,18 @@ func (r *AppProviderRestarter) StartApp(ctx context.Context, app, version string
 		closeIfPossible(result.Provider)
 		return fmt.Errorf("start app provider %q: %w", app, err)
 	}
+	// Publish before Register so the app's connections are routable as soon
+	// as the provider becomes visible.
+	if entry.Source.IsRegistry() {
+		if err := r.appDefinitions.publish(r.cfg, app, entry, r.deps); err != nil {
+			closeIfPossible(result.Provider)
+			return fmt.Errorf("start app provider %q: %w", app, err)
+		}
+	}
 	if err := r.providers.Register(app, result.Provider); err != nil {
 		closeIfPossible(result.Provider)
 		r.clearRunningVersion(app)
+		r.appDefinitions.clear(app)
 		return fmt.Errorf("start app provider %q: %w", app, err)
 	}
 	if version != "" {
@@ -537,6 +555,7 @@ func (r *AppProviderRestarter) storeConnectionAuth(app string, result *ProviderB
 }
 
 func (r *AppProviderRestarter) clearRuntimeBindings(app string) {
+	r.appDefinitions.clear(app)
 	r.storeConnectionAuth(app, &ProviderBuildResult{})
 	if r.deps.AppWorkflowDeclarations != nil {
 		r.deps.AppWorkflowDeclarations.Set(app, nil, nil)

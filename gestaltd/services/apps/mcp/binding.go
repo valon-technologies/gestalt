@@ -32,4 +32,8 @@ type Config struct {
 	// workspace front door so hosts can connect without walking catalogs.
 	OperationAccess     invocation.OperationAccessChecker
 	InvocationValidator func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error
+
+	// ConnectionOverrides replace MCPConnection entries for apps whose
+	// connection plan is resolved at runtime (registry-installed apps).
+	ConnectionOverrides invocation.ConnectionOverrides
 }

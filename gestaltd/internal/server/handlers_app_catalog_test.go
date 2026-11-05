@@ -522,6 +522,77 @@ func TestAppCatalogIncludesSchemaForRegistryOnlyApps(t *testing.T) {
 	}
 }
 
+// A registry-only app with no running version must not ask users to connect:
+// nothing on this server can serve it or accept a credential until a version
+// starts. It reports unavailable with reason not_installed, on both the app
+// listing and the connection overlay, even when config declares connections.
+func TestRegistryOnlyAppWithoutRunningVersionReportsNotInstalled(t *testing.T) {
+	t.Parallel()
+
+	subjectID := principal.UserSubjectID(testCanonicalAdminUserID)
+	authz := &serverTestAuthorizationProvider{
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(subjectID, "admin", "app", "registry-only"),
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = authStubWithSessionTokenIntrospect("alice-token", subjectID, "")
+		cfg.Authorization = authz
+		cfg.Providers = testutil.NewProviderRegistry(t)
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"registry-only": {
+				Source:      config.ProviderSource{Registry: "toolshed"},
+				DisplayName: "Registry Only",
+				Connections: map[string]*config.ConnectionDef{
+					"MCP": {
+						ConnectionID: "registry-only:MCP",
+						Mode:         providermanifestv1.ConnectionModeSubject,
+						Auth:         config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeManual},
+					},
+				},
+			},
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	type statusBody struct {
+		Name              string   `json:"name"`
+		Status            string   `json:"status"`
+		UnavailableReason string   `json:"unavailableReason"`
+		Actions           []string `json:"actions"`
+		Connected         bool     `json:"connected"`
+		Connections       []struct {
+			Name    string   `json:"name"`
+			Status  string   `json:"status"`
+			Actions []string `json:"actions"`
+		} `json:"connections"`
+	}
+	for _, path := range []string{"/api/v1/apps", "/api/v1/me/app-connections"} {
+		body := getJSONPath(t, ts, path, http.StatusOK, "Bearer alice-token")
+		var apps []statusBody
+		if err := json.Unmarshal(body, &apps); err != nil {
+			t.Fatalf("%s decode: %v", path, err)
+		}
+		if len(apps) != 1 || apps[0].Name != "registry-only" {
+			t.Fatalf("%s = %s, want only registry-only", path, body)
+		}
+		app := apps[0]
+		if app.Status != "unavailable" || app.UnavailableReason != "not_installed" {
+			t.Fatalf("%s status = %q reason = %q, want unavailable/not_installed: %s", path, app.Status, app.UnavailableReason, body)
+		}
+		if len(app.Actions) != 0 || app.Connected {
+			t.Fatalf("%s actions = %v connected = %v, want none", path, app.Actions, app.Connected)
+		}
+		if len(app.Connections) != 1 || app.Connections[0].Name != "MCP" {
+			t.Fatalf("%s connections = %+v, want the declared MCP schema", path, app.Connections)
+		}
+		if conn := app.Connections[0]; conn.Status != "unavailable" || len(conn.Actions) != 0 {
+			t.Fatalf("%s connection status = %q actions = %v, want unavailable with no actions", path, conn.Status, conn.Actions)
+		}
+	}
+}
+
 func TestAppOverlayNoAuthIsNotProductConnected(t *testing.T) {
 	t.Parallel()
 

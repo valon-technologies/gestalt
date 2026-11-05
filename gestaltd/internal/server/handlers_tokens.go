@@ -398,7 +398,7 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 }
 
 func (s *Server) effectiveConnectionDef(integration, connection string) (config.ConnectionDef, bool) {
-	entry, ok := s.pluginDefs[integration]
+	entry, ok := s.lookupAppDef(integration)
 	if !ok || entry == nil {
 		return config.ConnectionDef{}, false
 	}

@@ -225,6 +225,8 @@ type Server struct {
 	temporalWorkersPromoted       func() bool
 	servingReady                  <-chan struct{}
 	uiReadiness                   *UIReadinessMonitor
+
+	appDefinitions AppDefinitionOverlay
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -233,6 +235,7 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 		CatalogConnection: s.catalogConnection,
 		MCPConnection:     s.mcpConnection,
 		DefaultConnection: s.defaultConnection,
+		Overrides:         overlayConnectionOverrides(s.appDefinitions),
 	}
 }
 
@@ -321,6 +324,9 @@ type Config struct {
 	AppAutoDeployNotify func(app string)
 	// AppRegistryReconcileNotify requests prompt local runtime reconciliation.
 	AppRegistryReconcileNotify func(app string)
+	// AppDefinitions overlays registry-installed apps' entries and connection
+	// routing on AppDefs and the connection maps. Nil means boot-time only.
+	AppDefinitions AppDefinitionOverlay
 }
 
 func resolveServerPromoteSharedStateOnActivate(cfg Config) bool {
@@ -605,6 +611,8 @@ func New(cfg Config) (*Server, error) {
 		temporalWorkersPromoted:       cfg.TemporalWorkersPromoted,
 		servingReady:                  cfg.ServingReady,
 		uiReadiness:                   cfg.UIReadiness,
+
+		appDefinitions: cfg.AppDefinitions,
 	}
 	s.workflowSchedules = workflowmanager.New(workflowmanager.Config{
 		Providers:         cfg.Providers,
@@ -618,6 +626,8 @@ func New(cfg Config) (*Server, error) {
 		MCPConnection:     cfg.MCPConnection,
 		AppNames:          slices.Collect(maps.Keys(cfg.AppDefs)),
 		Now:               now,
+
+		ConnectionOverrides: overlayConnectionOverrides(cfg.AppDefinitions),
 	})
 	if cfg.RouteProfile != RouteProfileManagement {
 		publicConfig := publicGRPCConfig{

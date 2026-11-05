@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type appAdminAllowedOperationRow struct {
@@ -42,7 +44,7 @@ func (s *Server) mountAppAdminAllowedOperationsRoutes(r chi.Router) {
 
 func (s *Server) appAdminAllowedOperationsHandler(w http.ResponseWriter, r *http.Request) {
 	app := chi.URLParam(r, "app")
-	if s.pluginDefs[app] == nil {
+	if s.appDef(app) == nil {
 		writeError(w, http.StatusNotFound, "app not found")
 		return
 	}
@@ -57,6 +59,9 @@ func (s *Server) appAdminAllowedOperationsHandler(w http.ResponseWriter, r *http
 	// Use the provider's exposed catalog, including aliases and unrestricted
 	// operations. Runtime permissions must never become the definition baseline.
 	baseline, err := s.appAccessBaselineCatalog(r, app, prov)
+	if err != nil && writeCredentialCatalogError(w, app, err) {
+		return
+	}
 	if err != nil || baseline == nil {
 		slog.ErrorContext(r.Context(), "app operation catalog unavailable", "app", app, "error", err)
 		writeError(w, http.StatusServiceUnavailable, "app catalog is unavailable")
@@ -108,6 +113,36 @@ func (s *Server) appAdminAllowedOperationsHandler(w http.ResponseWriter, r *http
 	}
 	slices.SortFunc(rows, func(a, b appAdminAllowedOperationRow) int { return strings.Compare(a.ID, b.ID) })
 	writeJSON(w, http.StatusOK, appAdminAllowedOperationsResponse{App: app, Operations: rows})
+}
+
+// writeAppCatalogError reports a failure to list app's operations: a typed
+// 412 when the caller's own credential is the cause, otherwise the policy 503.
+func (s *Server) writeAppCatalogError(w http.ResponseWriter, r *http.Request, app string, err error) {
+	if writeCredentialCatalogError(w, app, err) {
+		return
+	}
+	s.writeAppOperationPolicyError(w, r, app, err)
+}
+
+// writeCredentialCatalogError answers a catalog failure caused by the caller's
+// missing or rejected credential with the 412 codes operation calls use, so
+// clients can offer connect or reconnect instead of reporting an outage. Apps
+// whose tools are listed through the caller's credential, such as MCP
+// upstreams, hit this whenever the caller has not connected. It reports
+// whether it wrote a response.
+func writeCredentialCatalogError(w http.ResponseWriter, app string, err error) bool {
+	switch {
+	case errors.Is(err, invocation.ErrNoCredential):
+		writeTypedError(w, http.StatusPreconditionFailed, "not_connected", app,
+			fmt.Sprintf("no external credential stored for integration %q; connect it to list its operations", app))
+	case errors.Is(err, invocation.ErrReconnectRequired):
+		writeTypedError(w, http.StatusPreconditionFailed, "reconnect_required", app,
+			// Keep "expired or was revoked": older CLIs match it when no code is sent.
+			fmt.Sprintf("credential for integration %q expired or was revoked; reconnect it to list its operations", app))
+	default:
+		return false
+	}
+	return true
 }
 
 func (s *Server) writeAppOperationPolicyError(w http.ResponseWriter, r *http.Request, app string, err error) {

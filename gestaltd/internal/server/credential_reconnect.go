@@ -73,12 +73,10 @@ func (s *Server) reconnectAudience(providerName, connection string) string {
 	if connection == "" {
 		return ""
 	}
-	if s.pluginDefs != nil {
-		if entry := s.pluginDefs[providerName]; entry != nil && entry.Connections != nil {
-			if def := entry.Connections[connection]; def != nil {
-				if id := strings.TrimSpace(def.ConnectionID); id != "" {
-					return id
-				}
+	if entry := s.appDef(providerName); entry != nil && entry.Connections != nil {
+		if def := entry.Connections[connection]; def != nil {
+			if id := strings.TrimSpace(def.ConnectionID); id != "" {
+				return id
 			}
 		}
 	}

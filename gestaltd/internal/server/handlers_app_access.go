@@ -50,7 +50,7 @@ func (s *Server) appAccessHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	cat, err := s.appAccessCatalog(r, name, prov)
 	if err != nil {
-		s.writeAppOperationPolicyError(w, r, name, err)
+		s.writeAppCatalogError(w, r, name, err)
 		return
 	}
 	if r.Method == http.MethodPut {

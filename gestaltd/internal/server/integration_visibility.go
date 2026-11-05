@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Server) integrationHiddenFromCatalog(provider string) bool {
-	entry, ok := s.pluginDefs[strings.TrimSpace(provider)]
+	entry, ok := s.lookupAppDef(strings.TrimSpace(provider))
 	return ok && entry != nil && entry.Static != nil && entry.Static.CatalogHidden
 }
 
@@ -118,7 +118,7 @@ func (s *Server) mountedUIListingAccessRequest(appName, subjectID string) (invoc
 
 // configuredMountedPath returns the app's declared static mount path.
 func (s *Server) configuredMountedPath(appName string) string {
-	entry, ok := s.pluginDefs[appName]
+	entry, ok := s.lookupAppDef(appName)
 	if !ok || entry == nil || entry.Static == nil {
 		return ""
 	}

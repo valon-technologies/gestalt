@@ -66,7 +66,7 @@ func (s *Server) pluginAuthRuntime(pluginName string) (authRuntime, error) {
 		return s.serverAuthRuntime(), nil
 	}
 
-	entry := s.pluginDefs[pluginName]
+	entry := s.appDef(pluginName)
 	if entry == nil || entry.RouteAuth == nil {
 		return s.serverAuthRuntime(), nil
 	}

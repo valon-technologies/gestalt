@@ -132,6 +132,10 @@ type Config struct {
 	MCPConnection     map[string]string
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
+
+	// ConnectionOverrides replace the connection maps for apps whose
+	// connection plan is resolved at runtime (registry-installed apps).
+	ConnectionOverrides invocation.ConnectionOverrides
 }
 
 type Manager struct {
@@ -146,6 +150,8 @@ type Manager struct {
 	mcpConnection     map[string]string
 	agentConnections  map[string][]string
 	sessionStart      map[string]*coreagent.SessionStartConfig
+
+	connectionOverrides invocation.ConnectionOverrides
 }
 
 func New(cfg Config) *Manager {
@@ -161,6 +167,8 @@ func New(cfg Config) *Manager {
 		mcpConnection:     maps.Clone(cfg.MCPConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
+
+		connectionOverrides: cfg.ConnectionOverrides,
 	}
 }
 
@@ -2958,6 +2966,7 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 		CatalogConnection: m.catalogConnection,
 		MCPConnection:     m.mcpConnection,
 		DefaultConnection: m.defaultConnection,
+		Overrides:         m.connectionOverrides,
 	}
 }
 

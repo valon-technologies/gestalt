@@ -42,10 +42,12 @@ type tenantAppDirectoryEntry struct {
 // snapshot. providers is ProviderMap.Generation. remote is the tunnel
 // registration topology. plugins covers catalog-relevant plugin config so an
 // in-place AppDefs edit does not leave stale connection schema in the cache.
+// appDefinitions is the registry app overlay generation.
 type tenantAppDirectoryEpoch struct {
-	providers uint64
-	remote    uint64
-	plugins   string
+	providers      uint64
+	remote         uint64
+	plugins        string
+	appDefinitions uint64
 }
 
 // appDirectory is one signed-in viewer's slice of the tenant snapshot, with
@@ -103,6 +105,8 @@ type appConnectionStatus struct {
 	Actions         []string               `json:"actions"`
 	Connected       bool                   `json:"connected"`
 	Connections     []connectionStatusView `json:"connections"`
+	// UnavailableReason mirrors integrationInfo.UnavailableReason.
+	UnavailableReason string `json:"unavailableReason,omitempty"`
 }
 
 type connectionStatusView struct {
@@ -252,6 +256,8 @@ func appConnectionStatusesFrom(infos []integrationInfo) []appConnectionStatus {
 			Actions:         actions,
 			Connected:       info.Connected,
 			Connections:     connectionStatusViews(info.Connections),
+
+			UnavailableReason: info.UnavailableReason,
 		})
 	}
 	return out
@@ -299,9 +305,10 @@ func (s *Server) tenantAppDirectoryEpoch() tenantAppDirectoryEpoch {
 		providers = s.providers.Generation()
 	}
 	return tenantAppDirectoryEpoch{
-		providers: providers,
-		remote:    s.remoteDirectoryTopology(),
-		plugins:   s.pluginDirectoryFingerprint(),
+		providers:      providers,
+		remote:         s.remoteDirectoryTopology(),
+		plugins:        s.pluginDirectoryFingerprint(),
+		appDefinitions: s.appDefinitionsGeneration(),
 	}
 }
 
@@ -330,7 +337,7 @@ func (s *Server) pluginDirectoryFingerprint() string {
 	for _, name := range names {
 		b.WriteByte(';')
 		b.WriteString(name)
-		plugin := s.pluginDefs[name]
+		plugin := s.appDef(name)
 		if plugin != nil {
 			fmt.Fprintf(&b, ":%s:%s:%t:%s:%s",
 				strings.TrimSpace(plugin.DisplayName),
@@ -432,7 +439,7 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 		}
 		return tenantAppDirectoryEntry{}, false, fmt.Errorf("resolve app %q: %w", name, err)
 	}
-	plugin := s.pluginDefs[name]
+	plugin := s.appDef(name)
 	entry := tenantAppDirectoryEntry{
 		Name:           name,
 		DisplayName:    prov.DisplayName(),
@@ -449,7 +456,7 @@ func (s *Server) tenantProviderDirectoryEntry(ctx context.Context, name string) 
 }
 
 func (s *Server) tenantRegistryDirectoryEntry(name string) tenantAppDirectoryEntry {
-	plugin := s.pluginDefs[name]
+	plugin := s.appDef(name)
 	entry := tenantAppDirectoryEntry{
 		Name:        name,
 		DisplayName: name,
@@ -527,7 +534,7 @@ func (s *Server) appSourceTreeURLs(ctx context.Context, snapshot *tenantAppDirec
 	registryApps := make(map[string]configuredRegistryApp)
 	for i := range snapshot.entries {
 		entry := &snapshot.entries[i]
-		plugin := s.pluginDefs[entry.Name]
+		plugin := s.appDef(entry.Name)
 		if plugin == nil {
 			continue
 		}
@@ -702,6 +709,9 @@ func (s *Server) projectComposedAppListing(r *http.Request, dir *appDirectory) (
 		info.Connections = s.connectionInfosFromAdvertised(entry.Name, entry.Advertised, instances, preferences, p)
 		authTypes := resolvedAuthTypesFromConnections(info.Connections)
 		s.applyIntegrationConnectionStatus(&info, entry.ConnectionMode, instances, authTypes, p)
+		if !entry.Loaded {
+			markNotInstalled(&info)
+		}
 		out = append(out, info)
 	}
 	return out, nil
