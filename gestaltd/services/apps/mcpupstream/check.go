@@ -72,8 +72,8 @@ func (r *CheckReport) Checks() []AllowedOperationsCheck {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]AllowedOperationsCheck, 0, len(r.checks))
-	for _, check := range r.checks {
-		out = append(out, check)
+	for upstream := range r.checks {
+		out = append(out, r.checks[upstream])
 	}
 	slices.SortFunc(out, func(a, b AllowedOperationsCheck) int { return strings.Compare(a.Upstream, b.Upstream) })
 	return out

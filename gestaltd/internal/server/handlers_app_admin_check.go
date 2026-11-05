@@ -78,8 +78,8 @@ func (s *Server) appAdminCheckHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := appAdminCheckResponse{App: app, OK: true, Surfaces: checks}
-	for _, check := range checks {
-		if !check.OK() {
+	for i := range checks {
+		if !checks[i].OK() {
 			response.OK = false
 		}
 	}
