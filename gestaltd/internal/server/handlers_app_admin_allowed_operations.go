@@ -42,7 +42,7 @@ func (s *Server) mountAppAdminAllowedOperationsRoutes(r chi.Router) {
 
 func (s *Server) appAdminAllowedOperationsHandler(w http.ResponseWriter, r *http.Request) {
 	app := chi.URLParam(r, "app")
-	if s.pluginDefs[app] == nil {
+	if s.appDef(app) == nil {
 		writeError(w, http.StatusNotFound, "app not found")
 		return
 	}

@@ -7330,7 +7330,7 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 			t.Fatalf("decoding error response: %v", err)
 		}
-		if errResp.Error != `no external credential stored for integration "test-int"; connect via OAuth first` {
+		if errResp.Error != `no external credential stored for integration "test-int"; connect it first` {
 			t.Fatalf("expected no-token message, got %q", errResp.Error)
 		}
 		if errResp.Code != "not_connected" {
@@ -14953,7 +14953,7 @@ func TestExecuteOperation_ReconnectRequiredMessage(t *testing.T) {
 	if err := json.Unmarshal(body, &errResp); err != nil {
 		t.Fatalf("decoding error response: %v", err)
 	}
-	if errResp.Error != `OAuth token for integration "test-int" expired or was revoked; reconnect it` {
+	if errResp.Error != `credential for integration "test-int" expired or was revoked; reconnect it` {
 		t.Fatalf("expected reconnect-required message, got %q", errResp.Error)
 	}
 	if errResp.Code != "reconnect_required" {

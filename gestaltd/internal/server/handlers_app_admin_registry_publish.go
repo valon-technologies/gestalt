@@ -95,14 +95,12 @@ func (s *Server) finalizeAppAdminRegistryPublish(w http.ResponseWriter, r *http.
 			description = v
 		}
 	}
-	if s.pluginDefs != nil {
-		if entry, ok := s.pluginDefs[app.name]; ok && entry != nil {
-			if displayName == app.name && strings.TrimSpace(entry.DisplayName) != "" {
-				displayName = strings.TrimSpace(entry.DisplayName)
-			}
-			if description == "" {
-				description = strings.TrimSpace(entry.Description)
-			}
+	if entry := s.appDef(app.name); entry != nil {
+		if displayName == app.name && strings.TrimSpace(entry.DisplayName) != "" {
+			displayName = strings.TrimSpace(entry.DisplayName)
+		}
+		if description == "" {
+			description = strings.TrimSpace(entry.Description)
 		}
 	}
 	result, err := service.Finalize(r.Context(), app.registry, appregistry.AdminPublishInput{

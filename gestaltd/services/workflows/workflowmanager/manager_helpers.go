@@ -20,6 +20,7 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 		CatalogConnection: m.catalogConnection,
 		MCPConnection:     m.mcpConnection,
 		DefaultConnection: m.defaultConnection,
+		Overrides:         m.connectionOverrides,
 	}
 }
 

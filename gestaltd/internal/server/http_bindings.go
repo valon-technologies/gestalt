@@ -296,7 +296,7 @@ func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
 }
 
 func (s *Server) withRegistryAppRuntime(app string, invoke func()) bool {
-	entry := s.pluginDefs[strings.TrimSpace(app)]
+	entry := s.appDef(strings.TrimSpace(app))
 	if entry == nil || !entry.Source.IsRegistry() {
 		invoke()
 		return true

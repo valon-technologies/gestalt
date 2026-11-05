@@ -96,37 +96,11 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 		if _, exists := runtime[name]; exists {
 			return fmt.Errorf("%s %q conflicts with another provider connection namespace", kind, name)
 		}
-		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+		connections, err := providerConnectionRuntime(kind, name, entry, egressDeps)
 		if err != nil {
-			return fmt.Errorf("%s %q: %w", kind, name, err)
-		}
-		providerConfig, err := config.NodeToMap(entry.Config)
-		if err != nil {
-			return fmt.Errorf("%s %q config: %w", kind, name, err)
-		}
-		policy := egressDeps.ProviderPolicy(entry)
-		addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
-			info, err := connectionRuntimeInfo(name, connName, conn, policy, providerConfig)
-			if err != nil {
-				return err
-			}
-			if _, ok := runtime[name]; !ok {
-				runtime[name] = map[string]invocation.ConnectionRuntimeInfo{}
-			}
-			runtime[name][connName] = info
-			return nil
-		}
-
-		pluginConn := plan.AppConnection()
-		if err := addRuntimeInfo(config.AppConnectionName, &pluginConn); err != nil {
 			return err
 		}
-		for _, connName := range plan.NamedConnectionNames() {
-			conn, _ := plan.NamedConnectionDef(connName)
-			if err := addRuntimeInfo(connName, &conn); err != nil {
-				return err
-			}
-		}
+		runtime[name] = connections
 		return nil
 	}
 
@@ -143,6 +117,41 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 	return runtime, nil
 }
 
+// providerConnectionRuntime returns one provider entry's connection runtime,
+// keyed by connection name.
+func providerConnectionRuntime(kind, name string, entry *config.ProviderEntry, egressDeps EgressDeps) (map[string]invocation.ConnectionRuntimeInfo, error) {
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return nil, fmt.Errorf("%s %q: %w", kind, name, err)
+	}
+	providerConfig, err := config.NodeToMap(entry.Config)
+	if err != nil {
+		return nil, fmt.Errorf("%s %q config: %w", kind, name, err)
+	}
+	policy := egressDeps.ProviderPolicy(entry)
+	connections := map[string]invocation.ConnectionRuntimeInfo{}
+	addRuntimeInfo := func(connName string, conn *config.ConnectionDef) error {
+		info, err := connectionRuntimeInfo(name, connName, conn, policy, providerConfig)
+		if err != nil {
+			return err
+		}
+		connections[connName] = info
+		return nil
+	}
+
+	pluginConn := plan.AppConnection()
+	if err := addRuntimeInfo(config.AppConnectionName, &pluginConn); err != nil {
+		return nil, err
+	}
+	for _, connName := range plan.NamedConnectionNames() {
+		conn, _ := plan.NamedConnectionDef(connName)
+		if err := addRuntimeInfo(connName, &conn); err != nil {
+			return nil, err
+		}
+	}
+	return connections, nil
+}
+
 // attachMCPOAuthRuntimeAuth wires per-call auth-config resolvers for mcp_oauth
 // connections: their token endpoint is only known after discovery and their
 // client identity lives in the external credentials store, so static runtime
@@ -151,48 +160,51 @@ func attachMCPOAuthRuntimeAuth(cfg *config.Config, runtime invocation.Connection
 	if cfg == nil || len(runtime) == 0 {
 		return nil
 	}
-	attachEntry := func(name string, entry *config.ProviderEntry) error {
-		if entry == nil {
-			return nil
-		}
-		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
-		if err != nil {
-			return fmt.Errorf("integration %q: %w", name, err)
-		}
-		mcpURL := ""
-		if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
-			mcpURL = resolved.URL
-		}
-		if mcpURL == "" {
-			return nil
-		}
-		attach := func(connName string, conn config.ConnectionDef) {
-			if conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
-				return
-			}
-			info, ok := runtime[name][connName]
-			if !ok {
-				return
-			}
-			info.AuthConfigResolver = buildMCPOAuthHandler(conn, mcpURL, deps).AuthConfig
-			runtime[name][connName] = info
-		}
-		attach(config.AppConnectionName, plan.AppConnection())
-		for _, connName := range plan.NamedConnectionNames() {
-			conn, _ := plan.NamedConnectionDef(connName)
-			attach(connName, conn)
-		}
-		return nil
-	}
 	for name, entry := range cfg.Apps {
-		if err := attachEntry(name, entry); err != nil {
+		if err := attachProviderMCPOAuthRuntimeAuth(name, entry, runtime[name], deps); err != nil {
 			return err
 		}
 	}
 	for name, entry := range cfg.Providers.Agent {
-		if err := attachEntry(name, entry); err != nil {
+		if err := attachProviderMCPOAuthRuntimeAuth(name, entry, runtime[name], deps); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// attachProviderMCPOAuthRuntimeAuth applies attachMCPOAuthRuntimeAuth to one
+// provider entry's connection runtime, updating connections in place.
+func attachProviderMCPOAuthRuntimeAuth(name string, entry *config.ProviderEntry, connections map[string]invocation.ConnectionRuntimeInfo, deps Deps) error {
+	if entry == nil {
+		return nil
+	}
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return fmt.Errorf("integration %q: %w", name, err)
+	}
+	mcpURL := ""
+	if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
+		mcpURL = resolved.URL
+	}
+	if mcpURL == "" {
+		return nil
+	}
+	attach := func(connName string, conn config.ConnectionDef) {
+		if conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
+			return
+		}
+		info, ok := connections[connName]
+		if !ok {
+			return
+		}
+		info.AuthConfigResolver = buildMCPOAuthHandler(conn, mcpURL, deps).AuthConfig
+		connections[connName] = info
+	}
+	attach(config.AppConnectionName, plan.AppConnection())
+	for _, connName := range plan.NamedConnectionNames() {
+		conn, _ := plan.NamedConnectionDef(connName)
+		attach(connName, conn)
 	}
 	return nil
 }

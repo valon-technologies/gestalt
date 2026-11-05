@@ -108,6 +108,9 @@ func ResolveInstalledApp(name string, entry *config.ProviderEntry, destDir, vers
 			resolved.ResolvedIconFile = iconPath
 		}
 	}
+	// Startup hydration skips registry apps because their package is not
+	// installed yet, so apply the same manifest metadata rule here.
+	resolved.ApplyResolvedManifestMetadata()
 
 	if install.executablePath != "" {
 		if _, err := os.Stat(install.executablePath); err != nil {

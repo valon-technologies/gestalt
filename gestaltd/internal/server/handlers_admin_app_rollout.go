@@ -351,7 +351,8 @@ func (s *Server) validRuntimeAppName(name string) bool {
 
 func (s *Server) configuredRegistryApps() []configuredRegistryApp {
 	out := make([]configuredRegistryApp, 0)
-	for name, entry := range s.pluginDefs {
+	for name := range s.pluginDefs {
+		entry := s.appDef(name)
 		if entry == nil {
 			continue
 		}

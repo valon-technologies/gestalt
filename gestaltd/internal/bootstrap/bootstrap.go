@@ -292,6 +292,10 @@ type Result struct {
 	RegistryAppStartup              func(context.Context)
 	ReconcileAppWorkflowDefinitions func(context.Context, string) error
 
+	// AppDefinitions overlays registry-installed apps' mounted entries and
+	// connection routing on the boot-time config. See AppDefinitions.
+	AppDefinitions *AppDefinitions
+
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
 	workflowConfigReconcileTasksStarted bool
@@ -1484,6 +1488,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	appDefinitions := NewAppDefinitions()
 	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, prepared.Authorization)
 	if err != nil {
 		failPendingStartupProviders(prepared.Deps, err)
@@ -1494,9 +1499,9 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 	invocationRecords := observability.NewInvocationRecordStore(observability.DefaultInvocationRecordCapacity)
 	appAccess := invocation.NewAppAccessResolver(nil)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
-		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
-		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
-		invocation.WithConnectionRuntime(connRuntime.Resolve),
+		invocation.WithConnectionMapper(invocation.OverriddenConnectionMap{Static: connMaps.APIConnection, Overrides: appDefinitions, Surface: invocation.ConnectionSurfaceAPI}),
+		invocation.WithMCPConnectionMapper(invocation.OverriddenConnectionMap{Static: connMaps.MCPConnection, Overrides: appDefinitions, Surface: invocation.ConnectionSurfaceMCP}),
+		invocation.WithConnectionRuntime(appDefinitions.ConnectionRuntime(connRuntime.Resolve)),
 		invocation.WithConnectionInstancePreferences(prepared.Services.ConnectionInstancePreferences),
 		invocation.WithAppAccessProfiles(prepared.Services.AppAccessProfiles),
 		invocation.WithAppAccessResolver(appAccess),
@@ -1528,6 +1533,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		CatalogConnection: connMaps.APIConnection,
 		MCPConnection:     connMaps.MCPConnection,
 		AppNames:          slices.Collect(maps.Keys(cfg.Apps)),
+
+		ConnectionOverrides: appDefinitions,
 	}))
 	if !flags.Enabled(featureflags.Workflow) {
 		workflowManager.SetUnavailable(featureflags.Disabled(featureflags.Workflow))
@@ -1544,6 +1551,8 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		MCPConnection:     connMaps.MCPConnection,
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
+
+		ConnectionOverrides: appDefinitions,
 	}))
 	if !flags.Enabled(featureflags.Agent) {
 		agentManager.SetUnavailable(featureflags.Disabled(featureflags.Agent))
@@ -1731,6 +1740,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		Lifecycles:       noopBuilds.lifecycles,
 		RegistryResolver: opts.RegistryResolver,
 		ArtifactsDir:     cfg.Server.ArtifactsDir,
+		AppDefinitions:   appDefinitions,
 		Fatal: func(err error) {
 			fatalAppProviderStateOnce.Do(func() {
 				fatalAppProviderState <- err
@@ -1791,6 +1801,7 @@ func BootstrapWithOptions(ctx context.Context, cfg *config.Config, factories *Fa
 		DevSupervisor:                  prepared.Deps.DevSupervisor,
 		AppRestarter:                   appRestarter,
 		AppRuntimeSnapshotter:          appRestarter,
+		AppDefinitions:                 appDefinitions,
 		runtimeRegistry:                prepared.runtimeRegistry,
 		workflowConfigReconcileTasks:   deferredWorkflowConfigReconcileTasks,
 		startupWorkflowConfigReconcile: startupWorkflowConfigReconcile,

@@ -6,6 +6,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 const (
@@ -97,12 +98,10 @@ func (info *integrationInfo) singleConnectionStatus() (*connectionDefInfo, bool)
 }
 
 func (s *Server) defaultConnectionName(integration string) string {
-	if s.defaultConnection != nil {
-		if connection := strings.TrimSpace(s.defaultConnection[integration]); connection != "" {
-			return connection
-		}
+	if connection := strings.TrimSpace(s.connectionNameFor(invocation.ConnectionSurfaceDefault, s.defaultConnection, integration)); connection != "" {
+		return connection
 	}
-	entry := s.pluginDefs[integration]
+	entry := s.appDef(integration)
 	if entry == nil {
 		return ""
 	}

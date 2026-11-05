@@ -343,7 +343,8 @@ func (s *Server) pluginConnectionBindingsForCredentialID(connectionID string) []
 		return nil
 	}
 	bindings := make([]pluginConnectionBinding, 0, 1)
-	for pluginName, entry := range s.pluginDefs {
+	for pluginName := range s.pluginDefs {
+		entry := s.appDef(pluginName)
 		if entry == nil {
 			continue
 		}
@@ -666,7 +667,7 @@ func (s *Server) resolveRequestedConnection(w http.ResponseWriter, integration, 
 		return config.ResolveConnectionAlias(requested), true
 	}
 
-	connection := s.defaultConnection[integration]
+	connection := s.connectionNameFor(invocation.ConnectionSurfaceDefault, s.defaultConnection, integration)
 	if connection == "" {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q requires an explicit connection", integration))
 		return "", false
@@ -973,7 +974,7 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 			http.StatusPreconditionFailed,
 			"not_connected",
 			providerName,
-			fmt.Sprintf("no external credential stored for integration %q; connect via OAuth first", providerName),
+			fmt.Sprintf("no external credential stored for integration %q; connect it first", providerName),
 		)
 	case errors.Is(err, invocation.ErrReconnectRequired):
 		s.persistReconnectRequiredGrant(r, providerName, err)
@@ -982,7 +983,8 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 			http.StatusPreconditionFailed,
 			"reconnect_required",
 			providerName,
-			fmt.Sprintf("OAuth token for integration %q expired or was revoked; reconnect it", providerName),
+			// Keep "expired or was revoked": older CLIs match it when no code is sent.
+			fmt.Sprintf("credential for integration %q expired or was revoked; reconnect it", providerName),
 		)
 	case errors.Is(err, invocation.ErrAmbiguousInstance):
 		writeTypedError(

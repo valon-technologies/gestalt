@@ -145,7 +145,7 @@ func (s *Server) projectPublicOperation(prov core.Provider, op catalog.CatalogOp
 }
 
 func (s *Server) operationConnectionProjection(integration string) (operationConnectionProjection, bool) {
-	entry := s.pluginDefs[integration]
+	entry := s.appDef(integration)
 	if entry == nil {
 		return operationConnectionProjection{}, false
 	}

@@ -164,6 +164,7 @@ func run(ctx context.Context, cfg *config.Config, result *bootstrap.Result, gest
 		ConnectionAuth:           result.ConnectionAuth,
 		ManualConnectionAuth:     result.ManualConnectionAuth,
 		AppDefs:                  cfg.Apps,
+		AppDefinitions:           resultAppDefinitions(result),
 		PublicBaseURL:            cfg.Server.BaseURL,
 		PublicGatewayTransport:   result.PublicGatewayTransport,
 		ManagementBaseURL:        cfg.Server.ManagementBaseURL(),
@@ -551,7 +552,8 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 	if !ok {
 		return nil, fmt.Errorf("MCP token resolution requires *invocation.Broker as invoker")
 	}
-	projectionServer := &Server{pluginDefs: cfg.Apps}
+	appDefinitions := resultAppDefinitions(result)
+	projectionServer := &Server{pluginDefs: cfg.Apps, appDefinitions: appDefinitions}
 
 	names := make([]string, 0, len(cfg.Apps))
 	for name := range cfg.Apps {
@@ -596,6 +598,8 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 		InvocationValidator: func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error {
 			return projectionServer.validatePublicOperationInvocation(provName, prov, op, params, explicitConnection)
 		},
+
+		ConnectionOverrides: overlayConnectionOverrides(appDefinitions),
 	}), nil
 }
 
@@ -1014,3 +1018,12 @@ func SetCheckGCSRegistryPermissionsForTest(fn func(context.Context, string) erro
 }
 
 func serverBoolPtr(v bool) *bool { return &v }
+
+// resultAppDefinitions returns result's registry app overlay as a nil
+// interface when bootstrap did not create one.
+func resultAppDefinitions(result *bootstrap.Result) AppDefinitionOverlay {
+	if result == nil || result.AppDefinitions == nil {
+		return nil
+	}
+	return result.AppDefinitions
+}

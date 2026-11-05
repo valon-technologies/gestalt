@@ -258,7 +258,7 @@ func (h *StatelessHTTPHandler) callResolvedAppTool(ctx context.Context, req mcpg
 		return mcpgo.NewToolResultError(err.Error()), nil
 	}
 
-	sessionConnections := []string{h.cfg.MCPConnection[provName]}
+	sessionConnections := []string{h.mcpConnection(provName)}
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, provName, h.cfg.TokenResolver, p, ref.operation, sessionConnections, instance)
 	if err != nil {
 		return nil, err
@@ -318,9 +318,15 @@ func (h *StatelessHTTPHandler) provider(ctx context.Context, provName string) (c
 	return prov, err == nil && prov != nil
 }
 
+// mcpConnection returns provName's MCP surface connection, preferring a
+// runtime override (registry-installed apps) over the startup map.
+func (h *StatelessHTTPHandler) mcpConnection(provName string) string {
+	return invocation.ConnectionNameFor(h.cfg.ConnectionOverrides, invocation.ConnectionSurfaceMCP, h.cfg.MCPConnection, provName)
+}
+
 func (h *StatelessHTTPHandler) resolveCatalog(ctx context.Context, provName string, prov core.Provider, instance string, strict bool) (*catalog.Catalog, error) {
 	targets := []invocation.CatalogResolutionTarget{{
-		Connection: h.cfg.MCPConnection[provName],
+		Connection: h.mcpConnection(provName),
 		Instance:   instance,
 	}}
 	cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(ctx, prov, provName, h.cfg.TokenResolver, principal.FromContext(ctx), targets, strict)
