@@ -87,11 +87,16 @@ connections.
 printf '%s\n' "$WIDGET_API_KEY" | gestalt app connect widget_metrics --credential api_key=-
 ```
 
-If `gestalt app connect` reports that the server advertised no connection
-details for an app that needs a connection, the server is not publishing that
-app's connection metadata. Ask a `gestaltd` administrator to upgrade the server
-or declare the app's connection in the deploy config; it cannot be fixed from
-the CLI.
+If `gestalt app connect` reports that an app isn't installed on this server, no
+version of that registry app is running there yet, so nothing can accept a
+connection. Ask a `gestaltd` administrator to deploy a version of the app.
+
+If it reports that the server advertised no connection details for an app that
+needs a connection, either no version of the app is running (older servers
+cannot say so directly) or the server is not publishing that app's connection
+metadata. Ask a `gestaltd` administrator to deploy the app, upgrade the server,
+or declare the app's connection in the deploy config. Neither case can be fixed
+from the CLI.
 
 ## App disconnect flags
 

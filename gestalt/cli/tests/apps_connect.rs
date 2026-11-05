@@ -731,8 +731,41 @@ fn test_connect_explains_app_listed_without_connection_metadata() {
             "App source: https://github.com/valon-technologies/valon-tools/tree/b6ae1dd/apps/vci-brain",
         ))
         .stderr(predicate::str::contains(
-            "advertises connection details for registry-installed apps",
+            "does not advertise connection details for registry-installed apps",
+        ))
+        .stderr(predicate::str::contains(
+            "Either no version of the app is running on this server",
         ));
+}
+
+#[test]
+fn test_connect_explains_app_not_installed_without_connecting() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"vci-brain","displayName":"VCI Brain",
+                "connections":[{"name":"MCP","authTypes":["manual"],"status":"unavailable",
+                  "credentialFields":[{"name":"token","label":"VCI Brain API Token"}],"actions":[]}],
+                "surfaces":[],"status":"unavailable","unavailableReason":"not_installed",
+                "credentialState":"unknown","actions":[],"connected":false}]"#,
+        )
+        .create();
+    let connect = server
+        .mock("POST", "/api/v1/auth/connect-manual")
+        .expect(0)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["app", "connect", "vci-brain", "--credential", "token=-"])
+        .write_stdin("vb_pat_123\n")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "app 'vci-brain' isn't installed on this server: no version of it is running",
+        ))
+        .stderr(predicate::str::contains("vb_pat_123").not());
+    connect.assert();
 }
 
 #[test]
