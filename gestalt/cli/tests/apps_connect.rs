@@ -730,7 +730,9 @@ fn test_connect_explains_app_listed_without_connection_metadata() {
         .stderr(predicate::str::contains(
             "App source: https://github.com/valon-technologies/valon-tools/tree/b6ae1dd/apps/vci-brain",
         ))
-        .stderr(predicate::str::contains("gestalt#3613"));
+        .stderr(predicate::str::contains(
+            "advertises connection details for registry-installed apps",
+        ));
 }
 
 #[test]

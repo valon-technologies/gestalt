@@ -767,9 +767,9 @@ fn missing_connection_metadata_error(integration: &IntegrationInfo) -> anyhow::E
         message.push_str(&format!("\nApp source: {source}"));
     }
     message.push_str(
-        "\nThis cannot be fixed locally: a gestaltd admin must deploy a gestaltd that includes \
-         registry-app connection metadata (gestalt#3613) or declare the app's connection in the \
-         deploy config.",
+        "\nThis cannot be fixed locally: a gestaltd admin must run a gestaltd version that \
+         advertises connection details for registry-installed apps, or declare the app's \
+         connection in the deploy config.",
     );
     anyhow!(message)
 }
@@ -1046,7 +1046,13 @@ mod tests {
                 err.contains("App source: https://github.com/valon-technologies/valon-tools/tree/b6ae1dd/apps/vci-brain"),
                 "{err}"
             );
-            assert!(err.contains("gestalt#3613"), "{err}");
+            assert!(
+                err.contains(
+                    "a gestaltd admin must run a gestaltd version that advertises connection details for registry-installed apps"
+                ),
+                "{err}"
+            );
+            assert!(!err.contains('#'), "{err}");
             assert!(err.contains("cannot be fixed locally"), "{err}");
             assert!(!err.contains("supported connection flow"), "{err}");
         }
