@@ -109,7 +109,7 @@ pub enum ConfigCommands {
 
 #[derive(Subcommand)]
 pub enum AppCommands {
-    /// Connect an app via OAuth or interactive manual auth
+    /// Connect an app via OAuth or manual (credential) auth
     Connect {
         /// App name (e.g., github, slack)
         name: String,
@@ -125,6 +125,16 @@ pub enum AppCommands {
         /// Store the connection credential under this service account subject
         #[arg(long = "service-account-id")]
         service_account_id: Option<String>,
+
+        /// Supply a manual-auth credential field without prompting (repeatable).
+        ///
+        /// FIELD is a credential field name of the connection (e.g. token). Use
+        /// FIELD=- to read the value from stdin; prefer this over FIELD=VALUE,
+        /// which exposes the secret in shell history and process listings. At
+        /// most one field may read from stdin. Fields not supplied are prompted
+        /// for only when stdin is a terminal and not used for a value.
+        #[arg(long = "credential", value_name = "FIELD=VALUE")]
+        credentials: Vec<String>,
     },
     /// Describe an app operation
     Describe(DescribeArgs),
