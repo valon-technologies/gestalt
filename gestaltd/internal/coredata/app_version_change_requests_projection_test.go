@@ -23,6 +23,27 @@ func TestLatestKnownVersionBreaksTimestampTiesLexicographically(t *testing.T) {
 	}
 }
 
+func TestLatestKnownVersionBreaksTimestampTiesBySemver(t *testing.T) {
+	t.Parallel()
+	at := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct{ lower, higher string }{
+		{lower: "1.9.0", higher: "1.10.0"},
+		{lower: "1.2.3-rc.1", higher: "1.2.3"},
+		{lower: "1.0.0-rc.2", higher: "1.0.0-rc.10"},
+	} {
+		lower := &core.AppInstallation{Version: tc.lower, UpdatedAt: at}
+		higher := &core.AppInstallation{Version: tc.higher, UpdatedAt: at}
+		for _, installations := range [][]*core.AppInstallation{
+			{lower, higher},
+			{higher, lower},
+		} {
+			if got := coredata.LatestKnownVersion(installations); got != tc.higher {
+				t.Fatalf("LatestKnownVersion(%s, %s) = %q, want %s", tc.lower, tc.higher, got, tc.higher)
+			}
+		}
+	}
+}
+
 func TestInstallationFromChangeRequestPreservesSourceIdentity(t *testing.T) {
 	t.Parallel()
 
