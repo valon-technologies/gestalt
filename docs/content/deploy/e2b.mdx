@@ -1,0 +1,215 @@
+import { Callout } from 'nextra/components'
+
+# E2B
+
+Deploy Gestalt to [E2B](https://e2b.dev) when you want an isolated, ephemeral
+Gestalt server inside an agent sandbox. This is a good fit for demos, tests,
+per-agent tool environments, and CI jobs. For a durable shared control plane
+with stable URLs, TLS, and persistent infrastructure, use [Docker](/deploy/docker)
+or [Helm](/deploy/helm) instead.
+
+<Callout type="warning">
+  [E2B template start commands](https://e2b.dev/docs/template/start-ready-command)
+  run during template build and are snapshotted. Do not bake production secrets,
+  OAuth client secrets, or a sandbox-specific `server.baseUrl` into a template.
+  Start `gestaltd` after creating the sandbox when those values need to be
+  unique per sandbox.
+</Callout>
+
+## Prerequisites
+
+- An [E2B account and API key](https://e2b.dev/docs/api-key).
+- The [E2B CLI](https://e2b.dev/docs/cli) installed with Homebrew or npm.
+- A Gestalt config file that can run inside a single sandbox.
+
+```sh
+brew install e2b
+# or
+npm install -g @e2b/cli
+
+e2b auth login
+```
+
+For CI, set `E2B_ACCESS_TOKEN` for noninteractive CLI commands and
+`E2B_API_KEY` for SDK calls.
+
+## Build a sandbox template
+
+Create an `e2b.Dockerfile` that packages the published `gestaltd` image and a
+config file, but does not start the server during the template build:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+
+USER root
+RUN apk add --no-cache curl
+RUN mkdir -p /etc/gestalt /data && chown -R nobody:nobody /etc/gestalt /data
+
+COPY --chown=nobody:nobody config.yaml /etc/gestalt/config.yaml
+
+USER nobody:nobody
+ENTRYPOINT []
+CMD ["sh", "-c", "tail -f /dev/null"]
+```
+
+The `/etc/gestalt` directory is writable because `gestaltd init` writes
+`gestalt.lock.json` next to the primary config by default. The `/data`
+directory stores prepared provider artifacts and SQLite state.
+
+Create `config.yaml` next to the Dockerfile:
+
+```yaml
+apiVersion: gestaltd.config/v3
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  baseUrl: "${GESTALT_BASE_URL:-}"
+  encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
+  providers:
+    indexeddb: main
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+```
+
+This is a minimal single-sandbox config. Add your normal platform auth,
+plugins, UI bundles, secrets provider, and datastore settings before using the
+template for anything beyond a throwaway environment.
+
+Build the E2B template:
+
+```sh
+e2b template create \
+  --dockerfile e2b.Dockerfile \
+  --cpu-count 2 \
+  --memory-mb 1024 \
+  gestalt-runtime
+```
+
+## Start Gestalt in a sandbox
+
+Use the E2B SDK to create a sandbox, derive the public sandbox URL for port
+`8080`, then run `gestaltd init` and `gestaltd serve --locked` with runtime
+environment variables.
+
+```sh
+npm install e2b dotenv
+```
+
+Create `run-gestalt.mjs`:
+
+```js
+import "dotenv/config";
+import { Sandbox } from "e2b";
+
+const encryptionKey = process.env.GESTALT_ENCRYPTION_KEY;
+
+if (!encryptionKey) {
+  throw new Error("Set GESTALT_ENCRYPTION_KEY to a stable 32-byte key.");
+}
+
+const sandbox = await Sandbox.create("gestalt-runtime", {
+  network: {
+    allowPublicTraffic: false,
+  },
+});
+
+const baseUrl = `https://${sandbox.getHost(8080)}`;
+const envs = {
+  GESTALT_BASE_URL: baseUrl,
+  GESTALT_ENCRYPTION_KEY: encryptionKey,
+};
+
+await sandbox.commands.run(
+  "gestaltd init --config /etc/gestalt/config.yaml --artifacts-dir /data",
+  { envs, timeoutMs: 300_000 },
+);
+
+await sandbox.commands.run(
+  "gestaltd serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data",
+  { envs, background: true },
+);
+
+await sandbox.commands.run(
+  "until curl -fsS http://127.0.0.1:8080/ready >/dev/null; do sleep 1; done",
+  { timeoutMs: 120_000 },
+);
+
+console.log(`Gestalt URL: ${baseUrl}`);
+console.log(`E2B sandbox ID: ${sandbox.sandboxId}`);
+console.log(`Traffic access token: ${sandbox.trafficAccessToken}`);
+```
+
+Run it:
+
+```sh
+# For throwaway sandboxes:
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+
+# For durable external state, reuse the same key on every sandbox start.
+node run-gestalt.mjs
+```
+
+When `allowPublicTraffic` is `false`, send the `e2b-traffic-access-token`
+header with requests to the sandbox URL. For a browser-only demo, omit the
+`network.allowPublicTraffic` block and avoid storing real upstream credentials
+in the sandbox.
+
+This restricts inbound access to E2B's public sandbox URL. It does not disable
+outbound internet from the sandbox, which `gestaltd init` needs when provider
+release metadata and artifacts are not vendored.
+
+## Fast-start snapshot
+
+E2B can snapshot a process that was started during template build, which makes
+new sandboxes ready immediately. Use that pattern only when the config,
+database snapshot, and encryption key are intentionally shared by every sandbox
+created from the template.
+
+For this mode, use a config with literal non-production values and add the
+`init` step to the Dockerfile:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+
+USER root
+RUN apk add --no-cache curl
+RUN mkdir -p /etc/gestalt /data && chown -R nobody:nobody /etc/gestalt /data
+
+COPY --chown=nobody:nobody config.yaml /etc/gestalt/config.yaml
+
+USER nobody:nobody
+RUN gestaltd init --config /etc/gestalt/config.yaml --artifacts-dir /data
+
+ENTRYPOINT []
+```
+
+```sh
+e2b template create \
+  --dockerfile e2b.Dockerfile \
+  --cmd "gestaltd serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data" \
+  --ready-cmd "curl -fsS http://127.0.0.1:8080/ready" \
+  --cpu-count 2 \
+  --memory-mb 1024 \
+  gestalt-dev
+```
+
+## Operational notes
+
+- E2B sandboxes are ephemeral. Store durable state in an external datastore if
+  data must survive sandbox replacement.
+- SQLite is fine for one sandbox. Use a networked IndexedDB provider when more
+  than one sandbox must share state.
+- `server.baseUrl` should be the sandbox URL returned by `sandbox.getHost(8080)`
+  when OAuth callbacks or browser links need to round-trip through E2B.
+- Keep `gestaltd init` and `gestaltd serve --locked` together so the sandbox
+  runs from resolved, pinned provider artifacts.
+- Do not set E2B `allowInternetAccess` to `false` unless all provider artifacts
+  are vendored and every required external service remains reachable through
+  another network path.
+- If you restrict E2B public traffic, OAuth callbacks from external providers
+  must still be able to reach the Gestalt callback URL.
