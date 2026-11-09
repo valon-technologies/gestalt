@@ -1,0 +1,194 @@
+import { Callout } from 'nextra/components'
+
+# Fly.io
+
+Fly.io can run Gestalt as a single HTTP service on port `8080`. This guide uses
+a locked image for repeatable deploys, Fly Secrets for runtime secrets, and a
+Fly Volume mounted at `/data` for SQLite and prepared provider artifacts.
+
+<Callout type="warning">
+  SQLite on a Fly Volume is a single-Machine deployment pattern. For more than
+  one Machine, use a networked datastore provider such as Postgres, MySQL,
+  DynamoDB, or MongoDB instead of `sqlite:///data/gestalt.db`.
+</Callout>
+
+## Prepare config
+
+Create `deploy/config.yaml`:
+
+```yaml
+apiVersion: gestaltd.config/v3
+server:
+  public:
+    host: 0.0.0.0
+    port: 8080
+  baseUrl: ${GESTALT_BASE_URL}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: sqlite:///data/gestalt.db
+```
+
+Set the values used while preparing the lock state. Use the same
+`GESTALT_ENCRYPTION_KEY` value for the Fly secret later; do not regenerate it
+between `gestaltd init` and deploy.
+
+```sh
+export FLY_APP=gestalt-example
+export FLY_REGION=ord
+export GESTALT_BASE_URL="https://${FLY_APP}.fly.dev"
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+
+gestaltd init \
+  --config deploy/config.yaml \
+  --artifacts-dir deploy \
+  --platform linux/amd64
+```
+
+Use the platform that matches the Fly Machine you deploy. For arm64 Machines,
+run `gestaltd init` with `--platform linux/arm64` instead, or include both
+platforms as a comma-separated list.
+
+## Build image
+
+Create `Dockerfile.fly`:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest
+COPY deploy/config.yaml /app/config.yaml
+COPY deploy/gestalt.lock.json /app/gestalt.lock.json
+CMD ["serve", "--locked", "--config", "/app/config.yaml", "--lockfile", "/app/gestalt.lock.json", "--artifacts-dir", "/data/artifacts"]
+```
+
+This uses the lockfile-only deployment pattern: the image contains the config
+and `gestalt.lock.json`, while the running Machine downloads any missing
+provider artifacts into `/data/artifacts` and verifies them against the pinned
+hashes in the lockfile.
+
+Make sure your Docker build context includes `deploy/config.yaml` and
+`deploy/gestalt.lock.json`. If your `.dockerignore` excludes `deploy/`, remove
+that rule or add exceptions before running `fly deploy`:
+
+```dockerignore
+!deploy/
+!deploy/config.yaml
+!deploy/gestalt.lock.json
+```
+
+## Configure Fly
+
+Create the Fly app without deploying yet:
+
+```sh
+fly launch \
+  --no-deploy \
+  --ha=false \
+  --name "$FLY_APP" \
+  --primary-region "$FLY_REGION" \
+  --dockerfile Dockerfile.fly \
+  --internal-port 8080 \
+  --no-db
+```
+
+Set the runtime secret:
+
+```sh
+fly secrets set GESTALT_ENCRYPTION_KEY="$GESTALT_ENCRYPTION_KEY" --app "$FLY_APP"
+```
+
+Edit the generated `fly.toml` so it matches this shape:
+
+```toml
+app = "gestalt-example"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile.fly"
+
+[env]
+  GESTALT_BASE_URL = "https://gestalt-example.fly.dev"
+
+[mounts]
+  source = "gestalt_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/ready"
+
+    [http_service.checks.headers]
+      "X-Forwarded-Proto" = "https"
+```
+
+Replace `gestalt-example` and `ord` with your app name and region. The
+`server.baseUrl` value must match the public HTTPS URL exactly so OAuth callback
+URLs are generated correctly.
+
+Create the volume in the same region as the app:
+
+```sh
+fly volumes create gestalt_data \
+  --app "$FLY_APP" \
+  --region "$FLY_REGION" \
+  --size 1
+```
+
+## Deploy
+
+Deploy the locked image:
+
+```sh
+fly deploy --app "$FLY_APP"
+```
+
+Check readiness and logs:
+
+```sh
+fly status --app "$FLY_APP"
+fly logs --app "$FLY_APP"
+curl "https://${FLY_APP}.fly.dev/ready"
+```
+
+## Updating
+
+After changing `deploy/config.yaml` or any provider source, refresh the lock
+state and redeploy:
+
+```sh
+gestaltd init \
+  --config deploy/config.yaml \
+  --artifacts-dir deploy \
+  --platform linux/amd64
+
+fly deploy --app "$FLY_APP"
+```
+
+If you switch from SQLite to a networked datastore, remove the `[mounts]`
+section, set the datastore DSN through `fly secrets set`, and update
+`providers.indexeddb.main.config.dsn` in `deploy/config.yaml`.
+
+If you need an image that starts without fetching provider artifacts at runtime,
+run `gestaltd init` on the same Linux platform that Fly will run, copy the
+generated `deploy/.gestaltd/` directory into the image, and set
+`--artifacts-dir` to that image path. Do not vendor artifacts prepared on a
+different operating system or architecture.
+
+See the Fly.io docs for [deploying with a Dockerfile](https://fly.io/docs/languages-and-frameworks/dockerfile/),
+[Fly app configuration](https://fly.io/docs/reference/configuration/), and
+[Fly Volumes](https://fly.io/docs/volumes/).
