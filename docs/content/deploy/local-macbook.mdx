@@ -1,0 +1,238 @@
+# Local MacBook
+
+Use this guide when you want a personal Gestalt server running directly on a
+MacBook. It installs the native macOS binaries, keeps state under
+`~/.gestaltd`, and runs `gestaltd` as a `launchd` user service at login.
+
+This is a local-only deployment pattern. For a shared or internet-facing
+deployment, use [Docker](/deploy/docker) or [Helm](/deploy/helm), add platform
+authentication, and put Gestalt behind TLS.
+
+## Install
+
+Install the server and client with Homebrew:
+
+```sh
+brew tap valon-technologies/gestalt
+brew install valon-technologies/gestalt/gestaltd
+brew install valon-technologies/gestalt/gestalt
+```
+
+Verify both binaries are on your `PATH`:
+
+```sh
+gestaltd --version
+gestalt --version
+```
+
+## Create local state
+
+Create the deployment directories and a persistent encryption key:
+
+```sh
+mkdir -p "$HOME/.gestaltd/secrets" "$HOME/.gestaltd/artifacts"
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
+openssl rand -hex 32 > "$HOME/.gestaltd/secrets/encryption-key"
+chmod 700 "$HOME/.gestaltd" "$HOME/.gestaltd/secrets"
+chmod 600 "$HOME/.gestaltd/secrets/encryption-key"
+```
+
+Write a local config:
+
+```sh
+cat > "$HOME/.gestaltd/config.yaml" <<EOF
+apiVersion: gestaltd.config/v3
+server:
+  public:
+    host: 127.0.0.1
+    port: 8080
+  baseUrl: http://localhost:8080
+  artifactsDir: ./artifacts
+  encryptionKey:
+    secret:
+      provider: local_files
+      name: encryption-key
+  providers:
+    secrets: local_files
+    indexeddb: main
+
+providers:
+  secrets:
+    local_files:
+      source: file
+      config:
+        dir: "${HOME}/.gestaltd/secrets"
+
+  indexeddb:
+    main:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.4/provider-release.yaml
+      config:
+        dsn: "sqlite://${HOME}/.gestaltd/gestalt.db"
+
+  ui:
+    root:
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/ui/default/v0.0.1-alpha.17/provider-release.yaml
+      path: /
+
+plugins:
+  httpbin:
+    displayName: HTTPBin
+    source: https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/httpbin/v0.0.1-alpha.1/provider-release.yaml
+    allowedHosts:
+      - httpbin.org
+EOF
+
+chmod 600 "$HOME/.gestaltd/config.yaml"
+```
+
+The public listener is bound to `127.0.0.1`, so it is reachable only from the
+same Mac. Change it to `0.0.0.0` only for a trusted LAN deployment, and add
+authentication before exposing it to other users.
+
+## Prepare locked state
+
+Validate the config and prepare the provider artifacts:
+
+```sh
+gestaltd validate --config "$HOME/.gestaltd/config.yaml"
+gestaltd init --config "$HOME/.gestaltd/config.yaml"
+```
+
+`gestaltd init` writes `~/.gestaltd/gestalt.lock.json` and prepares provider
+artifacts under `~/.gestaltd/artifacts`. After that, start the server in locked
+mode. The first `init` needs access to GitHub to resolve the published
+providers in the config; later locked starts use the prepared local artifacts.
+
+```sh
+gestaltd serve --locked --config "$HOME/.gestaltd/config.yaml"
+```
+
+In another terminal, check that it is healthy:
+
+```sh
+curl http://localhost:8080/health
+curl http://localhost:8080/ready
+```
+
+Stop the foreground server with `Ctrl-C` before installing the `launchd`
+service.
+
+## Run at login
+
+Create a LaunchAgent plist. `launchd` does not expand shell expressions inside
+the plist, so this command expands the Homebrew binary path and your home
+directory before writing the file:
+
+```sh
+GESTALTD_BIN="$(brew --prefix)/bin/gestaltd"
+PLIST="$HOME/Library/LaunchAgents/com.valon.gestaltd.plist"
+
+cat > "$PLIST" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.valon.gestaltd</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>${GESTALTD_BIN}</string>
+    <string>serve</string>
+    <string>--locked</string>
+    <string>--config</string>
+    <string>${HOME}/.gestaltd/config.yaml</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>${HOME}/.gestaltd</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>${HOME}/Library/Logs/gestaltd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>${HOME}/Library/Logs/gestaltd.err.log</string>
+</dict>
+</plist>
+EOF
+```
+
+Validate the plist before loading it:
+
+```sh
+plutil -lint "$PLIST"
+```
+
+Load and start the service:
+
+```sh
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.valon.gestaltd.plist"
+launchctl kickstart -k "gui/$(id -u)/com.valon.gestaltd"
+```
+
+Check status and logs:
+
+```sh
+launchctl print "gui/$(id -u)/com.valon.gestaltd"
+tail -f "$HOME/Library/Logs/gestaltd.out.log" "$HOME/Library/Logs/gestaltd.err.log"
+```
+
+## Connect the CLI
+
+Initialize the client against the local server:
+
+```sh
+gestalt init
+```
+
+Use `http://localhost:8080` when prompted for the server URL. Then verify the
+default plugin is visible:
+
+```sh
+gestalt plugin list
+gestalt plugin invoke httpbin get_ip
+```
+
+The web UI is available at `http://localhost:8080`, and the built-in admin UI
+is available at `http://localhost:8080/admin`.
+
+## Upgrade or restart
+
+After upgrading the binaries or changing `config.yaml`, refresh the lock state
+and restart the service:
+
+```sh
+brew upgrade valon-technologies/gestalt/gestaltd valon-technologies/gestalt/gestalt
+gestaltd init --config "$HOME/.gestaltd/config.yaml"
+launchctl kickstart -k "gui/$(id -u)/com.valon.gestaltd"
+```
+
+To stop and unload the service:
+
+```sh
+launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.valon.gestaltd.plist"
+```
+
+## Troubleshooting
+
+If `serve --locked` reports missing or stale artifacts, rerun:
+
+```sh
+gestaltd init --config "$HOME/.gestaltd/config.yaml"
+launchctl kickstart -k "gui/$(id -u)/com.valon.gestaltd"
+```
+
+If port `8080` is already in use, change `server.public.port` in
+`~/.gestaltd/config.yaml`, rerun `gestaltd init`, restart the service, and then
+run `gestalt init` again with the new URL.
+
+If OAuth plugins are added later, use
+`http://localhost:8080/api/v1/auth/callback` as the plugin connection callback
+URL unless the provider documents a different redirect. Platform authentication
+providers use `http://localhost:8080/api/v1/auth/login/callback`. For local
+plaintext OAuth providers, set their development-only insecure HTTP option when
+the provider supports one.
