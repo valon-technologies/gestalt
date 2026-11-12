@@ -28,10 +28,12 @@ func mountedUIThemeHandlerFullPath(mounted MountedUI, next http.Handler) http.Ha
 			return
 		}
 		switch {
+		case r.URL.Path == mountedUIBrandPaths(mounted.Path):
+			serveMountedUIBrandJSON(w, r, mounted)
 		case r.URL.Path == stylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, assetsPrefix):
-			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir, assetsPrefix)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -53,10 +55,12 @@ func mountedUIThemeHandler(mounted MountedUI, next http.Handler) http.Handler {
 			return
 		}
 		switch {
+		case r.URL.Path == mountedUIBrandJSONPath:
+			serveMountedUIBrandJSON(w, r, mounted)
 		case r.URL.Path == mountedUIThemeStylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, mountedUIThemeAssetsPrefix):
-			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir, mountedUIThemeAssetsPrefix)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -76,8 +80,8 @@ func serveMountedUIThemeStylesheet(w http.ResponseWriter, r *http.Request, style
 	serveMountedUIThemeContent(w, r, "text/css; charset=utf-8", body)
 }
 
-func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir string) {
-	assetPath, ok := cleanMountedUIThemeAssetPath(strings.TrimPrefix(r.URL.Path, mountedUIThemeAssetsPrefix))
+func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir, assetsPrefix string) {
+	assetPath, ok := cleanMountedUIThemeAssetPath(strings.TrimPrefix(r.URL.Path, assetsPrefix))
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -108,6 +112,8 @@ func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir 
 // table lacks .woff2, and OS mime databases are absent in minimal containers
 // — while delivering licensed fonts is the main reason assetsDir exists.
 var mountedUIThemeContentTypes = map[string]string{
+	".svg":   "image/svg+xml",
+	".png":   "image/png",
 	".woff2": "font/woff2",
 	".woff":  "font/woff",
 }
