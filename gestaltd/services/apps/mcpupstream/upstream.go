@@ -313,6 +313,29 @@ func (u *Upstream) resolveInnerName(name string) (string, bool) {
 	return u.exposure.Resolve(name)
 }
 
+// toolDisplayTitle resolves a tool's display title in the order the MCP schema
+// specifies. BaseMetadata.title defines it:
+//
+//	Intended for UI and end-user contexts [...] If not provided, the name
+//	should be used for display (except for Tool, where `annotations.title`
+//	should be given precedence over using `name`, if present).
+//
+// So the order is `title`, then `annotations.title`, then the name. Reading
+// only `annotations.title` skips the first and highest-priority step, and
+// servers overwhelmingly populate the top-level field, so in practice this
+// discarded every title an upstream supplied.
+//
+// The name is deliberately NOT substituted here. Leaving the field empty is
+// what lets each surface choose its own fallback (the MCP front door already
+// substitutes the operation ID), and writing the ID into this field would make
+// a real title indistinguishable from a substituted one.
+func toolDisplayTitle(t mcpgo.Tool) string {
+	if title := strings.TrimSpace(t.Title); title != "" {
+		return title
+	}
+	return strings.TrimSpace(t.Annotations.Title)
+}
+
 func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
 	cat := &catalog.Catalog{
 		Name:       name,
@@ -329,7 +352,7 @@ func buildCatalog(name string, tools []mcpgo.Tool) *catalog.Catalog {
 
 		catOp := catalog.CatalogOperation{
 			ID:           tools[i].Name,
-			Title:        tools[i].Annotations.Title,
+			Title:        toolDisplayTitle(tools[i]),
 			Description:  tools[i].Description,
 			InputSchema:  schema,
 			OutputSchema: outputSchema,
