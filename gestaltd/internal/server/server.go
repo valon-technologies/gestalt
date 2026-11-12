@@ -68,6 +68,7 @@ type MountedUI struct {
 	// <mount>/theme/ respectively. Both are optional.
 	ThemeStylesheet string
 	ThemeAssetsDir  string
+	PublicConfig    map[string]any
 	IsDev           bool
 	AppLevelAuth    bool
 	builtInAdmin    bool

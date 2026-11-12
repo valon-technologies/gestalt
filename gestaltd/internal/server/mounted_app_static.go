@@ -48,6 +48,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
 				IsDev:               true,
+				PublicConfig:        entry.Static.PublicConfig,
 			})
 			continue
 		}
@@ -59,6 +60,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				AuthorizationPolicy: entry.AuthorizationPolicy,
 				AppLevelAuth:        !entry.Static.Public,
 				Handler:             registryAppStaticHandler(name, mount, entry, providers, artifactsDir, runtimeState),
+				PublicConfig:        entry.Static.PublicConfig,
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
 			})
@@ -85,6 +87,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 			AuthorizationPolicy: entry.AuthorizationPolicy,
 			AppLevelAuth:        !entry.Static.Public,
 			Handler:             handler,
+			PublicConfig:        entry.Static.PublicConfig,
 			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
 		})

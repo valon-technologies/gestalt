@@ -126,6 +126,7 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 			inner = mountedUIThemeHandlerFullPath(mounted, inner)
 		}
 		inner = mountedUITelemetryHandler(mounted, inner)
+		inner = mountedUIPublicConfigHandler(mounted, inner)
 		return withDevContentSecurityPolicy(s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
 	inner = mountedUIThemeHandler(mounted, inner)
@@ -133,6 +134,7 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
 	inner = mountedUITelemetryHandler(mounted, inner)
+	inner = mountedUIPublicConfigHandler(mounted, inner)
 	return s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin)
 }
 
