@@ -220,12 +220,23 @@ func (h *Handler) AuthorizationURL(state string, scopes []string) string {
 }
 
 func (h *Handler) StartOAuth(state string, scopes []string) (string, string) {
-	upstream, err := h.ensure(context.Background())
+	authURL, verifier, err := h.StartOAuthE(state, scopes)
 	if err != nil {
 		slog.Error("mcpoauth: ensure failed", "method", "StartOAuth", "error", err)
-		return "", ""
 	}
-	return upstream.AuthorizationURLWithPKCE(state, scopes)
+	return authURL, verifier
+}
+
+// StartOAuthE is StartOAuth that says why it could not start. StartOAuth can
+// only return an empty URL, which the connect handler cannot turn into a
+// useful answer for the caller.
+func (h *Handler) StartOAuthE(state string, scopes []string) (string, string, error) {
+	upstream, err := h.ensure(context.Background())
+	if err != nil {
+		return "", "", err
+	}
+	authURL, verifier := upstream.AuthorizationURLWithPKCE(state, scopes)
+	return authURL, verifier, nil
 }
 
 func (h *Handler) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
