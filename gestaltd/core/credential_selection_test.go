@@ -134,3 +134,26 @@ func TestValidateConnectionParamDefsRequiresOneTypedTokenIdentity(t *testing.T) 
 		}
 	}
 }
+
+func TestCredentialNeedsReconnectWhenExpiredGrantCannotBeRefreshed(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(10, 0)
+	expired := time.Unix(9, 0)
+	live := time.Unix(11, 0)
+	for _, tc := range []struct {
+		name  string
+		grant *ExternalCredentialGrant
+		want  bool
+	}{
+		{"expired without refresh token", &ExternalCredentialGrant{AccessToken: "a", ExpiresAt: &expired}, true},
+		{"expired after failed refresh", &ExternalCredentialGrant{AccessToken: "a", RefreshToken: "r", ExpiresAt: &expired, RefreshErrorCount: 1}, true},
+		{"expired with refresh token still to try", &ExternalCredentialGrant{AccessToken: "a", RefreshToken: "r", ExpiresAt: &expired}, false},
+		{"unexpired without refresh token", &ExternalCredentialGrant{AccessToken: "a", ExpiresAt: &live}, false},
+		{"no expiry", &ExternalCredentialGrant{AccessToken: "a"}, false},
+	} {
+		if got := CredentialNeedsReconnect(&ExternalCredential{Grant: tc.grant}, now); got != tc.want {
+			t.Errorf("%s: CredentialNeedsReconnect = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
