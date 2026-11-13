@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -78,8 +79,12 @@ func flattenedOperationResultFromToolResult(result *mcpgo.CallToolResult) (*core
 	}
 	opResult.MCPResult = result
 	if result.IsError {
-		opResult.Status = http.StatusBadGateway
-		opResult.Body = []byte(`{"error":"operation failed"}`)
+		status, body, err := toolErrorResponse(result)
+		if err != nil {
+			return nil, err
+		}
+		opResult.Status = status
+		opResult.Body = body
 		return opResult, nil
 	}
 	body, err := flattenedToolResultBody(result)
@@ -88,6 +93,134 @@ func flattenedOperationResultFromToolResult(result *mcpgo.CallToolResult) (*core
 	}
 	opResult.Body = body
 	return opResult, nil
+}
+
+// ToolErrorCode marks an error the upstream tool reported itself, as opposed to
+// one raised while reaching it.
+const ToolErrorCode = "upstream_tool_error"
+
+// maxToolErrorMessageBytes caps the message lifted out of a tool error so a tool
+// that puts a large payload in its error text cannot bloat every error line.
+// The payload itself still rides along in details.
+const maxToolErrorMessageBytes = 4 << 10
+
+// toolErrorResponse shapes an isError tool result for surfaces that flatten the
+// MCP envelope. The tool ran and reported a failure, so the body carries its
+// reason in the {"error":{"message","code"}} envelope every SDK already reads,
+// and the status describes that failure. A blanket 502 told callers the gateway
+// had failed and invited them to retry a request the tool had rejected.
+//
+// Passing the tool's text through matches how REST upstream error bodies are
+// already returned. The text is the upstream's own response to the caller's
+// request, not a gateway-internal error.
+func toolErrorResponse(result *mcpgo.CallToolResult) (int, []byte, error) {
+	text := toolResultText(result)
+	details := toolErrorDetails(result, text)
+	envelope := map[string]any{
+		"error": map[string]any{
+			"message": toolErrorMessage(details, text),
+			"code":    ToolErrorCode,
+		},
+	}
+	if details != nil {
+		envelope["details"] = details
+	}
+	body, err := json.Marshal(envelope)
+	if err != nil {
+		return 0, nil, err
+	}
+	return toolErrorStatus(details), body, nil
+}
+
+func toolResultText(result *mcpgo.CallToolResult) string {
+	var parts []string
+	for _, content := range result.Content {
+		if text, ok := mcpgo.AsTextContent(content); ok && strings.TrimSpace(text.Text) != "" {
+			parts = append(parts, strings.TrimSpace(text.Text))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// toolErrorDetails returns the tool's structured error payload: its structured
+// content, or its text when that text is JSON, as many MCP servers encode it.
+func toolErrorDetails(result *mcpgo.CallToolResult, text string) any {
+	if result.StructuredContent != nil {
+		return result.StructuredContent
+	}
+	if text == "" || !json.Valid([]byte(text)) {
+		return nil
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		return nil
+	}
+	return parsed
+}
+
+func toolErrorMessage(details any, text string) string {
+	message := text
+	if object, ok := details.(map[string]any); ok {
+		if value, ok := object["message"].(string); ok && strings.TrimSpace(value) != "" {
+			message = strings.TrimSpace(value)
+		}
+	}
+	if message == "" {
+		return "upstream tool reported an error without a message"
+	}
+	return truncateUTF8(message, maxToolErrorMessageBytes)
+}
+
+// toolErrorStatus uses the HTTP status a tool reports for its own upstream call,
+// when it reports one. 401 and 407 are not passed through: clients read those as
+// the gateway rejecting their own credentials. An upstream 5xx becomes 502,
+// which is then accurate. Anything else is 422: the request reached the tool and
+// the tool refused it.
+func toolErrorStatus(details any) int {
+	status := reportedStatus(details)
+	switch {
+	case status == http.StatusUnauthorized, status == http.StatusProxyAuthRequired:
+		return http.StatusUnprocessableEntity
+	case status >= 400 && status <= 499:
+		return status
+	case status >= 500 && status <= 599:
+		return http.StatusBadGateway
+	default:
+		return http.StatusUnprocessableEntity
+	}
+}
+
+func reportedStatus(details any) int {
+	object, ok := details.(map[string]any)
+	if !ok {
+		return 0
+	}
+	for _, key := range []string{"statusCode", "status"} {
+		switch value := object[key].(type) {
+		case float64:
+			if value == float64(int(value)) {
+				return int(value)
+			}
+		case int:
+			return value
+		case json.Number:
+			if n, err := value.Int64(); err == nil {
+				return int(n)
+			}
+		}
+	}
+	return 0
+}
+
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 func flattenedToolResultBody(result *mcpgo.CallToolResult) ([]byte, error) {
