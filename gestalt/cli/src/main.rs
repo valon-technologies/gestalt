@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
@@ -10,7 +12,7 @@ use gestalt::output;
 
 fn run() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    let format = cli.format;
+    let format = output::Format::resolve(cli.format, std::io::stdout().is_terminal());
     let url = cli.url.as_deref();
     let url_was_explicit = cli.url.is_some();
 

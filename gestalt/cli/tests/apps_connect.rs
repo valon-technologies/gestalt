@@ -579,7 +579,7 @@ fn test_cli_apps_list_table_output() {
         .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.args(["app", "list"]);
+    cmd.args(["--format", "table", "app", "list"]);
     let output = cmd.output().unwrap();
     assert!(
         output.status.success(),

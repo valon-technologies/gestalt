@@ -182,7 +182,7 @@ fn test_auth_status_reports_auth_disabled_before_stored_credentials() {
     cli_command(home.path())
         .arg("--url")
         .arg(server.url())
-        .args(["auth", "status"])
+        .args(["--format", "table", "auth", "status"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Auth:        disabled"))
@@ -205,7 +205,7 @@ fn test_auth_status_reports_unreachable_server() {
     cli_command(home.path())
         .arg("--url")
         .arg("http://127.0.0.1:1")
-        .args(["auth", "status"])
+        .args(["--format", "table", "auth", "status"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Server:      http://127.0.0.1:1"))
@@ -218,7 +218,7 @@ fn test_auth_status_no_url_configured() {
     let home = tempfile::tempdir().unwrap();
 
     cli_command(home.path())
-        .args(["auth", "status"])
+        .args(["--format", "table", "auth", "status"])
         .assert()
         .success()
         .stderr(predicate::str::contains("Server:      not configured"))

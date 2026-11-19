@@ -11,9 +11,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    /// Output format
-    #[arg(long, global = true, value_enum, default_value_t = Format::Table)]
-    pub format: Format,
+    /// Output format [default: table on a terminal, json otherwise]
+    #[arg(long, global = true, value_enum)]
+    pub format: Option<Format>,
 
     /// API server URL (overrides config and env)
     #[arg(long, global = true)]
