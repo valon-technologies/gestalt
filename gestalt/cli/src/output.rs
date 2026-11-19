@@ -12,6 +12,17 @@ pub enum Format {
     Table,
 }
 
+impl Format {
+    /// Explicit `--format` wins; otherwise table for terminals, JSON for pipes and scripts.
+    pub fn resolve(explicit: Option<Format>, stdout_is_terminal: bool) -> Format {
+        explicit.unwrap_or(if stdout_is_terminal {
+            Format::Table
+        } else {
+            Format::Json
+        })
+    }
+}
+
 pub fn print_json<T>(value: &T)
 where
     T: Serialize + ?Sized,
@@ -156,5 +167,18 @@ pub fn print_error(msg: &str) {
         eprintln!("{}: {}", "error".red().bold(), msg);
     } else {
         eprintln!("error: {}", msg);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Format;
+
+    #[test]
+    fn resolve_defaults_to_table_on_tty_and_json_otherwise() {
+        assert_eq!(Format::resolve(None, true), Format::Table);
+        assert_eq!(Format::resolve(None, false), Format::Json);
+        assert_eq!(Format::resolve(Some(Format::Table), false), Format::Table);
+        assert_eq!(Format::resolve(Some(Format::Json), true), Format::Json);
     }
 }
