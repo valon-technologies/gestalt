@@ -12,6 +12,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 	s.mountAppAdminIdentitiesRoutes(r)
 	s.mountAppAdminAccessRoutes(r)
 	s.mountAppAdminAllowedOperationsRoutes(r)
+	s.mountAppAdminCheckRoutes(r)
 	s.mountAppAdminMetricsRoutes(r)
 
 	s.mountCatalogCLIRoutes(r)

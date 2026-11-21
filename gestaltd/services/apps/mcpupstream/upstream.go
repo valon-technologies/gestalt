@@ -287,22 +287,34 @@ func mergeHeaders(base, override map[string]string) map[string]string {
 }
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
-	if u.client != nil && u.cat != nil {
+	report := checkReportFromContext(ctx)
+	if report == nil && u.client != nil && u.cat != nil {
 		return u.decorateCatalog(u.cat), nil
 	}
 
 	client, err := u.connect(ctx, token)
 	if err != nil {
+		report.recordError(u.name, err)
 		return nil, err
 	}
-	defer func() { _ = client.Close() }()
+	if client != u.client {
+		defer func() { _ = client.Close() }()
+	}
 
 	toolsResult, err := client.ListTools(ctx, mcpgo.ListToolsRequest{})
 	if err != nil {
-		return nil, fmt.Errorf("mcpupstream %s: listing tools: %w", u.name, err)
+		err = fmt.Errorf("mcpupstream %s: listing tools: %w", u.name, err)
+		report.recordError(u.name, err)
+		return nil, err
 	}
 
 	cat := buildCatalog(u.name, toolsResult.Tools)
+	if report != nil {
+		// Check mode records unknown allowed_operations keys instead of
+		// failing, so the caller sees every mismatch in one pass.
+		report.record(u.name, u.exposure, cat)
+		return u.decorateCatalog(u.exposure.ApplyCatalog(cat)), nil
+	}
 	if err := u.exposure.ValidateCatalog(cat); err != nil {
 		return nil, err
 	}

@@ -148,6 +148,15 @@ func (p *Policy) Validate(ops []core.Operation) error {
 }
 
 func (p *Policy) ValidateCatalog(cat *catalog.Catalog) error {
+	if unknown := p.UnknownCatalogOperations(cat); len(unknown) > 0 {
+		return fmt.Errorf("allowed_operations contains unknown operation %q", unknown[0])
+	}
+	return nil
+}
+
+// UnknownCatalogOperations returns, sorted, the allowed_operations keys that
+// do not name an operation in cat. It returns nil when either is nil.
+func (p *Policy) UnknownCatalogOperations(cat *catalog.Catalog) []string {
 	if p == nil || cat == nil {
 		return nil
 	}
@@ -160,13 +169,24 @@ func (p *Policy) ValidateCatalog(cat *catalog.Catalog) error {
 		}
 		opSet[op.ID] = struct{}{}
 	}
+	var unknown []string
 	for original := range p.originalToExposed {
 		if _, ok := opSet[original]; !ok {
-			return fmt.Errorf("allowed_operations contains unknown operation %q", original)
+			unknown = append(unknown, original)
 		}
 	}
+	slices.Sort(unknown)
+	return unknown
+}
 
-	return nil
+// ExposedName returns the name an original operation is exposed under, and
+// whether the policy exposes it at all. A nil policy exposes everything as-is.
+func (p *Policy) ExposedName(original string) (string, bool) {
+	if p == nil {
+		return original, true
+	}
+	exposed, ok := p.originalToExposed[original]
+	return exposed, ok
 }
 
 func (p *Policy) Resolve(name string) (string, bool) {
