@@ -100,13 +100,15 @@ func GroupCredentialAccountCandidateIndices(candidates []CredentialAccountCandid
 	return indices
 }
 
-// CredentialNeedsReconnect reports whether a credential's expired grant has
-// already failed refresh and therefore cannot be selected as a usable account.
+// CredentialNeedsReconnect reports whether a credential's grant has expired
+// and cannot be renewed: refresh already failed, or there is no refresh token
+// to try (an upstream that issues a long-lived access token and nothing else).
+// Such a grant cannot be selected as a usable account.
 func CredentialNeedsReconnect(credential *ExternalCredential, now time.Time) bool {
-	if credential == nil || credential.Grant == nil || credential.Grant.ExpiresAt == nil || credential.Grant.RefreshErrorCount <= 0 {
+	if credential == nil || credential.Grant == nil || credential.Grant.ExpiresAt == nil || credential.Grant.ExpiresAt.After(now) {
 		return false
 	}
-	return !credential.Grant.ExpiresAt.After(now)
+	return credential.Grant.RefreshErrorCount > 0 || credential.Grant.RefreshToken == ""
 }
 
 // PreferCredential applies the canonical ordering for credentials that
