@@ -19,7 +19,7 @@ import (
 // BuildOption configures optional aspects of provider construction.
 type BuildOption func(*buildOptions)
 
-const defaultHTTPTimeout = 10 * time.Second
+const defaultHTTPTimeout = 30 * time.Second
 
 type buildOptions struct {
 	authOverride AuthHandler
