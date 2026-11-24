@@ -127,6 +127,11 @@ for a service-account credential.
 }
 ```
 
+If Gestalt cannot produce an authorization URL, for example because an
+`mcp_oauth` app's discovery or dynamic client registration failed, the
+response is `502` with `"code": "connection_unavailable"` and the reason in
+`error`.
+
 `POST /api/v1/auth/connect-manual` accepts:
 
 ```json

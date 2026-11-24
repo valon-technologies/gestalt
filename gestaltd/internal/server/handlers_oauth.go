@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -13,6 +14,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
+
+// oauthStarterWithError is implemented by OAuth handlers that can say why they
+// could not produce an authorization URL (mcp_oauth: discovery or dynamic
+// client registration failed). Handlers without it keep the plain StartOAuth.
+type oauthStarterWithError interface {
+	StartOAuthE(state string, scopes []string) (authURL, verifier string, err error)
+}
 
 type startOAuthRequest struct {
 	Integration      string            `json:"integration"`
@@ -103,7 +111,28 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if authURL == "" {
-		authURL, verifier = handler.StartOAuth("_", req.Scopes)
+		if starter, ok := handler.(oauthStarterWithError); ok {
+			var startErr error
+			authURL, verifier, startErr = starter.StartOAuthE("_", req.Scopes)
+			if startErr != nil {
+				auditErr = startErr
+				slog.WarnContext(r.Context(), "oauth start failed", "provider", req.Integration, "connection", connection, "error", startErr)
+				writeTypedError(w, http.StatusBadGateway, "connection_unavailable", req.Integration,
+					fmt.Sprintf("cannot start connecting %q: %v", req.Integration, startErr))
+				return
+			}
+		} else {
+			authURL, verifier = handler.StartOAuth("_", req.Scopes)
+		}
+	}
+	// A handler that cannot reach its authorization server returns an empty
+	// URL. Setting state on that would answer 200 with a link that has no
+	// host, which a client would then open in the browser.
+	if authURL == "" {
+		auditErr = errors.New("oauth authorization URL unavailable")
+		writeTypedError(w, http.StatusBadGateway, "connection_unavailable", req.Integration,
+			fmt.Sprintf("cannot start connecting %q: its authorization server is unavailable", req.Integration))
+		return
 	}
 
 	authSource := ""
