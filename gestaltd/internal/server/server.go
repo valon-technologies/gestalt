@@ -66,11 +66,12 @@ type MountedUI struct {
 	// ThemeStylesheet and ThemeAssetsDir are resolved absolute paths to a
 	// deployment-configured theme, served at <mount>/theme.css and under
 	// <mount>/theme/ respectively. Both are optional.
-	ThemeStylesheet string
-	ThemeAssetsDir  string
-	IsDev           bool
-	AppLevelAuth    bool
-	builtInAdmin    bool
+	ThemeStylesheet     string
+	ThemeAssetsDir      string
+	ThemeFontCORSOrigin string
+	IsDev               bool
+	AppLevelAuth        bool
+	builtInAdmin        bool
 }
 
 type MountedHTTPBinding struct {

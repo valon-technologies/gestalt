@@ -31,7 +31,7 @@ func mountedUIThemeHandlerFullPath(mounted MountedUI, next http.Handler) http.Ha
 		case r.URL.Path == stylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, assetsPrefix):
-			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir, assetsPrefix, mounted.ThemeFontCORSOrigin)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -56,7 +56,7 @@ func mountedUIThemeHandler(mounted MountedUI, next http.Handler) http.Handler {
 		case r.URL.Path == mountedUIThemeStylesheetPath:
 			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
 		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, mountedUIThemeAssetsPrefix):
-			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir, mountedUIThemeAssetsPrefix, mounted.ThemeFontCORSOrigin)
 		default:
 			next.ServeHTTP(w, r)
 		}
@@ -76,8 +76,8 @@ func serveMountedUIThemeStylesheet(w http.ResponseWriter, r *http.Request, style
 	serveMountedUIThemeContent(w, r, "text/css; charset=utf-8", body)
 }
 
-func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir string) {
-	assetPath, ok := cleanMountedUIThemeAssetPath(strings.TrimPrefix(r.URL.Path, mountedUIThemeAssetsPrefix))
+func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir, assetsPrefix, fontOrigin string) {
+	assetPath, ok := cleanMountedUIThemeAssetPath(strings.TrimPrefix(r.URL.Path, assetsPrefix))
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -100,6 +100,13 @@ func serveMountedUIThemeAsset(w http.ResponseWriter, r *http.Request, assetsDir 
 	}
 	if contentType == "" {
 		contentType = http.DetectContentType(body)
+	}
+	if strings.HasPrefix(fontOrigin, "https://") && strings.HasPrefix(assetPath, "fonts/") && mountedUIThemeContentTypes[ext] != "" {
+		// Shared caches must not reuse a response across different Origin values.
+		w.Header().Add("Vary", "Origin")
+		if r.Header.Get("Origin") == fontOrigin {
+			w.Header().Set("Access-Control-Allow-Origin", fontOrigin)
+		}
 	}
 	serveMountedUIThemeContent(w, r, contentType, body)
 }

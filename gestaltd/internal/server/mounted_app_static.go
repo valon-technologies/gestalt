@@ -47,6 +47,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				Handler:             handler,
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				ThemeFontCORSOrigin: fontCORSOrigin(entry.Static.Theme),
 				IsDev:               true,
 			})
 			continue
@@ -61,6 +62,7 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 				Handler:             registryAppStaticHandler(name, mount, entry, providers, artifactsDir, runtimeState),
 				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				ThemeFontCORSOrigin: fontCORSOrigin(entry.Static.Theme),
 			})
 			continue
 		}
@@ -87,10 +89,18 @@ func mountedAppStaticsFromEntries(apps map[string]*config.ProviderEntry, provide
 			Handler:             handler,
 			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
 			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+			ThemeFontCORSOrigin: fontCORSOrigin(entry.Static.Theme),
 		})
 	}
 
 	return mounted, nil
+}
+
+func fontCORSOrigin(theme *config.UIThemeConfig) string {
+	if theme == nil {
+		return ""
+	}
+	return theme.FontCORSOrigin
 }
 
 func registryAppStaticHandler(app, mount string, entry *config.ProviderEntry, providers *registry.ProviderMap[core.Provider], artifactsDir string, runtimeState AppRuntimeState) http.Handler {

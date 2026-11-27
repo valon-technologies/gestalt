@@ -1173,8 +1173,9 @@ type ProviderMCPSurfaceOverride struct {
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.
 // TODO(hughhan1): deployment theme overrides are a deployer workaround and should not be supported long-term.
 type UIThemeConfig struct {
-	Stylesheet string `yaml:"stylesheet,omitempty"`
-	AssetsDir  string `yaml:"assetsDir,omitempty"`
+	Stylesheet     string `yaml:"stylesheet,omitempty"`
+	AssetsDir      string `yaml:"assetsDir,omitempty"`
+	FontCORSOrigin string `yaml:"fontCorsOrigin,omitempty"`
 }
 
 // UIThemeConfigFromProviderConfig decodes the optional theme block of a ui
